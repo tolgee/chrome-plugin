@@ -13,37 +13,34 @@ export let Properties = undefined;
 export const ContextProvider: FunctionComponent = (props) => {
 
     const [screenshots, setScreenShots] = useState({});
-    const [spans, setSpans] = useState({});
+    const [keys, setKeys] = useState({});
     const [ready, setReady] = useState(undefined);
 
     const makeScreenShot = async (input) => {
-        const screenshot = await screenShotMaker.capture(input);
-        //setScreenShots([...screenshots, screenshot]);
+        await screenShotMaker.capture(input);
     };
 
     useEffect(() => {
+        let closureReady = ready;
         messages.send("GET_CONFIGURATION").then((properties: any) => {
             if (properties?.config?.apiUrl && properties?.config?.apiKey) {
                 setReady(true);
+                closureReady = true;
                 Properties = properties;
                 screenShotMaker.getScreenshots().then(setScreenShots)
             }
 
-            messages.send("GET_SPANS").then(r => {
-                setSpans(r);
+            messages.send("GET_KEYS").then(r => {
+                setKeys(r);
             })
         });
 
-
+        setTimeout(() => {
+            if(!closureReady){
+                setReady(false);
+            }
+        }, 2000);
     }, []);
-
-    const openImage = (s) => {
-        var image = new Image();
-        image.src = s;
-
-        const w = window.open("");
-        w.document.write(image.outerHTML);
-    };
 
     if (!ready) {
         if (ready === undefined) {
@@ -52,7 +49,7 @@ export const ContextProvider: FunctionComponent = (props) => {
         return <Box width="500px" p={4}>This website is not using Polygloat!</Box>
     }
 
-    const context = {spans, ready, messages, screenshots, makeScreenShot};
+    const context = {keys, ready, messages, screenshots, makeScreenShot};
 
     return (
         <Context.Provider value={context}>

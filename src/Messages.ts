@@ -28,6 +28,7 @@ export class Messages {
             if (event.source != window) {
                 return;
             }
+
             this.listenersWindow.forEach(listener => {
                 if (listener.type == event.data.type) {
                     listener.callback(event.data.data);
@@ -39,10 +40,11 @@ export class Messages {
     };
 
     readonly startRuntimeListening = () => {
+        // noinspection JSDeprecatedSymbols
         chrome.runtime.onMessage.addListener((request: RuntimeMessage, sender, sendResponse) => {
-            this.listenersRuntime.forEach(l => {
-                if (l.type == request.type) {
-                    l.callback(request.data, sendResponse);
+            this.listenersRuntime.forEach(listener => {
+                if (listener.type == request.type) {
+                    listener.callback(request.data, sendResponse);
                 }
             });
         });
