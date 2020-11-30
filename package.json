@@ -6,15 +6,9 @@
   "author": "Jan Cizmar",
   "license": "ISC",
   "scripts": {
-    "start": "webpack-dev-server --env.mode=development --hot",
-    "startProd": "webpack-dev-server --env.mode=production",
-    "startSentry": "webpack-dev-server --env.mode=production --env.sentry=true",
     "build": "webpack --env.mode=production",
-    "watch": "webpack --env.mode=development --watch",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "check": "tsc",
-    "cypress": "cypress run"
+    "start": "webpack --env.mode=development --watch",
+    "test": "jest"
   },
   "dependencies": {
     "@sentry/browser": "^5.15.0",

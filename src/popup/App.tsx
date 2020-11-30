@@ -6,6 +6,8 @@ import {Context} from "./Context";
 export const App = () => {
     let context = useContext(Context);
 
+    console.log(context.keys);
+
     return (
         <Container maxWidth="sm" style={{minWidth: 500}}>
             <Box display="flex" flexWrap="wrap">
@@ -21,18 +23,16 @@ export const App = () => {
                 )}
             </Box>
 
-            {Object.entries(context.spans).map(([k, v]) =>
-                <Box onMouseOver={() => context.messages.sendToLib("HIGHLIGHT_SPAN", k)}
+            {Object.entries(context.keys).map(([k, v]) =>
+                <Box onMouseOver={() => context.messages.sendToLib("HIGHLIGHT_KEY", k)}
                      onMouseOut={() => {
-                         context.messages.sendToLib("UNHIGHLIGHT_SPAN", k)
+                         context.messages.sendToLib("UNHIGHLIGHT_KEY", k)
                      }}
-                     onClick={() => context.makeScreenShot((v as any).input)}
+                     onClick={() => context.makeScreenShot(k)}
                      key={k}>
-                    {(v as any).input}
-
+                    {k}
                 </Box>
             )}
-
         </Container>
     )
 };

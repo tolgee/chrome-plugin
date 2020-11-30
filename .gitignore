@@ -3,3 +3,4 @@ lib
 dist
 /cypress/integration/examples/
 .idea
+polygloatRestructure.chrome-plugin.iml
