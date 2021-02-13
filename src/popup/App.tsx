@@ -1,12 +1,10 @@
 import * as React from 'react';
-import {Box, Button, CircularProgress, Container} from "@material-ui/core";
-import {useContext} from "react";
+import {useContext} from 'react';
+import {Box, Container} from "@material-ui/core";
 import {Context} from "./Context";
 
 export const App = () => {
     let context = useContext(Context);
-
-    console.log(context.keys);
 
     return (
         <Container maxWidth="sm" style={{minWidth: 500}}>

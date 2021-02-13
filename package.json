@@ -1,7 +1,7 @@
 {
-  "name": "polygloat-chrome",
+  "name": "Tolgee-chrome",
   "version": "0.0.1",
-  "description": "Polygloat framework Google Chrome plugin",
+  "description": "Tolgee framework Google Chrome plugin",
   "main": "index.js",
   "author": "Jan Cizmar",
   "license": "ISC",
@@ -24,7 +24,7 @@
     "yup": "^0.28.3"
   },
   "devDependencies": {
-    "@babel/cli": "^7.8.4",
+    "@babel/cli": "^7.12.13",
     "@babel/core": "^7.9.0",
     "@babel/plugin-proposal-class-properties": "^7.8.3",
     "@babel/plugin-proposal-decorators": "^7.8.3",
@@ -69,6 +69,6 @@
     "webpack-bundle-analyzer": "^3.6.1",
     "webpack-chrome-extension-reloader": "^1.3.0",
     "webpack-conditional-loader": "^1.0.12",
-    "webpack-dev-server": "^3.10.3"
+    "webpack-dev-server": "^3.11.2"
   }
 }

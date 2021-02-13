@@ -1,8 +1,8 @@
 {
-  "name": "Polygloat Tools",
+  "name": "Tolgee Tools",
   "version": "0.0.1",
   "manifest_version": 2,
-  "description": "Translate your web application more effectively with Polygloat plugin!",
+  "description": "Translate your web application more effectively with Tolgee plugin!",
   "browser_action": {
     "default_icon": "assets/icon128.png",
     "default_popup": "index.html"

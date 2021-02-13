@@ -46,7 +46,7 @@ export const ContextProvider: FunctionComponent = (props) => {
         if (ready === undefined) {
             return <Box width="500px" display="flex" justifyContent="center"><CircularProgress/></Box>
         }
-        return <Box width="500px" p={4}>This website is not using Polygloat!</Box>
+        return <Box width="500px" p={4}>This website is not using Tolgee!</Box>
     }
 
     const context = {keys, ready, messages, screenshots, makeScreenShot};
