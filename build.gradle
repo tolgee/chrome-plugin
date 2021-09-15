@@ -1,6 +1,0 @@
-idea {
-    module {
-        excludeDirs += file('node_modules')
-        excludeDirs += file('lib')
-    }
-}

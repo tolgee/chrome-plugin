@@ -39,7 +39,7 @@ export class Messages {
       });
     };
 
-    window.addEventListener("message", receiveMessage, false);
+    window.addEventListener('message', receiveMessage, false);
   };
 
   readonly startRuntimeListening = () => {
@@ -64,7 +64,12 @@ export class Messages {
   };
 
   readonly send = (type: string, data?: any) => {
-    console.log(data);
     window.postMessage({ type, data }, window.origin);
+  };
+
+  readonly sendToLib = (type: string, data?: any) => {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type, data }, (data) => resolve(data));
+    });
   };
 }

@@ -1,0 +1,71 @@
+name: Prerelease
+
+on:
+  workflow_run:
+    workflows: ['Test']
+    branches: ['main', 'next']
+    types:
+      - completed
+
+jobs:
+  main:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12.x'
+
+      - name: Set git globals
+        run: |
+          git config --local user.email "machine@tolgee.io"
+          git config --local user.name "Tolgee Machine"
+
+      - name: Npm ci
+        run: npm ci
+
+      - name: Run get new version
+        run: npm run release-dry
+
+      - name: Set version property
+        id: version
+        run: echo ::set-output name=VERSION::$(test -e .VERSION && echo v$(cat .VERSION))
+
+      - name: Build (build & test)
+        run: npm run build
+
+      - name: Set git globals
+        run: |
+          git config --local user.email "machine@tolgee.io"
+          git config --local user.name "Tolgee Machine"
+
+      - name: Run npm release
+        if: ${{ steps.version.outputs.VERSION != '' }}
+        run: npm run release
+
+      - name: Create Release
+        if: ${{ steps.version.outputs.VERSION != '' }}
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          release_name: Release ${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: true
+
+      - name: Upload Release Asset
+        if: ${{ steps.version.outputs.VERSION != '' }}
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/release_package.zip
+          asset_name: Tolgee-chrome-${{ steps.version.outputs.VERSION }}.zip
+          asset_content_type: application/zip

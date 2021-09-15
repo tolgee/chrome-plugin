@@ -1,26 +1,14 @@
 {
   "compilerOptions": {
-    "target": "es5",
-    "module": "esnext",
-    "moduleResolution": "node",
-    "sourceMap": true,
-    "declaration": true,
-    "outDir": "./lib",
-    "removeComments": false,
-    "lib": [
-      "es2020",
-      "dom"
-    ],
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
+    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "jsx": "react",
-    "downlevelIteration": true
-  },
-  "include": [
-    "src"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+    "lib": ["dom", "es2019"],
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "target": "es2018",
+    "noEmit": true
+  }
 }
