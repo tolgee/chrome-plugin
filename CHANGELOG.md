@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/tolgee/chrome-plugin/compare/v1.0.0...v1.0.1) (2021-09-15)
+
+
+### Bug Fixes
+
+* node production mode ([64ecae6](https://github.com/tolgee/chrome-plugin/commit/64ecae6b3cc55a5f38043cc05c0037871928c890))
+
 # 1.0.0 (2021-09-15)
 
 
