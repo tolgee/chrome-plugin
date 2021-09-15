@@ -35,7 +35,7 @@ jobs:
         run: echo ::set-output name=VERSION::$(test -e .VERSION && echo v$(cat .VERSION))
 
       - name: Build (build & test)
-        run: NODE_ENV=production && npm run build
+        run: export NODE_ENV=production && npm run build
 
       - name: Set git globals
         run: |

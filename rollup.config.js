@@ -37,6 +37,6 @@ export default {
     // Empties the output dir before a new build
     emptyDir(),
     // Outputs a zip file
-    isProduction && zip({ file: 'release_package.zip' }),
+    isProduction && zip({ file: './release_package.zip' }),
   ],
 };
