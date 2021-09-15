@@ -4,3 +4,7 @@ dist
 /cypress/integration/examples/
 .idea
 **/*.iml
+.vscode
+releases
+.DS_Store
+.VERSION

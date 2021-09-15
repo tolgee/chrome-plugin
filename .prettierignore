@@ -1,0 +1,6 @@
+dist
+assets
+
+./*.json
+
+**/*.generated.*
