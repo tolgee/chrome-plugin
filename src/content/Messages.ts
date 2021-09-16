@@ -28,7 +28,7 @@ export class Messages {
 
   readonly startWindowListening = () => {
     const receiveMessage = (event: PgEvent) => {
-      if (event.source != window) {
+      if (event.source !== window) {
         return;
       }
 

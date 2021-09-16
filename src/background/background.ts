@@ -1,7 +1,7 @@
 import { ScreenshotMaker } from './ScreenshotMaker';
 
-chrome.runtime.onMessage.addListener((_request, _sender, sendResponse) => {
-  ScreenshotMaker.capture().then((data) => {
+chrome.runtime.onMessage.addListener((_request, sender, sendResponse) => {
+  ScreenshotMaker.capture(sender.tab.windowId).then((data) => {
     sendResponse(data);
   });
   // this indicates, that we send response asynchronously
