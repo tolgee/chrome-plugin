@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/tolgee/chrome-plugin/compare/v1.0.1...v1.0.2) (2021-09-16)
+
+
+### Bug Fixes
+
+* taking screenshot from popup ([c186542](https://github.com/tolgee/chrome-plugin/commit/c186542fd7bf71335e49a42b3cec6de4cac790e7))
+
 ## [1.0.1](https://github.com/tolgee/chrome-plugin/compare/v1.0.0...v1.0.1) (2021-09-15)
 
 
