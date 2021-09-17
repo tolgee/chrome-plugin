@@ -11,7 +11,7 @@
     "scripts": ["src/background/background.ts"],
     "persistent": false
   },
-  "permissions": ["activeTab", "tabs", "<all_urls>"],
+  "permissions": ["activeTab", "<all_urls>"],
   "icons": {
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
@@ -20,7 +20,6 @@
   "content_scripts": [
     {
       "matches": ["*://*/*"],
-      "match_about_blank": true,
       "all_frames": true,
       "run_at": "document_idle",
       "js": ["src/content/contentScript.ts"]
