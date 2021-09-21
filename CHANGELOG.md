@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/tolgee/chrome-plugin/compare/v1.0.3...v1.0.4) (2021-09-21)
+
+
+### Bug Fixes
+
+* release with correct version ([5c65bd7](https://github.com/tolgee/chrome-plugin/commit/5c65bd79d4d5e17cd2d74464efedb3ebb0640480))
+
 ## [1.0.3](https://github.com/tolgee/chrome-plugin/compare/v1.0.2...v1.0.3) (2021-09-17)
 
 
