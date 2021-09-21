@@ -34,6 +34,9 @@ jobs:
         id: version
         run: echo ::set-output name=VERSION::$(test -e .VERSION && echo v$(cat .VERSION))
 
+      - name: Upgrade version in manifest.json
+        run: sh upgrade_manifest.sh $(cat .VERSION)
+
       - name: Build (build & test)
         run: export NODE_ENV=production && npm run build
 

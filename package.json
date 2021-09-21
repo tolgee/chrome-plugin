@@ -51,7 +51,21 @@
       "@semantic-release/commit-analyzer",
       "@semantic-release/release-notes-generator",
       "@semantic-release/changelog",
-      "@semantic-release/git",
+      [
+        "@semantic-release/exec",
+        {
+          "prepare": "sh upgrade_manifest.sh ${nextRelease.version}"
+        }
+      ],
+      [
+        "@semantic-release/git",
+        {
+          "assets": [
+            "CHANGELOG.md",
+            "manifest.json"
+          ]
+        }
+      ],
       [
         "@semantic-release/exec",
         {
