@@ -4,18 +4,22 @@
   "manifest_version": 2,
   "description": "Translate your web application more effectively with Tolgee plugin!",
   "browser_action": {
-    "default_icon": "assets/icon128.png",
+    "default_icon": {
+      "16": "assets/inactive16.png",
+      "48": "assets/inactive48.png",
+      "128": "assets/inactive128.png"
+    },
     "default_popup": "src/popup/index.html"
   },
   "background": {
     "scripts": ["src/background/background.ts"],
     "persistent": false
   },
-  "permissions": ["activeTab", "<all_urls>"],
+  "permissions": ["activeTab", "<all_urls>", "storage"],
   "icons": {
-    "16": "assets/icon16.png",
-    "48": "assets/icon48.png",
-    "128": "assets/icon128.png"
+    "16": "assets/present16.png",
+    "48": "assets/present48.png",
+    "128": "assets/present128.png"
   },
   "content_scripts": [
     {
