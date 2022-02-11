@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/tolgee/chrome-plugin/compare/v1.0.4...v1.1.0) (2022-02-11)
+
+
+### Features
+
+* In-context translating on production TG-459 ([8e55d14](https://github.com/tolgee/chrome-plugin/commit/8e55d143bc305e43d39b109a5ccc1d7e76324cc2))
+
 ## [1.0.4](https://github.com/tolgee/chrome-plugin/compare/v1.0.3...v1.0.4) (2021-09-21)
 
 
