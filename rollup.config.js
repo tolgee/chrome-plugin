@@ -11,7 +11,7 @@ import {
 import { emptyDir } from 'rollup-plugin-empty-dir';
 import zip from 'rollup-plugin-zip';
 import replace from '@rollup/plugin-replace';
-import copy from 'rollup-plugin-copy';
+import copy from 'rollup-plugin-copy2';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -29,11 +29,10 @@ export default {
         : JSON.stringify('development'),
       preventAssignment: true,
     }),
-    copy({
-      targets: [{ src: 'assets/*', dest: 'dist/assets' }],
-      hook: 'writeBundle',
-    }),
     chromeExtension(),
+    copy({
+      assets: ['assets/*'],
+    }),
     // Adds a Chrome extension reloader during watch mode
     simpleReloader(),
     resolve(),

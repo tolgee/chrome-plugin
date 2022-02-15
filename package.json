@@ -38,7 +38,7 @@
     "react-svg-loader": "^3.0.3",
     "rollup": "^2.56.3",
     "rollup-plugin-chrome-extension": "^3.6.1",
-    "rollup-plugin-copy": "^3.4.0",
+    "rollup-plugin-copy2": "^0.3.1",
     "rollup-plugin-empty-dir": "^1.0.5",
     "rollup-plugin-zip": "^1.0.1",
     "semantic-release": "^17.4.7",
