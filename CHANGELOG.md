@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/tolgee/chrome-plugin/compare/v1.1.0...v1.1.1) (2022-02-15)
+
+
+### Bug Fixes
+
+* Tolgee logo in active mode ([a03acb2](https://github.com/tolgee/chrome-plugin/commit/a03acb28544080827e2209c85076b5ec70f328f5))
+
 # [1.1.0](https://github.com/tolgee/chrome-plugin/compare/v1.0.4...v1.1.0) (2022-02-11)
 
 
