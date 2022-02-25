@@ -57,13 +57,14 @@ export const useDetectorForm = () => {
       case 'CHANGE_VALUES':
         return { ...state, values: { ...state.values, ...action.payload } };
       case 'CHANGE_LIB_CONFIG':
+        const newValues = {
+          apiKey: action.payload?.config?.apiKey,
+          apiUrl: action.payload?.config?.apiUrl,
+        };
         return {
           ...state,
           libConfig: action.payload,
-          values: state.values || {
-            apiKey: action.payload?.config?.apiKey,
-            apiUrl: action.payload?.config?.apiUrl,
-          },
+          values: validateValues(state.values) || newValues,
           tolgeePresent: !action.payload
             ? 'not_present'
             : action.payload.uiPresent === undefined
