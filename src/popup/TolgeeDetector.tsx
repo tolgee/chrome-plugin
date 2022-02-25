@@ -48,7 +48,7 @@ export const TolgeeDetector = () => {
         <CircularProgress />
       </Box>
     );
-  } else if (tolgeePresent === 'present') {
+  } else if (tolgeePresent === 'present' || appliedValues) {
     const disabled =
       !dataPresent &&
       !appliedValues &&

@@ -8,11 +8,23 @@ let configuration: any = undefined;
 const messages = new Messages();
 messages.startWindowListening();
 
+const getAppliedCredenials = () => {
+  return {
+    apiKey: sessionStorage.getItem(API_KEY_LOCAL_STORAGE),
+    apiUrl: sessionStorage.getItem(API_URL_LOCAL_STORAGE),
+  };
+};
+
 // handshake with library
 messages.listenWindow('TOLGEE_READY', (c) => {
   if (!configuration) {
     configuration = c;
-    if (!c.uiPresent && c.config.mode === 'development') {
+    const appliedCredentials = getAppliedCredenials();
+    if (
+      appliedCredentials.apiKey &&
+      c.uiPresent === false &&
+      c.config.mode === 'development'
+    ) {
       injectUiLib(c.uiVersion);
     }
     updateState(configuration, messages);
@@ -36,10 +48,7 @@ messages.listenRuntime('DETECT_TOLGEE', (data, sendResponse) => {
 });
 
 messages.listenRuntime('GET_CREDENTIALS', (data, sendResponse) =>
-  sendResponse({
-    apiKey: sessionStorage.getItem(API_KEY_LOCAL_STORAGE),
-    apiUrl: sessionStorage.getItem(API_URL_LOCAL_STORAGE),
-  })
+  sendResponse(getAppliedCredenials())
 );
 
 messages.listenRuntime('SET_CREDENTIALS', (data, sendResponse) => {
