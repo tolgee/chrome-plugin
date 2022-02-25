@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/tolgee/chrome-plugin/compare/v1.1.1...v1.1.2) (2022-02-25)
+
+
+### Bug Fixes
+
+* Fix bugs with old version of Tolgee and race condition ([43fbdef](https://github.com/tolgee/chrome-plugin/commit/43fbdeff39de4cb1ac35a811887c8c53a9e1fa69))
+
 ## [1.1.1](https://github.com/tolgee/chrome-plugin/compare/v1.1.0...v1.1.1) (2022-02-15)
 
 
