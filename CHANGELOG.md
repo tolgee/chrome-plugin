@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/tolgee/chrome-plugin/compare/v1.1.2...v1.1.3) (2022-03-23)
+
+
+### Bug Fixes
+
+* always load storage values after config is loaded ([15567ff](https://github.com/tolgee/chrome-plugin/commit/15567ff4732a993c8a63c87fa829b1bf5621d328))
+
 ## [1.1.2](https://github.com/tolgee/chrome-plugin/compare/v1.1.1...v1.1.2) (2022-02-25)
 
 
