@@ -108,6 +108,7 @@ export const useDetectorForm = () => {
           appliedValues: undefined,
           storedValues: undefined,
           values: undefined,
+          libConfig: undefined,
         };
       case 'STORE_VALUES':
         apply();
@@ -147,26 +148,35 @@ export const useDetectorForm = () => {
     }
   }, [appliedValues]);
 
-  // load stored values
-  useEffect(() => {
-    loadValues().then((data) => {
-      dispatch({
-        type: 'LOAD_STORED_VALUES',
-        payload: validateValues(data),
-      });
-    });
-  }, []);
-
-  // load Tolgee config
   useEffect(() => {
     loadConfig()
-      .then((data) => {
-        dispatch({ type: 'CHANGE_LIB_CONFIG', payload: data });
+      .then((libConfig) => {
+        dispatch({ type: 'CHANGE_LIB_CONFIG', payload: libConfig });
       })
       .catch(() => {
         dispatch({ type: 'CHANGE_LIB_CONFIG', payload: null });
       });
   }, []);
+
+  // after tolgee config is loaded
+  // get applied values and stored values
+  const onLibConfigChange = async () => {
+    const appliedValues = await loadAppliedValues();
+    if (validateValues(appliedValues)) {
+      dispatch({ type: 'SET_APPLIED_VALUES', payload: appliedValues });
+    }
+
+    const storedData = await loadValues();
+    if (validateValues(storedData)) {
+      dispatch({ type: 'LOAD_STORED_VALUES', payload: storedData });
+    }
+  };
+
+  useEffect(() => {
+    if (state.libConfig) {
+      onLibConfigChange();
+    }
+  }, [state.libConfig]);
 
   // listen for Tolgee config change (after page is reloaded)
   useEffect(() => {
@@ -180,16 +190,6 @@ export const useDetectorForm = () => {
     };
     chrome.runtime.onMessage.addListener(listener);
     () => chrome.runtime.onMessage.removeListener(listener);
-  }, []);
-
-  // load applied values from sessionStorage
-  useEffect(() => {
-    loadAppliedValues().then((data) => {
-      dispatch({
-        type: 'SET_APPLIED_VALUES',
-        payload: validateValues(data),
-      });
-    });
   }, []);
 
   const setCredentialsCheck = (val: CredentialsCheck) => {
