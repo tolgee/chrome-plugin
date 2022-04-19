@@ -49,10 +49,13 @@ export const TolgeeDetector = () => {
       </Box>
     );
   } else if (tolgeePresent === 'present' || appliedValues) {
-    const disabled =
-      !dataPresent &&
-      !appliedValues &&
-      libConfig?.config?.mode === 'development';
+    const isInDevelopmentMode =
+      !appliedValues && libConfig?.config?.mode === 'development';
+
+    const valuesNotChanged =
+      isInDevelopmentMode &&
+      libConfig?.config.apiKey === values.apiKey &&
+      libConfig.config.apiUrl === values.apiUrl;
 
     return (
       <Box
@@ -79,7 +82,6 @@ export const TolgeeDetector = () => {
           }
           onKeyDown={handleKeyDown}
           size="small"
-          disabled={disabled}
         />
         <FormControl>
           <TextField
@@ -94,7 +96,6 @@ export const TolgeeDetector = () => {
             }
             onKeyDown={handleKeyDown}
             size="small"
-            disabled={disabled}
           />
           <FormHelperText
             error={credentialsCheck === 'invalid'}
@@ -107,47 +108,58 @@ export const TolgeeDetector = () => {
             ) : credentialsCheck === 'invalid' ? (
               'Invalid'
             ) : (
-              <span style={{ color: 'green' }}>Valid</span>
+              <span style={{ color: 'green' }}>
+                {credentialsCheck.projectName}
+              </span>
             )}
           </FormHelperText>
         </FormControl>
-        {!disabled && (
-          <Box display="flex" justifyContent="space-between">
-            <Box display="flex" style={{ gap: 5 }}>
-              {dataPresent && (
-                <>
-                  <Switch
-                    size="small"
-                    checked={Boolean(appliedValues)}
-                    onChange={handleApplyChange}
-                    color="primary"
-                  />
-                  <Typography>Applied</Typography>
-                </>
-              )}
-            </Box>
-            <Box display="flex" style={{ gap: 10 }}>
-              {dataPresent && (
-                <Button
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="flex-start"
+        >
+          <Box display="flex" style={{ gap: 5 }}>
+            {dataPresent ? (
+              <>
+                <Switch
                   size="small"
-                  onClick={() => dispatch({ type: 'CLEAR_ALL' })}
-                  variant="contained"
-                >
-                  Clear
-                </Button>
-              )}
+                  checked={Boolean(appliedValues)}
+                  onChange={handleApplyChange}
+                  color="primary"
+                />
+                <Typography>Applied</Typography>
+              </>
+            ) : isInDevelopmentMode ? (
+              <Typography style={{ fontSize: 12, color: '#535353' }}>
+                Api key is included directly in Tolgee configuration. <br /> Use
+                this setup only in development environment.
+              </Typography>
+            ) : (
+              ''
+            )}
+          </Box>
+          <Box display="flex" style={{ gap: 10 }}>
+            {dataPresent && (
               <Button
                 size="small"
-                onClick={() => dispatch({ type: 'APPLY_VALUES' })}
+                onClick={() => dispatch({ type: 'CLEAR_ALL' })}
                 variant="contained"
-                color="primary"
-                disabled={!validateValues(values)}
               >
-                Apply
+                Clear
               </Button>
-            </Box>
+            )}
+            <Button
+              size="small"
+              onClick={() => dispatch({ type: 'APPLY_VALUES' })}
+              variant="contained"
+              color="primary"
+              disabled={!validateValues(values) || valuesNotChanged}
+            >
+              Apply
+            </Button>
           </Box>
-        )}
+        </Box>
       </Box>
     );
   } else if (tolgeePresent === 'legacy') {
