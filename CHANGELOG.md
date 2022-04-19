@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/tolgee/chrome-plugin/compare/v1.1.3...v1.2.0) (2022-04-19)
+
+
+### Features
+
+* Allow rewrite apiKey even when Tolgee is in dev mode already ([4138aa1](https://github.com/tolgee/chrome-plugin/commit/4138aa13a5ec8f4351041418f0b2ea987140cf45))
+
 ## [1.1.3](https://github.com/tolgee/chrome-plugin/compare/v1.1.2...v1.1.3) (2022-03-23)
 
 
