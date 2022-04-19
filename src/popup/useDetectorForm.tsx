@@ -18,7 +18,13 @@ type LibConfig = {
   };
 };
 
-type CredentialsCheck = null | 'loading' | 'invalid' | 'valid';
+type ProjectInfo = {
+  projectName: string;
+  scopes: string[];
+  userFullName: string;
+};
+
+type CredentialsCheck = null | 'loading' | 'invalid' | ProjectInfo;
 type TolgeePresent = 'loading' | 'present' | 'not_present' | 'legacy';
 
 const initialState = {
@@ -197,7 +203,7 @@ export const useDetectorForm = () => {
   };
 
   const checkableValues: Values | undefined =
-    appliedValues || libConfig?.config;
+    appliedValues || !storedValues ? libConfig?.config : undefined;
 
   // check applied credentials
   useEffect(() => {
@@ -213,7 +219,11 @@ export const useDetectorForm = () => {
         .catch(() => setCredentialsCheck('invalid'))
         .then((data) => {
           if (data?.key) {
-            setCredentialsCheck('valid');
+            setCredentialsCheck({
+              projectName: data.projectName,
+              scopes: data.scopes,
+              userFullName: data.userFullName,
+            });
           } else {
             setCredentialsCheck('invalid');
           }
