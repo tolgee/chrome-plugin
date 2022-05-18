@@ -1,4 +1,5 @@
 import { API_KEY_LOCAL_STORAGE, API_URL_LOCAL_STORAGE } from '../constants';
+import { LibConfig } from '../types';
 import { injectUiLib } from './injectUiLib';
 import { Messages } from './Messages';
 import { updateState } from './updateState';
@@ -16,14 +17,14 @@ const getAppliedCredenials = () => {
 };
 
 // handshake with library
-messages.listenWindow('TOLGEE_READY', (c) => {
+messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
   if (!configuration) {
     configuration = c;
     const appliedCredentials = getAppliedCredenials();
     if (
       appliedCredentials.apiKey &&
       c.uiPresent === false &&
-      c.config.mode === 'development'
+      (c.mode || c.config?.mode) === 'development'
     ) {
       injectUiLib(c.uiVersion);
     }

@@ -12,7 +12,7 @@ const getCurrentTab = async () => {
 };
 
 const getCurrentTabOrigin = async () => {
-  const url = new URL((await getCurrentTab()).url);
+  const url = new URL((await getCurrentTab()).url!);
   return url.origin;
 };
 

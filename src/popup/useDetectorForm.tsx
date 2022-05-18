@@ -1,4 +1,5 @@
 import { useEffect, useReducer } from 'react';
+import { LibConfig } from '../types';
 import { loadAppliedValues, loadConfig } from './loadConfig';
 import { sendMessage } from './sendMessage';
 import { loadValues, storeValues } from './storage';
@@ -7,15 +8,6 @@ import { useApplier } from './useApplier';
 type Values = {
   apiUrl?: string;
   apiKey?: string;
-};
-
-type LibConfig = {
-  uiPresent: boolean;
-  config: {
-    apiUrl: '';
-    apiKey: '';
-    mode: 'production' | 'development';
-  };
 };
 
 type ProjectInfo = {
@@ -111,10 +103,10 @@ export const useDetectorForm = () => {
         apply();
         return {
           ...state,
-          appliedValues: undefined,
-          storedValues: undefined,
-          values: undefined,
-          libConfig: undefined,
+          appliedValues: null,
+          storedValues: null,
+          values: null,
+          libConfig: null,
         };
       case 'STORE_VALUES':
         apply();
