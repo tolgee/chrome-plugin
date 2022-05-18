@@ -34,7 +34,7 @@ export const TolgeeDetector = () => {
     }
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     // on enter
     if (e.keyCode === 13 && validateValues(values)) {
       dispatch({ type: 'APPLY_VALUES' });
@@ -50,12 +50,13 @@ export const TolgeeDetector = () => {
     );
   } else if (tolgeePresent === 'present' || appliedValues) {
     const isInDevelopmentMode =
-      !appliedValues && libConfig?.config?.mode === 'development';
+      !appliedValues &&
+      (libConfig?.mode || libConfig?.config?.mode) === 'development';
 
     const valuesNotChanged =
       isInDevelopmentMode &&
-      libConfig?.config.apiKey === values.apiKey &&
-      libConfig.config.apiUrl === values.apiUrl;
+      libConfig?.config.apiKey === values?.apiKey &&
+      libConfig?.config.apiUrl === values?.apiUrl;
 
     return (
       <Box
