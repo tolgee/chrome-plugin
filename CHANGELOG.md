@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/tolgee/chrome-plugin/compare/v1.2.0...v1.2.1) (2022-05-20)
+
+
+### Bug Fixes
+
+* core "mode" in new location, improve type safety ([92eae74](https://github.com/tolgee/chrome-plugin/commit/92eae745b9973b8086e447260c1ce4e3f79da004))
+
 # [1.2.0](https://github.com/tolgee/chrome-plugin/compare/v1.1.3...v1.2.0) (2022-04-19)
 
 
