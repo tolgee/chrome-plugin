@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/tolgee/chrome-plugin/compare/v1.2.1...v1.2.2) (2022-06-30)
+
+
+### Bug Fixes
+
+* Run contentScript only in main frame ([e7f239b](https://github.com/tolgee/chrome-plugin/commit/e7f239b2e5f78889216b53bb2957be323409a179))
+
 ## [1.2.1](https://github.com/tolgee/chrome-plugin/compare/v1.2.0...v1.2.1) (2022-05-20)
 
 
