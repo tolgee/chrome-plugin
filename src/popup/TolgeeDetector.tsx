@@ -18,6 +18,7 @@ export const TolgeeDetector = () => {
   const [state, dispatch] = useDetectorForm();
 
   const {
+    error,
     values,
     storedValues,
     appliedValues,
@@ -42,7 +43,13 @@ export const TolgeeDetector = () => {
   };
 
   const dataPresent = storedValues || appliedValues;
-  if (tolgeePresent === 'loading') {
+  if (error) {
+    return (
+      <Box width={POPUP_WIDTH} p={1} color="red">
+        <Typography variant="body2">Error: {error}</Typography>
+      </Box>
+    );
+  } else if (tolgeePresent === 'loading') {
     return (
       <Box width={POPUP_WIDTH} p={1} display="flex" justifyContent="center">
         <CircularProgress />

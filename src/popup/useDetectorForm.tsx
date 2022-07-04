@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from 'react';
 import { LibConfig } from '../types';
-import { loadAppliedValues, loadConfig } from './loadConfig';
+import { loadAppliedValues } from './loadConfig';
 import { sendMessage } from './sendMessage';
 import { loadValues, storeValues } from './storage';
 import { useApplier } from './useApplier';
@@ -26,12 +26,17 @@ const initialState = {
   tolgeePresent: 'loading' as TolgeePresent,
   credentialsCheck: null as CredentialsCheck,
   libConfig: null as LibConfig | null,
+  error: null as string | null,
+  frameId: null as number | null,
 };
 
 type State = typeof initialState;
 type Action =
   | { type: 'CHANGE_VALUES'; payload: Partial<Values> }
-  | { type: 'CHANGE_LIB_CONFIG'; payload: LibConfig | null }
+  | {
+      type: 'CHANGE_LIB_CONFIG';
+      payload: { libData: LibConfig | null; frameId: number | null };
+    }
   | { type: 'SET_APPLIED_VALUES'; payload: Values | null }
   | { type: 'SET_CREDENTIALS_CHECK'; payload: CredentialsCheck }
   | { type: 'LOAD_STORED_VALUES'; payload: Values | null }
@@ -55,17 +60,25 @@ export const useDetectorForm = () => {
       case 'CHANGE_VALUES':
         return { ...state, values: { ...state.values, ...action.payload } };
       case 'CHANGE_LIB_CONFIG':
+        const { libData, frameId } = action.payload;
         const newValues = {
-          apiKey: action.payload?.config?.apiKey,
-          apiUrl: action.payload?.config?.apiUrl,
+          apiKey: libData?.config?.apiKey,
+          apiUrl: libData?.config?.apiUrl,
         };
+        if (state.frameId !== null && state.frameId !== frameId) {
+          return {
+            ...state,
+            error: 'Detected multiple Tolgee instances',
+          };
+        }
         return {
           ...state,
-          libConfig: action.payload,
+          libConfig: libData,
+          frameId,
           values: validateValues(state.values) || newValues,
-          tolgeePresent: !action.payload
+          tolgeePresent: !libData
             ? 'not_present'
-            : action.payload.uiPresent === undefined
+            : libData.uiPresent === undefined
             ? 'legacy'
             : 'present',
         };
@@ -147,14 +160,24 @@ export const useDetectorForm = () => {
   }, [appliedValues]);
 
   useEffect(() => {
-    loadConfig()
-      .then((libConfig) => {
-        dispatch({ type: 'CHANGE_LIB_CONFIG', payload: libConfig });
-      })
-      .catch(() => {
-        dispatch({ type: 'CHANGE_LIB_CONFIG', payload: null });
-      });
+    sendMessage('DETECT_TOLGEE').then(() => {});
   }, []);
+
+  // timeout when Tolgee is not detected
+  useEffect(() => {
+    if (!state.libConfig) {
+      const timer = setTimeout(
+        () =>
+          dispatch({
+            type: 'CHANGE_LIB_CONFIG',
+            payload: { frameId: null, libData: null },
+          }),
+        300
+      );
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [state.libConfig]);
 
   // after tolgee config is loaded
   // get applied values and stored values
@@ -176,13 +199,14 @@ export const useDetectorForm = () => {
     }
   }, [state.libConfig]);
 
-  // listen for Tolgee config change (after page is reloaded)
+  // listen for Tolgee config change
   useEffect(() => {
-    const listener = ({ type, data }: any) => {
+    const listener = ({ type, data }: any, sender) => {
+      const frameId = sender.frameId;
       if (type === 'TOLGEE_CONFIG_LOADED') {
         dispatch({
           type: 'CHANGE_LIB_CONFIG',
-          payload: data,
+          payload: { libData: data, frameId },
         });
       }
     };
