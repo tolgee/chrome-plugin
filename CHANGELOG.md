@@ -1,3 +1,10 @@
+## [1.2.3](https://github.com/tolgee/chrome-plugin/compare/v1.2.2...v1.2.3) (2022-07-04)
+
+
+### Bug Fixes
+
+* Tolgee in iFrame + multiple instances detection error ([6c681a9](https://github.com/tolgee/chrome-plugin/commit/6c681a9344a6df17f51520a02dfc0bbf6e47deda))
+
 ## [1.2.2](https://github.com/tolgee/chrome-plugin/compare/v1.2.1...v1.2.2) (2022-06-30)
 
 

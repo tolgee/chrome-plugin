@@ -1,6 +1,6 @@
 {
   "name": "Tolgee Tools",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "manifest_version": 2,
   "description": "Translate your web application more effectively with Tolgee plugin!",
   "browser_action": {
