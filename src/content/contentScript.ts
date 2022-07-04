@@ -45,7 +45,10 @@ messages.startRuntimeListening();
 
 // popup will ask if tolgee is present on the page
 messages.listenRuntime('DETECT_TOLGEE', (data, sendResponse) => {
-  sendResponse(configuration);
+  sendResponse();
+  if (configuration) {
+    messages.sendToLib('TOLGEE_CONFIG_LOADED', configuration);
+  }
 });
 
 messages.listenRuntime('GET_CREDENTIALS', (data, sendResponse) =>
