@@ -231,18 +231,20 @@ export const useDetectorForm = () => {
           checkableValues!.apiKey
         }`
       )
-        .then((r) => r.json())
+        .then((r) => {
+          if (r.ok) {
+            return r.json();
+          } else {
+            throw r.json();
+          }
+        })
         .catch(() => setCredentialsCheck('invalid'))
         .then((data) => {
-          if (data?.key) {
-            setCredentialsCheck({
-              projectName: data.projectName,
-              scopes: data.scopes,
-              userFullName: data.userFullName,
-            });
-          } else {
-            setCredentialsCheck('invalid');
-          }
+          setCredentialsCheck({
+            projectName: data.projectName,
+            scopes: data.scopes,
+            userFullName: data.userFullName,
+          });
         });
     } else {
       setCredentialsCheck(null);
