@@ -34,6 +34,10 @@ messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
   }
 });
 
+messages.listenWindow('TOLGEE_PING', () => {
+  messages.send('TOLGEE_PONG');
+});
+
 // resend message to take screenshot to background
 messages.listenWindow('TOLGEE_TAKE_SCREENSHOT', () => {
   messages.sendToLib('TOLGEE_TAKE_SCREENSHOT').then((response) => {
