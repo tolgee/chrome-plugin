@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/tolgee/chrome-plugin/compare/v1.2.4...v1.3.0) (2022-09-15)
+
+
+### Features
+
+* support ping ([dcbcf3e](https://github.com/tolgee/chrome-plugin/commit/dcbcf3e764ab7121264bf7060172da3e6e2268bf))
+
 ## [1.2.4](https://github.com/tolgee/chrome-plugin/compare/v1.2.3...v1.2.4) (2022-08-30)
 
 
