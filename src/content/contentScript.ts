@@ -4,7 +4,7 @@ import { injectUiLib } from './injectUiLib';
 import { Messages } from './Messages';
 import { updateState } from './updateState';
 
-let configuration: any = undefined;
+let configuration: LibConfig | undefined = undefined;
 
 const messages = new Messages();
 messages.startWindowListening();
@@ -29,19 +29,35 @@ messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
       injectUiLib(c.uiVersion);
     }
     updateState(configuration, messages);
-    messages.send('TOLGEE_PLUGIN_READY');
-    messages.sendToLib('TOLGEE_CONFIG_LOADED', configuration);
+    messages.sendToLib('TOLGEE_PLUGIN_READY');
+    messages.sendToPlugin('TOLGEE_CONFIG_LOADED', configuration);
   }
 });
 
+// handshake with library
+messages.listenWindow('TOLGEE_CONFIG_UPDATE', (c: LibConfig) => {
+  configuration = c;
+  const appliedCredentials = getAppliedCredenials();
+  if (
+    appliedCredentials.apiKey &&
+    c.uiPresent === false &&
+    (c.mode || c.config?.mode) === 'development'
+  ) {
+    injectUiLib(c.uiVersion);
+  }
+  updateState(configuration, messages);
+  messages.sendToLib('TOLGEE_PLUGIN_UPDATED');
+  messages.sendToPlugin('TOLGEE_CONFIG_LOADED', configuration);
+});
+
 messages.listenWindow('TOLGEE_PING', () => {
-  messages.send('TOLGEE_PONG');
+  messages.sendToLib('TOLGEE_PONG');
 });
 
 // resend message to take screenshot to background
 messages.listenWindow('TOLGEE_TAKE_SCREENSHOT', () => {
-  messages.sendToLib('TOLGEE_TAKE_SCREENSHOT').then((response) => {
-    messages.send('TOLGEE_SCREENSHOT_TAKEN', response);
+  messages.sendToPlugin('TOLGEE_TAKE_SCREENSHOT').then((response) => {
+    messages.sendToLib('TOLGEE_SCREENSHOT_TAKEN', response);
   });
 });
 
@@ -51,7 +67,7 @@ messages.startRuntimeListening();
 messages.listenRuntime('DETECT_TOLGEE', (data, sendResponse) => {
   sendResponse();
   if (configuration) {
-    messages.sendToLib('TOLGEE_CONFIG_LOADED', configuration);
+    messages.sendToPlugin('TOLGEE_CONFIG_LOADED', configuration);
   }
 });
 
@@ -70,7 +86,11 @@ messages.listenRuntime('SET_CREDENTIALS', (data, sendResponse) => {
   } else {
     sessionStorage.removeItem(API_URL_LOCAL_STORAGE);
   }
-  location.reload();
+  if (configuration?.noRestart && data.apiKey && data.apiUrl) {
+    messages.sendToLib('SET_CREDENTIALS');
+  } else {
+    location.reload();
+  }
   sendResponse(true);
   updateState(configuration, messages);
 });
