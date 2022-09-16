@@ -1,4 +1,5 @@
 export type LibConfig = {
+  noRestart: boolean | undefined;
   uiPresent: boolean;
   uiVersion?: string;
   mode: 'production' | 'development';

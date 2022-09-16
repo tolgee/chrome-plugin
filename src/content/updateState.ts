@@ -15,5 +15,5 @@ export const updateState = (config: any, messages: Messages) => {
     state = 'inactive';
   }
 
-  messages.sendToLib('TOLGEE_SET_STATE', state);
+  messages.sendToPlugin('TOLGEE_SET_STATE', state);
 };

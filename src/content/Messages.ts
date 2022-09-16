@@ -63,11 +63,11 @@ export class Messages {
     this.listenersWindow.push({ type, callback });
   };
 
-  readonly send = (type: string, data?: any) => {
+  readonly sendToLib = (type: string, data?: any) => {
     window.postMessage({ type, data }, window.origin);
   };
 
-  readonly sendToLib = (type: string, data?: any) => {
+  readonly sendToPlugin = (type: string, data?: any) => {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ type, data }, (data) => resolve(data));
     });

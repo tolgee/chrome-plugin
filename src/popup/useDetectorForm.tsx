@@ -22,7 +22,7 @@ type TolgeePresent = 'loading' | 'present' | 'not_present' | 'legacy';
 const initialState = {
   values: null as Values | null,
   storedValues: null as Values | null,
-  appliedValues: null as Values | null,
+  appliedValues: null as Values | null | undefined,
   tolgeePresent: 'loading' as TolgeePresent,
   credentialsCheck: null as CredentialsCheck,
   libConfig: null as LibConfig | null,
@@ -52,6 +52,15 @@ export const validateValues = (values?: Values | null) => {
   return null;
 };
 
+export const compareValues = (
+  values1?: Values | null,
+  values2?: Values | null
+) => {
+  return (
+    values1?.apiKey === values2?.apiKey && values2?.apiUrl === values2?.apiUrl
+  );
+};
+
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
 
@@ -65,7 +74,7 @@ export const useDetectorForm = () => {
           apiKey: libData?.config?.apiKey,
           apiUrl: libData?.config?.apiUrl,
         };
-        if (state.frameId !== null && state.frameId !== frameId) {
+        if (state.libConfig !== null && state.frameId !== frameId) {
           return {
             ...state,
             error: 'Detected multiple Tolgee instances',
@@ -112,21 +121,22 @@ export const useDetectorForm = () => {
             apiUrl: state.values?.apiUrl,
           },
         };
-      case 'CLEAR_ALL':
+      case 'CLEAR_ALL': {
         apply();
         return {
           ...state,
-          appliedValues: null,
+          appliedValues: undefined,
           storedValues: null,
           values: null,
           libConfig: null,
         };
+      }
       case 'STORE_VALUES':
         apply();
         return {
           ...state,
-          storedValues: state.appliedValues,
-          values: state.appliedValues,
+          storedValues: state.appliedValues || null,
+          values: state.appliedValues || null,
           appliedValues: null,
         };
       case 'LOAD_VALUES':
@@ -218,11 +228,17 @@ export const useDetectorForm = () => {
     dispatch({ type: 'SET_CREDENTIALS_CHECK', payload: val });
   };
 
-  const checkableValues: Values | undefined =
-    appliedValues || !storedValues ? libConfig?.config : undefined;
+  let checkableValues: Values | undefined | null;
+
+  if (appliedValues && compareValues(appliedValues, libConfig?.config)) {
+    checkableValues = validateValues(appliedValues);
+  } else if (!storedValues) {
+    checkableValues = validateValues(libConfig?.config);
+  }
 
   // check applied credentials
   useEffect(() => {
+    let cancelled = false;
     if (validateValues(checkableValues)) {
       setCredentialsCheck('loading');
 
@@ -238,17 +254,23 @@ export const useDetectorForm = () => {
             throw r.json();
           }
         })
-        .catch(() => setCredentialsCheck('invalid'))
+        .catch(() => {
+          !cancelled && setCredentialsCheck('invalid');
+        })
         .then((data) => {
-          setCredentialsCheck({
-            projectName: data.projectName,
-            scopes: data.scopes,
-            userFullName: data.userFullName,
-          });
+          !cancelled &&
+            setCredentialsCheck({
+              projectName: data.projectName,
+              scopes: data.scopes,
+              userFullName: data.userFullName,
+            });
         });
     } else {
       setCredentialsCheck(null);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [checkableValues?.apiUrl, checkableValues?.apiKey]);
 
   return [state, dispatch] as const;
