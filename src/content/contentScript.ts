@@ -86,11 +86,7 @@ messages.listenRuntime('SET_CREDENTIALS', (data, sendResponse) => {
   } else {
     sessionStorage.removeItem(API_URL_LOCAL_STORAGE);
   }
-  if (configuration?.noRestart && data.apiKey && data.apiUrl) {
-    messages.sendToLib('SET_CREDENTIALS');
-  } else {
-    location.reload();
-  }
+  location.reload();
   sendResponse(true);
   updateState(configuration, messages);
 });
