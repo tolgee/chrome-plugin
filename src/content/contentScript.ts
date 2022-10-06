@@ -18,24 +18,7 @@ const getAppliedCredenials = () => {
 
 // handshake with library
 messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
-  if (!configuration) {
-    configuration = c;
-    const appliedCredentials = getAppliedCredenials();
-    if (
-      appliedCredentials.apiKey &&
-      c.uiPresent === false &&
-      (c.mode || c.config?.mode) === 'development'
-    ) {
-      injectUiLib(c.uiVersion);
-    }
-    updateState(configuration, messages);
-    messages.sendToLib('TOLGEE_PLUGIN_READY');
-    messages.sendToPlugin('TOLGEE_CONFIG_LOADED', configuration);
-  }
-});
-
-// handshake with library
-messages.listenWindow('TOLGEE_CONFIG_UPDATE', (c: LibConfig) => {
+  const firstHandshake = !configuration;
   configuration = c;
   const appliedCredentials = getAppliedCredenials();
   if (
@@ -46,7 +29,13 @@ messages.listenWindow('TOLGEE_CONFIG_UPDATE', (c: LibConfig) => {
     injectUiLib(c.uiVersion);
   }
   updateState(configuration, messages);
-  messages.sendToLib('TOLGEE_PLUGIN_UPDATED');
+  if (firstHandshake) {
+    messages.sendToLib('TOLGEE_PLUGIN_READY');
+  } else {
+    // !!!! different message to make it backward compatible with old Tolgee
+    // if we keep it same, it will cause infinite loop
+    messages.sendToLib('TOLGEE_PLUGIN_UPDATED');
+  }
   messages.sendToPlugin('TOLGEE_CONFIG_LOADED', configuration);
 });
 
