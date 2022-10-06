@@ -170,7 +170,7 @@ export const useDetectorForm = () => {
   }, [appliedValues]);
 
   useEffect(() => {
-    sendMessage('DETECT_TOLGEE').then(() => {});
+    sendMessage('DETECT_TOLGEE');
   }, []);
 
   // timeout when Tolgee is not detected
@@ -230,10 +230,10 @@ export const useDetectorForm = () => {
 
   let checkableValues: Values | undefined | null;
 
-  if (appliedValues && compareValues(appliedValues, libConfig?.config)) {
-    checkableValues = validateValues(appliedValues);
-  } else if (!storedValues) {
-    checkableValues = validateValues(libConfig?.config);
+  // we want to check validity of values, that are displayed and applied
+  const valuesToCompare = appliedValues || libConfig?.config;
+  if (!storedValues || compareValues(valuesToCompare, storedValues)) {
+    checkableValues = validateValues(valuesToCompare);
   }
 
   // check applied credentials
