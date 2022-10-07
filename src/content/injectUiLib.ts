@@ -10,12 +10,12 @@ function injectScript(src) {
 
 let injectPromise = null as any as Promise<void>;
 
+const CDN_URL = 'https://cdn.jsdelivr.net/npm';
+
 export function injectUiLib(version?: string) {
   if (!injectPromise) {
     injectPromise = injectScript(
-      `https://unpkg.com/@tolgee/ui@${
-        version || 'latest'
-      }/dist/tolgee-ui.umd.min.js`
+      `${CDN_URL}/@tolgee/ui@${version || 'latest'}/dist/tolgee-ui.umd.min.js`
     );
   }
   return injectPromise;
