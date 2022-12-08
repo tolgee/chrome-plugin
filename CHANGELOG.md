@@ -1,3 +1,13 @@
+# [1.4.0](https://github.com/tolgee/chrome-plugin/compare/v1.3.0...v1.4.0) (2022-12-08)
+
+
+### Features
+
+* allow no-restart flow ([e28aa3f](https://github.com/tolgee/chrome-plugin/commit/e28aa3f504fcc888f2a23f6d21a5c72d8c47e0d6))
+* improve communication with library ([2820845](https://github.com/tolgee/chrome-plugin/commit/282084521725581f0d4683f175239b62cfcf4427))
+* remove noRestart flow ([810225c](https://github.com/tolgee/chrome-plugin/commit/810225c2c72a360732e877d1769102cd7e2ca256))
+* use jsdelivr instead of unpkg ([365cb43](https://github.com/tolgee/chrome-plugin/commit/365cb4391d25e493fcc75330ce7813532d4b92ab))
+
 # [1.3.0](https://github.com/tolgee/chrome-plugin/compare/v1.2.4...v1.3.0) (2022-09-15)
 
 
