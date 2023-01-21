@@ -10,7 +10,8 @@ import {
   Typography,
 } from '@material-ui/core';
 
-import { useDetectorForm, validateValues } from './useDetectorForm';
+import { useDetectorForm } from './useDetectorForm';
+import { validateValues } from './tools';
 
 const POPUP_WIDTH = 400;
 

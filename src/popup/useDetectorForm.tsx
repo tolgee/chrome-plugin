@@ -3,12 +3,8 @@ import { LibConfig } from '../types';
 import { loadAppliedValues } from './loadConfig';
 import { sendMessage } from './sendMessage';
 import { loadValues, storeValues } from './storage';
+import { compareValues, normalizeUrl, validateValues, Values } from './tools';
 import { useApplier } from './useApplier';
-
-type Values = {
-  apiUrl?: string;
-  apiKey?: string;
-};
 
 type ProjectInfo = {
   projectName: string;
@@ -44,22 +40,6 @@ type Action =
   | { type: 'CLEAR_ALL' }
   | { type: 'STORE_VALUES' }
   | { type: 'LOAD_VALUES' };
-
-export const validateValues = (values?: Values | null) => {
-  if (values?.apiKey && values?.apiUrl) {
-    return values;
-  }
-  return null;
-};
-
-export const compareValues = (
-  values1?: Values | null,
-  values2?: Values | null
-) => {
-  return (
-    values1?.apiKey === values2?.apiKey && values2?.apiUrl === values2?.apiUrl
-  );
-};
 
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
@@ -242,11 +222,9 @@ export const useDetectorForm = () => {
     if (validateValues(checkableValues)) {
       setCredentialsCheck('loading');
 
-      fetch(
-        `${checkableValues!.apiUrl}/v2/api-keys/current?ak=${
-          checkableValues!.apiKey
-        }`
-      )
+      const url = normalizeUrl(checkableValues!.apiUrl);
+
+      fetch(`${url}/v2/api-keys/current?ak=${checkableValues!.apiKey}`)
         .then((r) => {
           if (r.ok) {
             return r.json();
