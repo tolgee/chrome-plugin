@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/tolgee/chrome-plugin/compare/v1.4.0...v1.4.1) (2023-01-27)
+
+
+### Bug Fixes
+
+* remove trailing slash from url ([d7872a6](https://github.com/tolgee/chrome-plugin/commit/d7872a680696726c2e53038e3db2c109942c55af))
+
 # [1.4.0](https://github.com/tolgee/chrome-plugin/compare/v1.3.0...v1.4.0) (2022-12-08)
 
 
