@@ -1,3 +1,11 @@
+## [1.4.2](https://github.com/tolgee/chrome-plugin/compare/v1.4.1...v1.4.2) (2023-01-27)
+
+
+### Bug Fixes
+
+* use tolgee pat instead of github token ([7237ac7](https://github.com/tolgee/chrome-plugin/commit/7237ac72c90ba66f03349e7d066acc72258f23a6))
+* use tolgee pat instead of github token ([735ad0b](https://github.com/tolgee/chrome-plugin/commit/735ad0bb1b926a9bd06c41b37e11e5c197dc0ad7))
+
 ## [1.4.1](https://github.com/tolgee/chrome-plugin/compare/v1.4.0...v1.4.1) (2023-01-27)
 
 
