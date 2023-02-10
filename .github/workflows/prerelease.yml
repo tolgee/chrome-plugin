@@ -32,7 +32,7 @@ jobs:
 
       - name: Set version property
         id: version
-        run: echo ::set-output name=VERSION::$(test -e .VERSION && echo v$(cat .VERSION))
+        run: echo "VERSION=$(test -e .VERSION && echo v$(cat .VERSION))" >> $GITHUB_OUTPUT
 
       - name: Upgrade version in manifest.json
         run: sh upgrade_manifest.sh $(cat .VERSION)
