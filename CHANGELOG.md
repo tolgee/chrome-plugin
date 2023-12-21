@@ -1,3 +1,11 @@
+# [1.5.0](https://github.com/tolgee/chrome-plugin/compare/v1.4.2...v1.5.0) (2023-12-21)
+
+
+### Features
+
+* remove unnecessary icons ([882ca22](https://github.com/tolgee/chrome-plugin/commit/882ca223b2f14780413bdd3207ed0f20753db92b))
+* update icon ([e7614a0](https://github.com/tolgee/chrome-plugin/commit/e7614a0b5492438c902bf648edb37da35dabf471))
+
 ## [1.4.2](https://github.com/tolgee/chrome-plugin/compare/v1.4.1...v1.4.2) (2023-01-27)
 
 
