@@ -28,6 +28,7 @@ export class Messages {
 
   readonly startWindowListening = () => {
     const receiveMessage = (event: PgEvent) => {
+      console.log(event.data);
       if (event.source !== window) {
         return;
       }
@@ -68,6 +69,7 @@ export class Messages {
   };
 
   readonly sendToPlugin = (type: string, data?: any) => {
+    console.log({ type, data });
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ type, data }, (data) => resolve(data));
     });

@@ -3,6 +3,7 @@ import { ScreenshotMaker } from './ScreenshotMaker';
 type State = 'present' | 'active' | 'inactive';
 
 chrome.runtime.onMessage.addListener(({ type, data }, sender, sendResponse) => {
+  console.log({ type, data });
   switch (type) {
     case 'TOLGEE_TAKE_SCREENSHOT':
       ScreenshotMaker.capture(sender.tab!.windowId).then((data) => {
@@ -19,7 +20,7 @@ chrome.runtime.onMessage.addListener(({ type, data }, sender, sendResponse) => {
 });
 
 const setStateIcon = (state: State, tabId: number) => {
-  chrome.browserAction.setIcon({
+  chrome.action.setIcon({
     path: {
       128: `assets/${state}.png`,
     },

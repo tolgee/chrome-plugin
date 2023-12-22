@@ -237,6 +237,7 @@ export const useDetectorForm = () => {
         })
         .then((data) => {
           !cancelled &&
+            data &&
             setCredentialsCheck({
               projectName: data.projectName,
               scopes: data.scopes,
