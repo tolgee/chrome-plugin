@@ -21,9 +21,7 @@ chrome.runtime.onMessage.addListener(({ type, data }, sender, sendResponse) => {
 
 const setStateIcon = (state: State, tabId: number) => {
   chrome.action.setIcon({
-    path: {
-      128: `assets/${state}.png`,
-    },
+    path: { 128: `/icons/${state}.png` },
     tabId,
   });
 };
