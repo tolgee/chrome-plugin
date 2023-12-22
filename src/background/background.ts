@@ -9,14 +9,15 @@ chrome.runtime.onMessage.addListener(({ type, data }, sender, sendResponse) => {
       ScreenshotMaker.capture(sender.tab!.windowId).then((data) => {
         sendResponse(data);
       });
-      // this indicates, that we send response asynchronously
       return true;
     case 'TOLGEE_SET_STATE':
       setStateIcon(data, sender.tab!.id!);
-      return false;
+      sendResponse();
+      break;
     default:
-      return false;
+      sendResponse();
   }
+  return false;
 });
 
 const setStateIcon = (state: State, tabId: number) => {
