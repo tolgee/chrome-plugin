@@ -1,19 +1,20 @@
 {
   "name": "Tolgee Tools",
   "version": "1.5.0",
-  "manifest_version": 2,
+  "manifest_version": 3,
   "description": "Translate your web application more effectively with Tolgee plugin!",
-  "browser_action": {
+  "action": {
     "default_icon": {
       "128": "assets/inactive.png"
     },
     "default_popup": "src/popup/index.html"
   },
   "background": {
-    "scripts": ["src/background/background.ts"],
-    "persistent": false
+    "service_worker": "src/background/background.ts",
+    "type": "module"
   },
-  "permissions": ["activeTab", "<all_urls>", "storage"],
+  "permissions": ["activeTab", "tabs", "storage"],
+  "host_permissions": ["<all_urls>"],
   "icons": {
     "128": "assets/present.png"
   },
@@ -23,6 +24,13 @@
       "all_frames": true,
       "run_at": "document_idle",
       "js": ["src/content/contentScript.ts"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*"],
+      "matches": ["*://*/*"],
+      "extensions": []
     }
   ]
 }
