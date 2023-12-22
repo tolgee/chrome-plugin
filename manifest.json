@@ -13,7 +13,7 @@
     "service_worker": "src/background/background.ts",
     "type": "module"
   },
-  "permissions": ["activeTab", "tabs", "storage"],
+  "permissions": ["activeTab", "storage"],
   "host_permissions": ["<all_urls>"],
   "icons": {
     "128": "icons/present.png"
@@ -24,13 +24,6 @@
       "all_frames": true,
       "run_at": "document_idle",
       "js": ["src/content/contentScript.ts"]
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["icons/*"],
-      "matches": ["*://*/*"],
-      "extensions": []
     }
   ]
 }
