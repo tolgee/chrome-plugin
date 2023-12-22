@@ -3,10 +3,7 @@ type Listener = {
   callback: (data) => void;
 };
 
-type RuntimeCallbackType = (
-  data,
-  responseCallback: (response?) => void
-) => void;
+type RuntimeCallbackType = (data) => Promise<any>;
 
 type RuntimeListener = {
   type: string;
@@ -28,7 +25,6 @@ export class Messages {
 
   readonly startWindowListening = () => {
     const receiveMessage = (event: PgEvent) => {
-      console.log(event.data);
       if (event.source !== window) {
         return;
       }
@@ -47,11 +43,12 @@ export class Messages {
     // noinspection JSDeprecatedSymbols
     chrome.runtime.onMessage.addListener(
       (request: RuntimeMessage, sender, sendResponse) => {
-        this.listenersRuntime.forEach((listener) => {
+        this.listenersRuntime.forEach(async (listener) => {
           if (listener.type == request.type) {
-            listener.callback(request.data, sendResponse);
+            sendResponse(await listener.callback(request.data));
           }
         });
+        return true;
       }
     );
   };
@@ -69,7 +66,6 @@ export class Messages {
   };
 
   readonly sendToPlugin = (type: string, data?: any) => {
-    console.log({ type, data });
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ type, data }, (data) => resolve(data));
     });

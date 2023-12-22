@@ -53,18 +53,15 @@ messages.listenWindow('TOLGEE_TAKE_SCREENSHOT', () => {
 messages.startRuntimeListening();
 
 // popup will ask if tolgee is present on the page
-messages.listenRuntime('DETECT_TOLGEE', (data, sendResponse) => {
-  sendResponse();
+messages.listenRuntime('DETECT_TOLGEE', async () => {
   if (configuration) {
     messages.sendToPlugin('TOLGEE_CONFIG_LOADED', configuration);
   }
 });
 
-messages.listenRuntime('GET_CREDENTIALS', (data, sendResponse) =>
-  sendResponse(getAppliedCredenials())
-);
+messages.listenRuntime('GET_CREDENTIALS', async () => getAppliedCredenials());
 
-messages.listenRuntime('SET_CREDENTIALS', (data, sendResponse) => {
+messages.listenRuntime('SET_CREDENTIALS', async (data) => {
   if (data.apiKey) {
     sessionStorage.setItem(API_KEY_LOCAL_STORAGE, data.apiKey);
   } else {
@@ -76,6 +73,5 @@ messages.listenRuntime('SET_CREDENTIALS', (data, sendResponse) => {
     sessionStorage.removeItem(API_URL_LOCAL_STORAGE);
   }
   location.reload();
-  sendResponse(true);
   updateState(configuration, messages);
 });
