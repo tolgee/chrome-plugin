@@ -19,7 +19,7 @@ const getCurrentTabOrigin = async () => {
 export const storeValues = async (values: Values | null) => {
   try {
     const origin = await getCurrentTabOrigin();
-    await new Promise<void>(async (resolve) => {
+    await new Promise<void>((resolve) => {
       if (values?.apiKey && values?.apiUrl) {
         chrome.storage.local.set(
           {
@@ -43,7 +43,7 @@ export const storeValues = async (values: Values | null) => {
 export const loadValues = async () => {
   try {
     const origin = await getCurrentTabOrigin();
-    return new Promise<any>((resolve) =>
+    return new Promise<Values>((resolve) =>
       chrome.storage.local.get(origin, (keys) => {
         const data = keys[origin];
         resolve({
