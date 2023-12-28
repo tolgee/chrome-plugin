@@ -7,7 +7,7 @@
     "default_icon": {
       "128": "icons/inactive.png"
     },
-    "default_popup": "src/popup/index.html"
+    "default_popup": "index.html"
   },
   "background": {
     "service_worker": "src/background/background.ts",
