@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/tolgee/chrome-plugin/compare/v1.6.0...v1.6.1) (2023-12-28)
+
+
+### Bug Fixes
+
+* zip release ([1245b82](https://github.com/tolgee/chrome-plugin/commit/1245b82fb2f98ab73067141b535e518c2f74f962))
+
 # [1.6.0](https://github.com/tolgee/chrome-plugin/compare/v1.5.0...v1.6.0) (2023-12-28)
 
 
