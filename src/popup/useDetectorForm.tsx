@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useReducer } from 'react';
 import { LibConfig } from '../types';
 import { loadAppliedValues } from './loadConfig';
@@ -48,7 +49,7 @@ export const useDetectorForm = () => {
     switch (action.type) {
       case 'CHANGE_VALUES':
         return { ...state, values: { ...state.values, ...action.payload } };
-      case 'CHANGE_LIB_CONFIG':
+      case 'CHANGE_LIB_CONFIG': {
         const { libData, frameId } = action.payload;
         const newValues = {
           apiKey: libData?.config?.apiKey,
@@ -68,9 +69,10 @@ export const useDetectorForm = () => {
           tolgeePresent: !libData
             ? 'not_present'
             : libData.uiPresent === undefined
-            ? 'legacy'
-            : 'present',
+              ? 'legacy'
+              : 'present',
         };
+      }
       case 'SET_APPLIED_VALUES':
         return {
           ...state,
@@ -127,7 +129,7 @@ export const useDetectorForm = () => {
           values: state.storedValues,
         };
       default:
-        // @ts-ignore
+        // @ts-expect-error action type is type uknown
         throw new Error(`Unknown action ${action.type}`);
     }
   };
@@ -191,12 +193,15 @@ export const useDetectorForm = () => {
 
   // listen for Tolgee config change
   useEffect(() => {
-    const listener = ({ type, data }: any, sender) => {
+    const listener = (
+      { type, data }: any,
+      sender: chrome.runtime.MessageSender
+    ) => {
       const frameId = sender.frameId;
       if (type === 'TOLGEE_CONFIG_LOADED') {
         dispatch({
           type: 'CHANGE_LIB_CONFIG',
-          payload: { libData: data, frameId },
+          payload: { libData: data, frameId: frameId || null },
         });
       }
     };

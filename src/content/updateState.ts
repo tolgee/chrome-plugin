@@ -9,7 +9,7 @@ export const updateState = (config: any, messages: Messages) => {
 
   if (Boolean(config) && (apiKey || apiUrl)) {
     state = 'active';
-  } else if (Boolean(config)) {
+  } else if (config) {
     state = 'present';
   } else {
     state = 'inactive';

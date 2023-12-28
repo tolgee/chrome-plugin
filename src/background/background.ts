@@ -3,7 +3,6 @@ import { ScreenshotMaker } from './ScreenshotMaker';
 type State = 'present' | 'active' | 'inactive';
 
 chrome.runtime.onMessage.addListener(({ type, data }, sender, sendResponse) => {
-  console.log({ type, data });
   switch (type) {
     case 'TOLGEE_TAKE_SCREENSHOT':
       ScreenshotMaker.capture(sender.tab!.windowId).then((data) => {

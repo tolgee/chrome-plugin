@@ -8,7 +8,7 @@ import {
   Switch,
   TextField,
   Typography,
-} from '@material-ui/core';
+} from '@mui/material';
 
 import { useDetectorForm } from './useDetectorForm';
 import { validateValues } from './tools';
@@ -109,6 +109,7 @@ export const TolgeeDetector = () => {
           <FormHelperText
             error={credentialsCheck === 'invalid'}
             style={{ height: 15 }}
+            sx={{ marginLeft: 0 }}
           >
             {credentialsCheck === null ? (
               ''
@@ -154,6 +155,7 @@ export const TolgeeDetector = () => {
                 size="small"
                 onClick={() => dispatch({ type: 'CLEAR_ALL' })}
                 variant="contained"
+                color="secondary"
               >
                 Clear
               </Button>

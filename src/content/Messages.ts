@@ -1,9 +1,9 @@
 type Listener = {
   type: string;
-  callback: (data) => void;
+  callback: (data: any) => void;
 };
 
-type RuntimeCallbackType = (data) => Promise<any>;
+type RuntimeCallbackType = (data: any) => Promise<any>;
 
 type RuntimeListener = {
   type: string;
@@ -15,7 +15,7 @@ export type Message = {
   type: string;
 };
 
-export type RuntimeMessage = {} & Message;
+export type RuntimeMessage = object & Message;
 
 type PgEvent = { data: Message } & MessageEvent;
 
@@ -57,7 +57,7 @@ export class Messages {
     this.listenersRuntime.push({ type, callback });
   };
 
-  readonly listenWindow = (type: string, callback: (data) => void) => {
+  readonly listenWindow = (type: string, callback: (data: any) => void) => {
     this.listenersWindow.push({ type, callback });
   };
 

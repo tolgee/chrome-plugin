@@ -1,22 +1,23 @@
-import { createMuiTheme, ThemeProvider } from '@material-ui/core';
-import * as React from 'react';
-import * as ReactDOM from 'react-dom';
+import { createTheme, ThemeProvider } from '@mui/material';
+import { createRoot } from 'react-dom/client';
 import { TolgeeDetector } from './TolgeeDetector';
 
-const theme = createMuiTheme({
+const theme = createTheme({
   palette: {
     primary: {
       main: '#EC407A',
     },
     secondary: {
-      main: '#2B5582',
+      main: '#e0e0e0',
     },
   },
 });
 
-ReactDOM.render(
+const container = document.getElementById('root');
+const root = createRoot(container!);
+
+root.render(
   <ThemeProvider theme={theme}>
     <TolgeeDetector />
-  </ThemeProvider>,
-  document.getElementById('root')
+  </ThemeProvider>
 );
