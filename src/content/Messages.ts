@@ -42,7 +42,7 @@ export class Messages {
   readonly startRuntimeListening = () => {
     // noinspection JSDeprecatedSymbols
     chrome.runtime.onMessage.addListener(
-      (request: RuntimeMessage, sender, sendResponse) => {
+      (request: RuntimeMessage, _, sendResponse) => {
         this.listenersRuntime.forEach(async (listener) => {
           if (listener.type == request.type) {
             sendResponse(await listener.callback(request.data));
