@@ -5,6 +5,7 @@
   "main": "index.js",
   "author": "Jan Cizmar",
   "license": "ISC",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
