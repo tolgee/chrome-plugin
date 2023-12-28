@@ -1,3 +1,20 @@
+# [1.6.0](https://github.com/tolgee/chrome-plugin/compare/v1.5.0...v1.6.0) (2023-12-28)
+
+
+### Bug Fixes
+
+* avoid console errors ([14f4b59](https://github.com/tolgee/chrome-plugin/commit/14f4b593d23b172683d26332b7991eb20befc0c9))
+
+
+### Features
+
+* icon changes working ([21ee241](https://github.com/tolgee/chrome-plugin/commit/21ee241d7cdadf8204ff351c0fd363d5d63a99e0))
+* move to VITE ([a023799](https://github.com/tolgee/chrome-plugin/commit/a02379960b6e7bba4252a35bc5b3986067ca5030))
+* move to VITE ([c73c6c4](https://github.com/tolgee/chrome-plugin/commit/c73c6c41f5fa6638689244f0b793f560e2b868ed))
+* remove unnecessary permissions ([b3085ae](https://github.com/tolgee/chrome-plugin/commit/b3085aededa83ad357527974c06a020d02d2e55f))
+* remove unnecessary permissions ([1ea770c](https://github.com/tolgee/chrome-plugin/commit/1ea770c3836b4b19327856ab83cc087ed487b34d))
+* screenshots working ([939bdf5](https://github.com/tolgee/chrome-plugin/commit/939bdf56aaf0e36698edf6ea4cee140fb69b8fa2))
+
 # [1.5.0](https://github.com/tolgee/chrome-plugin/compare/v1.4.2...v1.5.0) (2023-12-21)
 
 
