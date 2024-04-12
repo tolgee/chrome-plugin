@@ -56,6 +56,8 @@ messages.startRuntimeListening();
 messages.listenRuntime('DETECT_TOLGEE', async () => {
   if (configuration) {
     messages.sendToPlugin('TOLGEE_CONFIG_LOADED', configuration);
+  } else {
+    messages.sendToPlugin('TOLGEE_CONFIG_NOT_LOADED');
   }
 });
 
