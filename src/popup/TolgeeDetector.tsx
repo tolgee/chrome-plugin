@@ -47,7 +47,9 @@ export const TolgeeDetector = () => {
   if (error) {
     return (
       <Box width={POPUP_WIDTH} p={1} color="red">
-        <Typography variant="body2">Error: {error}</Typography>
+        <Typography variant="body2" fontWeight="bold">
+          Error: {error}
+        </Typography>
       </Box>
     );
   } else if (tolgeePresent === 'loading') {

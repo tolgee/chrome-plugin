@@ -34,6 +34,7 @@ type Action =
       type: 'CHANGE_LIB_CONFIG';
       payload: { libData: LibConfig | null; frameId: number | null };
     }
+  | { type: 'SET_ERROR'; payload: string }
   | { type: 'SET_APPLIED_VALUES'; payload: Values | null }
   | { type: 'SET_CREDENTIALS_CHECK'; payload: CredentialsCheck }
   | { type: 'LOAD_STORED_VALUES'; payload: Values | null }
@@ -73,6 +74,12 @@ export const useDetectorForm = () => {
               : 'present',
         };
       }
+      case 'SET_ERROR':
+        return {
+          ...state,
+          tolgeePresent: 'not_present',
+          error: action.payload,
+        };
       case 'SET_APPLIED_VALUES':
         return {
           ...state,
@@ -152,24 +159,13 @@ export const useDetectorForm = () => {
   }, [appliedValues]);
 
   useEffect(() => {
-    sendMessage('DETECT_TOLGEE');
+    sendMessage('DETECT_TOLGEE').catch(() => {
+      dispatch({
+        type: 'SET_ERROR',
+        payload: 'No access to this page, try to refresh',
+      });
+    });
   }, []);
-
-  // timeout when Tolgee is not detected
-  useEffect(() => {
-    if (!state.libConfig) {
-      const timer = setTimeout(
-        () =>
-          dispatch({
-            type: 'CHANGE_LIB_CONFIG',
-            payload: { frameId: null, libData: null },
-          }),
-        300
-      );
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [state.libConfig]);
 
   // after tolgee config is loaded
   // get applied values and stored values
@@ -202,6 +198,11 @@ export const useDetectorForm = () => {
         dispatch({
           type: 'CHANGE_LIB_CONFIG',
           payload: { libData: data, frameId: frameId || null },
+        });
+      } else if (type === 'TOLGEE_CONFIG_NOT_LOADED') {
+        dispatch({
+          type: 'CHANGE_LIB_CONFIG',
+          payload: { libData: null, frameId: null },
         });
       }
     };
