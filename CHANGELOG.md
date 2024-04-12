@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/tolgee/chrome-plugin/compare/v1.6.1...v1.7.0) (2024-04-12)
+
+
+### Features
+
+* show error when page is not responding ([3af107e](https://github.com/tolgee/chrome-plugin/commit/3af107e5a5f6ef8fd285931554c987b9b2dccdfa))
+
 ## [1.6.1](https://github.com/tolgee/chrome-plugin/compare/v1.6.0...v1.6.1) (2023-12-28)
 
 
