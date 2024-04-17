@@ -167,6 +167,22 @@ export const useDetectorForm = () => {
     });
   }, []);
 
+  // timeout when Tolgee is not detected
+  useEffect(() => {
+    if (!state.libConfig) {
+      const timer = setTimeout(
+        () =>
+          dispatch({
+            type: 'CHANGE_LIB_CONFIG',
+            payload: { frameId: null, libData: null },
+          }),
+        300
+      );
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [state.libConfig]);
+
   // after tolgee config is loaded
   // get applied values and stored values
   const onLibConfigChange = async () => {
@@ -198,11 +214,6 @@ export const useDetectorForm = () => {
         dispatch({
           type: 'CHANGE_LIB_CONFIG',
           payload: { libData: data, frameId: frameId || null },
-        });
-      } else if (type === 'TOLGEE_CONFIG_NOT_LOADED') {
-        dispatch({
-          type: 'CHANGE_LIB_CONFIG',
-          payload: { libData: null, frameId: null },
         });
       }
     };
