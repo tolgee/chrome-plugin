@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/tolgee/chrome-plugin/compare/v1.7.0...v1.7.1) (2024-04-17)
+
+
+### Bug Fixes
+
+* bug when there are iframes ([6310fdb](https://github.com/tolgee/chrome-plugin/commit/6310fdbc85c9e1b4a962093ef3d3699b467b7446))
+
 # [1.7.0](https://github.com/tolgee/chrome-plugin/compare/v1.6.1...v1.7.0) (2024-04-12)
 
 
