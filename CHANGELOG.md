@@ -1,3 +1,10 @@
+## [1.7.2](https://github.com/tolgee/chrome-plugin/compare/v1.7.1...v1.7.2) (2024-10-18)
+
+
+### Bug Fixes
+
+* hotfix manifest.json to work ([7920aff](https://github.com/tolgee/chrome-plugin/commit/7920aff9f8ab94e7b5c69e0dd94d495ed5234e71))
+
 ## [1.7.1](https://github.com/tolgee/chrome-plugin/compare/v1.7.0...v1.7.1) (2024-04-17)
 
 
