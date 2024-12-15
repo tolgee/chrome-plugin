@@ -13,7 +13,7 @@ import manifest from './manifest.json';
 
 function myPlugin(): Plugin {
   function updateManifest() {
-    const absolutePath = path.resolve('./dist/manifest.json');
+    const absolutePath = path.resolve('./dist-firefox/manifest.json');
 
     const content = fs.readFileSync(absolutePath);
     const test = JSON.parse(content);
@@ -43,5 +43,14 @@ function myPlugin(): Plugin {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), crx({ manifest: manifest as any }), myPlugin(), zipPack()],
+  build: {
+    outDir: 'dist-firefox',
+    emptyOutDir: true,
+  },
+  plugins: [
+    react(),
+    crx({ manifest: manifest as any, browser: 'firefox' }),
+    myPlugin(),
+    zipPack({ inDir: 'dist-firefox', outFileName: 'firefox.zip' }),
+  ],
 });

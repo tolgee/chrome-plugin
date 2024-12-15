@@ -1,3 +1,5 @@
+import browser from 'webextension-polyfill';
+
 type Listener = {
   type: string;
   callback: (data: any) => void;
@@ -40,17 +42,18 @@ export class Messages {
   };
 
   readonly startRuntimeListening = () => {
-    // noinspection JSDeprecatedSymbols
-    chrome.runtime.onMessage.addListener(
-      (request: RuntimeMessage, _, sendResponse) => {
-        this.listenersRuntime.forEach(async (listener) => {
-          if (listener.type == request.type) {
-            sendResponse(await listener.callback(request.data));
-          }
-        });
-        return true;
-      }
-    );
+    browser.runtime.onMessage.addListener((request, _, sendResponse) => {
+      const { type, data } = request as RuntimeMessage;
+
+      this.listenersRuntime.forEach(async (listener) => {
+        if (listener.type == type) {
+          const response = await listener.callback(data);
+
+          sendResponse(response);
+        }
+      });
+      return true;
+    });
   };
 
   readonly listenRuntime = (type: string, callback: RuntimeCallbackType) => {
@@ -66,8 +69,6 @@ export class Messages {
   };
 
   readonly sendToPlugin = (type: string, data?: any) => {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type, data }, (data) => resolve(data));
-    });
+    return browser.runtime.sendMessage({ type, data });
   };
 }

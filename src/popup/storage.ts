@@ -1,14 +1,14 @@
+import browser from 'webextension-polyfill';
+
 type Values = {
   apiUrl?: string;
   apiKey?: string;
 };
 
 const getCurrentTab = async () => {
-  return new Promise<chrome.tabs.Tab>((resolve) =>
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      resolve(tabs[0]);
-    })
-  );
+  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+
+  return tabs[0];
 };
 
 const getCurrentTabOrigin = async () => {
@@ -19,21 +19,17 @@ const getCurrentTabOrigin = async () => {
 export const storeValues = async (values: Values | null) => {
   try {
     const origin = await getCurrentTabOrigin();
-    await new Promise<void>((resolve) => {
-      if (values?.apiKey && values?.apiUrl) {
-        chrome.storage.local.set(
-          {
-            [origin]: {
-              apiUrl: values.apiUrl,
-              apiKey: values.apiKey,
-            },
-          },
-          resolve
-        );
-      } else {
-        chrome.storage.local.remove(origin, resolve);
-      }
-    });
+
+    if (values?.apiKey && values?.apiUrl) {
+      browser.storage.local.set({
+        [origin]: {
+          apiUrl: values.apiUrl,
+          apiKey: values.apiKey,
+        },
+      });
+    } else {
+      browser.storage.local.remove(origin);
+    }
   } catch (e) {
     console.error(e);
     return;
@@ -43,15 +39,13 @@ export const storeValues = async (values: Values | null) => {
 export const loadValues = async () => {
   try {
     const origin = await getCurrentTabOrigin();
-    return new Promise<Values>((resolve) =>
-      chrome.storage.local.get(origin, (keys) => {
-        const data = keys[origin];
-        resolve({
-          apiKey: data?.apiKey,
-          apiUrl: data?.apiUrl,
-        });
-      })
-    );
+    const keys = await browser.storage.local.get(origin);
+    const data = keys[origin] as Values;
+
+    return {
+      apiKey: data?.apiKey,
+      apiUrl: data?.apiUrl,
+    };
   } catch (e) {
     console.error(e);
     return {};
