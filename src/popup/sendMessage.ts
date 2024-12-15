@@ -1,16 +1,15 @@
-export const sendMessage = (type: string, data?: any) => {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      chrome.tabs.sendMessage(
-        tabs[0].id as number,
-        { type, data },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError);
-          }
-          resolve(response);
-        }
-      );
-    });
+import browser from 'webextension-polyfill';
+
+export const sendMessage = async (type: string, data?: any) => {
+  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+  const response = await browser.tabs.sendMessage(tabs[0].id as number, {
+    type,
+    data,
   });
+
+  if (browser.runtime.lastError) {
+    throw browser.runtime.lastError;
+  }
+
+  return response;
 };

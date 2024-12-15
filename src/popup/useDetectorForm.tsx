@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
+import browser, { type Runtime } from 'webextension-polyfill';
 import { useEffect, useReducer } from 'react';
 import { LibConfig } from '../types';
 import { loadAppliedValues } from './loadConfig';
@@ -6,6 +7,7 @@ import { sendMessage } from './sendMessage';
 import { loadValues, storeValues } from './storage';
 import { compareValues, normalizeUrl, validateValues, Values } from './tools';
 import { useApplier } from './useApplier';
+import { RuntimeMessage } from '../content/Messages';
 
 type ProjectInfo = {
   projectName: string;
@@ -205,10 +207,9 @@ export const useDetectorForm = () => {
 
   // listen for Tolgee config change
   useEffect(() => {
-    const listener = (
-      { type, data }: any,
-      sender: chrome.runtime.MessageSender
-    ) => {
+    const listener = (message: unknown, sender: Runtime.MessageSender) => {
+      const { type, data } = message as RuntimeMessage;
+
       const frameId = sender.frameId;
       if (type === 'TOLGEE_CONFIG_LOADED') {
         dispatch({
@@ -216,9 +217,11 @@ export const useDetectorForm = () => {
           payload: { libData: data, frameId: frameId || null },
         });
       }
+
+      return undefined;
     };
-    chrome.runtime.onMessage.addListener(listener);
-    () => chrome.runtime.onMessage.removeListener(listener);
+    browser.runtime.onMessage.addListener(listener);
+    () => browser.runtime.onMessage.removeListener(listener);
   }, []);
 
   const setCredentialsCheck = (val: CredentialsCheck) => {
