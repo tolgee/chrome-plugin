@@ -1,3 +1,15 @@
+# [1.8.0](https://github.com/tolgee/chrome-plugin/compare/v1.7.2...v1.8.0) (2024-12-16)
+
+
+### Bug Fixes
+
+* remove myPlugin from firefox vite config ([c8ff703](https://github.com/tolgee/chrome-plugin/commit/c8ff703cf21feb7fc11afe4a3b1a4b3b26872a0d))
+
+
+### Features
+
+* add firefox support ([ea86d4d](https://github.com/tolgee/chrome-plugin/commit/ea86d4d808b534665c98c07f678c9635e4a9dbc4))
+
 ## [1.7.2](https://github.com/tolgee/chrome-plugin/compare/v1.7.1...v1.7.2) (2024-10-18)
 
 
