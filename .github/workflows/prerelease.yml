@@ -65,7 +65,7 @@ jobs:
           draft: false
           prerelease: true
 
-      - name: Upload Release Asset
+      - name: Upload Release Asset Chrome
         if: ${{ steps.version.outputs.VERSION != '' }}
         id: upload-release-asset
         uses: actions/upload-release-asset@v1
@@ -73,6 +73,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist-zip/dist.zip
+          asset_path: ./dist-zip/chrome.zip
           asset_name: Tolgee-chrome-${{ steps.version.outputs.VERSION }}.zip
+          asset_content_type: application/zip
+
+      - name: Upload Release Asset Firefox
+        if: ${{ steps.version.outputs.VERSION != '' }}
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist-zip/firefox.zip
+          asset_name: Tolgee-firefox-${{ steps.version.outputs.VERSION }}.zip
           asset_content_type: application/zip
