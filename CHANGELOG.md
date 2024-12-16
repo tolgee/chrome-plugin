@@ -1,3 +1,10 @@
+## [1.8.2](https://github.com/tolgee/chrome-plugin/compare/v1.8.1...v1.8.2) (2024-12-16)
+
+
+### Bug Fixes
+
+* firefox manifest update ([dfe7096](https://github.com/tolgee/chrome-plugin/commit/dfe7096d9e67483ef7aa4c93ff9730ac1755cfc4))
+
 ## [1.8.1](https://github.com/tolgee/chrome-plugin/compare/v1.8.0...v1.8.1) (2024-12-16)
 
 
