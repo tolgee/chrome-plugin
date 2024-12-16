@@ -1,3 +1,11 @@
+## [1.8.1](https://github.com/tolgee/chrome-plugin/compare/v1.8.0...v1.8.1) (2024-12-16)
+
+
+### Bug Fixes
+
+* update release pipeline ([8d9e40c](https://github.com/tolgee/chrome-plugin/commit/8d9e40c386d4a44cda1f1080d105fdae007d817a))
+* update release pipeline ([cb684e7](https://github.com/tolgee/chrome-plugin/commit/cb684e78b8c7166cd96c26095988a648ab5ec3ed))
+
 # [1.8.0](https://github.com/tolgee/chrome-plugin/compare/v1.7.2...v1.8.0) (2024-12-16)
 
 
