@@ -14,9 +14,17 @@ Tolgee Chrome plugin is an integral part of Tolgee ecosystem. It enables tolgee-
 
 With the Tolgee plugin, you can modify translations live on your page, so you can see the location of all translations. Find out how exactly the page will look with the newly added translation. 
 
+## Install Extension
+
+You can download our Chrome browser extension on Chrome Web Store:
+
+[<img src="images/available-on-chrome-banner.png" alt="Available on Chrome Web Store" width="200" />](https://chromewebstore.google.com/detail/tolgee-tools/hacnbapajkkfohnonhbmegojnddagfnj)
+
 ## Additional information
 
 To learn more visit [https://tolgee.io](https://tolgee.io)
+
+Or visit our main GitHub page: [https://github.com/tolgee/tolgee-platform](https://github.com/tolgee/tolgee-platform)
 
 👇 Concider supporting us with your stars ⭐️
 
