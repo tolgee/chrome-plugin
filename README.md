@@ -25,7 +25,7 @@ Translate your web application more effectively with the Tolgee plugin!
 
 ## Tolgee Chrome plugin is an integral part of Tolgee ecosystem
 
-![Tolgee_demo_wide](https://github.com/user-attachments/assets/ca0d0ea0-a440-409f-a3cd-f93ef01dc197)
+![Tolgee Demo Example](https://github.com/user-attachments/assets/ca0d0ea0-a440-409f-a3cd-f93ef01dc197)
 
 
 ## Features
