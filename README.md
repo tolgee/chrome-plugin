@@ -25,9 +25,8 @@ Translate your web application more effectively with the Tolgee plugin!
 
 ## Tolgee Chrome plugin is an integral part of Tolgee ecosystem
 
-<img src="images/tolgee-chrome-translate-screenshot.png" alt="Tolgee Translate Content Instantly" width="500">
+![Tolgee_demo_wide](https://github.com/user-attachments/assets/ca0d0ea0-a440-409f-a3cd-f93ef01dc197)
 
-It enables tolgee-js to take screenshots automatically. With the Tolgee plugin, you can modify translations live on your page so you can see the location of all translations. Find out how exactly the page will look with the newly added translation. 
 
 ## Features
 
