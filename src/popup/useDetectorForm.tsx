@@ -13,6 +13,7 @@ type ProjectInfo = {
   projectName: string;
   scopes: string[];
   userFullName: string;
+  branchingEnabled: boolean;
 };
 
 type CredentialsCheck = null | 'loading' | 'invalid' | ProjectInfo;
@@ -57,6 +58,7 @@ export const useDetectorForm = () => {
         const newValues = {
           apiKey: libData?.config?.apiKey,
           apiUrl: libData?.config?.apiUrl,
+          branch: libData?.config?.branch,
         };
         if (state.libConfig !== null && state.frameId !== frameId) {
           return {
@@ -106,10 +108,12 @@ export const useDetectorForm = () => {
           appliedValues: {
             apiKey: state.values?.apiKey,
             apiUrl: state.values?.apiUrl,
+            branch: state.values?.branch,
           },
           storedValues: {
             apiKey: state.values?.apiKey,
             apiUrl: state.values?.apiUrl,
+            branch: state.values?.branch,
           },
         };
       case 'CLEAR_ALL': {
@@ -262,6 +266,7 @@ export const useDetectorForm = () => {
               projectName: data.projectName,
               scopes: data.scopes,
               userFullName: data.userFullName,
+              branchingEnabled: data.branchingEnabled ?? false,
             });
         });
     } else {

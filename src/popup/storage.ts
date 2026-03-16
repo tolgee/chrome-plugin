@@ -3,6 +3,7 @@ import browser from 'webextension-polyfill';
 type Values = {
   apiUrl?: string;
   apiKey?: string;
+  branch?: string;
 };
 
 const getCurrentTab = async () => {
@@ -25,6 +26,7 @@ export const storeValues = async (values: Values | null) => {
         [origin]: {
           apiUrl: values.apiUrl,
           apiKey: values.apiKey,
+          branch: values.branch,
         },
       });
     } else {
@@ -45,6 +47,7 @@ export const loadValues = async () => {
     return {
       apiKey: data?.apiKey,
       apiUrl: data?.apiUrl,
+      branch: data?.branch,
     };
   } catch (e) {
     console.error(e);

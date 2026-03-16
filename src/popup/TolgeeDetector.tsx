@@ -66,7 +66,8 @@ export const TolgeeDetector = () => {
     const valuesNotChanged =
       isInDevelopmentMode &&
       libConfig?.config.apiKey === values?.apiKey &&
-      libConfig?.config.apiUrl === values?.apiUrl;
+      libConfig?.config.apiUrl === values?.apiUrl &&
+      (libConfig?.config.branch || '') === (values?.branch || '');
 
     return (
       <Box
@@ -126,6 +127,23 @@ export const TolgeeDetector = () => {
             )}
           </FormHelperText>
         </FormControl>
+        {typeof credentialsCheck === 'object' &&
+          credentialsCheck?.branchingEnabled && (
+            <TextField
+              label="Branch"
+              variant="outlined"
+              value={values?.branch || ''}
+              onChange={(e: any) =>
+                dispatch({
+                  type: 'CHANGE_VALUES',
+                  payload: { branch: e.target.value },
+                })
+              }
+              onKeyDown={handleKeyDown}
+              size="small"
+              placeholder={libConfig?.config?.branch || 'Default branch'}
+            />
+          )}
         <Box
           display="flex"
           justifyContent="space-between"

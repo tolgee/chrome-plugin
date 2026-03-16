@@ -1,4 +1,8 @@
-import { API_KEY_LOCAL_STORAGE, API_URL_LOCAL_STORAGE } from '../constants';
+import {
+  API_KEY_LOCAL_STORAGE,
+  API_URL_LOCAL_STORAGE,
+  BRANCH_LOCAL_STORAGE,
+} from '../constants';
 import { LibConfig } from '../types';
 import { injectUiLib } from './injectUiLib';
 import { Messages } from './Messages';
@@ -13,6 +17,7 @@ const getAppliedCredenials = () => {
   return {
     apiKey: sessionStorage.getItem(API_KEY_LOCAL_STORAGE),
     apiUrl: sessionStorage.getItem(API_URL_LOCAL_STORAGE),
+    branch: sessionStorage.getItem(BRANCH_LOCAL_STORAGE),
   };
 };
 
@@ -71,6 +76,11 @@ messages.listenRuntime('SET_CREDENTIALS', async (data) => {
     sessionStorage.setItem(API_URL_LOCAL_STORAGE, data.apiUrl);
   } else {
     sessionStorage.removeItem(API_URL_LOCAL_STORAGE);
+  }
+  if (data.branch) {
+    sessionStorage.setItem(BRANCH_LOCAL_STORAGE, data.branch);
+  } else {
+    sessionStorage.removeItem(BRANCH_LOCAL_STORAGE);
   }
   location.reload();
   updateState(configuration, messages);

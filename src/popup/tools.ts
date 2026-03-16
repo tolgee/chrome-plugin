@@ -1,6 +1,7 @@
 export type Values = {
   apiUrl?: string;
   apiKey?: string;
+  branch?: string;
 };
 
 export const validateValues = (values?: Values | null) => {
