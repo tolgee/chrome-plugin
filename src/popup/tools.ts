@@ -16,7 +16,9 @@ export const compareValues = (
   values2?: Values | null
 ) => {
   return (
-    values1?.apiKey === values2?.apiKey && values2?.apiUrl === values2?.apiUrl
+    values1?.apiKey === values2?.apiKey &&
+    values1?.apiUrl === values2?.apiUrl &&
+    (values1?.branch || '') === (values2?.branch || '')
   );
 };
 

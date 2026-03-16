@@ -100,22 +100,29 @@ export const useDetectorForm = () => {
           storedValues: action.payload,
           values: action.payload,
         };
-      case 'APPLY_VALUES':
+      case 'APPLY_VALUES': {
         // sync values with storage/localStorage
         apply();
+        const branchEnabled =
+          typeof state.credentialsCheck === 'object' &&
+          state.credentialsCheck?.branchingEnabled;
+        const effectiveBranch = branchEnabled
+          ? state.values?.branch
+          : undefined;
         return {
           ...state,
           appliedValues: {
             apiKey: state.values?.apiKey,
             apiUrl: state.values?.apiUrl,
-            branch: state.values?.branch,
+            branch: effectiveBranch,
           },
           storedValues: {
             apiKey: state.values?.apiKey,
             apiUrl: state.values?.apiUrl,
-            branch: state.values?.branch,
+            branch: effectiveBranch,
           },
         };
+      }
       case 'CLEAR_ALL': {
         apply();
         return {
