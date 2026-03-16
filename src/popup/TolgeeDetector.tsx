@@ -142,6 +142,7 @@ export const TolgeeDetector = () => {
               onKeyDown={handleKeyDown}
               size="small"
               placeholder={libConfig?.config?.branch || 'Default branch'}
+              helperText="Leave empty to use the branch from SDK config"
             />
           )}
         <Box
