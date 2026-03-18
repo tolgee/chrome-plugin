@@ -11,6 +11,7 @@ import { RuntimeMessage } from '../content/Messages';
 
 type ProjectInfo = {
   projectName: string;
+  projectId: number;
   scopes: string[];
   userFullName: string;
   branchingEnabled: boolean;
@@ -18,6 +19,11 @@ type ProjectInfo = {
 
 type CredentialsCheck = null | 'loading' | 'invalid' | ProjectInfo;
 type TolgeePresent = 'loading' | 'present' | 'not_present' | 'legacy';
+
+type BranchOption = {
+  name: string;
+  isDefault: boolean;
+};
 
 const initialState = {
   values: null as Values | null,
@@ -28,6 +34,7 @@ const initialState = {
   libConfig: null as LibConfig | null,
   error: null as string | null,
   frameId: null as number | null,
+  branches: null as BranchOption[] | null,
 };
 
 type State = typeof initialState;
@@ -44,7 +51,8 @@ type Action =
   | { type: 'APPLY_VALUES' }
   | { type: 'CLEAR_ALL' }
   | { type: 'STORE_VALUES' }
-  | { type: 'LOAD_VALUES' };
+  | { type: 'LOAD_VALUES' }
+  | { type: 'SET_BRANCHES'; payload: BranchOption[] | null };
 
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
@@ -147,6 +155,11 @@ export const useDetectorForm = () => {
           ...state,
           appliedValues: state.storedValues,
           values: state.storedValues,
+        };
+      case 'SET_BRANCHES':
+        return {
+          ...state,
+          branches: action.payload,
         };
       default:
         // @ts-expect-error action type is type uknown
@@ -271,6 +284,7 @@ export const useDetectorForm = () => {
             data &&
             setCredentialsCheck({
               projectName: data.projectName,
+              projectId: data.projectId,
               scopes: data.scopes,
               userFullName: data.userFullName,
               branchingEnabled: data.branchingEnabled ?? false,
@@ -283,6 +297,46 @@ export const useDetectorForm = () => {
       cancelled = true;
     };
   }, [checkableValues?.apiUrl, checkableValues?.apiKey]);
+
+  // fetch branches when credentials are valid and branching is enabled
+  useEffect(() => {
+    let cancelled = false;
+    const check = state.credentialsCheck;
+    if (
+      typeof check === 'object' &&
+      check?.branchingEnabled &&
+      validateValues(checkableValues)
+    ) {
+      const url = normalizeUrl(checkableValues!.apiUrl);
+      fetch(
+        `${url}/v2/projects/${check.projectId}/branches?ak=${
+          checkableValues!.apiKey
+        }&size=100`
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!cancelled && data?._embedded?.branches) {
+            dispatch({
+              type: 'SET_BRANCHES',
+              payload: data._embedded.branches.map((b: any) => ({
+                name: b.name,
+                isDefault: b.isDefault,
+              })),
+            });
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            dispatch({ type: 'SET_BRANCHES', payload: null });
+          }
+        });
+    } else {
+      dispatch({ type: 'SET_BRANCHES', payload: null });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [state.credentialsCheck]);
 
   return [state, dispatch] as const;
 };
