@@ -313,15 +313,21 @@ export const useDetectorForm = () => {
           checkableValues!.apiKey
         }&size=100`
       )
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+          if (!r.ok) {
+            throw new Error('Failed to load branches');
+          }
+          return r.json();
+        })
         .then((data) => {
-          if (!cancelled && data?._embedded?.branches) {
+          if (!cancelled) {
             dispatch({
               type: 'SET_BRANCHES',
-              payload: data._embedded.branches.map((b: any) => ({
-                name: b.name,
-                isDefault: b.isDefault,
-              })),
+              payload:
+                data?._embedded?.branches?.map((b: any) => ({
+                  name: b.name,
+                  isDefault: b.isDefault,
+                })) ?? null,
             });
           }
         })
