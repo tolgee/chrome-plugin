@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/tolgee/chrome-plugin/compare/v1.8.2...v1.9.0) (2026-03-19)
+
+
+### Features
+
+* add branching support ([#38](https://github.com/tolgee/chrome-plugin/issues/38)) ([fd394d4](https://github.com/tolgee/chrome-plugin/commit/fd394d444328a4595c6c4a3e3865bf3bc7bdee21))
+
 ## [1.8.2](https://github.com/tolgee/chrome-plugin/compare/v1.8.1...v1.8.2) (2024-12-16)
 
 
