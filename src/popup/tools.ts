@@ -1,6 +1,7 @@
 export type Values = {
   apiUrl?: string;
   apiKey?: string;
+  branch?: string;
 };
 
 export const validateValues = (values?: Values | null) => {
@@ -15,7 +16,9 @@ export const compareValues = (
   values2?: Values | null
 ) => {
   return (
-    values1?.apiKey === values2?.apiKey && values2?.apiUrl === values2?.apiUrl
+    values1?.apiKey === values2?.apiKey &&
+    values1?.apiUrl === values2?.apiUrl &&
+    (values1?.branch || '') === (values2?.branch || '')
   );
 };
 

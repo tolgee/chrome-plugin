@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  Autocomplete,
   Box,
   Button,
   CircularProgress,
@@ -26,7 +27,9 @@ export const TolgeeDetector = () => {
     libConfig,
     tolgeePresent,
     credentialsCheck,
+    branches,
   } = state;
+  const [branchOpen, setBranchOpen] = useState(false);
 
   const handleApplyChange = async () => {
     if (appliedValues) {
@@ -66,7 +69,8 @@ export const TolgeeDetector = () => {
     const valuesNotChanged =
       isInDevelopmentMode &&
       libConfig?.config.apiKey === values?.apiKey &&
-      libConfig?.config.apiUrl === values?.apiUrl;
+      libConfig?.config.apiUrl === values?.apiUrl &&
+      (libConfig?.config.branch || '') === (values?.branch || '');
 
     return (
       <Box
@@ -126,6 +130,73 @@ export const TolgeeDetector = () => {
             )}
           </FormHelperText>
         </FormControl>
+        {typeof credentialsCheck === 'object' &&
+          credentialsCheck?.branchingEnabled && (
+            <Autocomplete
+              style={{ marginBottom: branchOpen ? 150 : 0 }}
+              open={branchOpen}
+              onOpen={() => setBranchOpen(true)}
+              onClose={() => setBranchOpen(false)}
+              freeSolo
+              size="small"
+              disablePortal
+              slotProps={{
+                popper: {
+                  placement: 'bottom',
+                  modifiers: [{ name: 'flip', enabled: false }],
+                },
+              }}
+              ListboxProps={{ style: { maxHeight: 150 } }}
+              options={branches ?? []}
+              getOptionLabel={(option) =>
+                typeof option === 'string' ? option : option.name
+              }
+              value={
+                branches?.find((b) => b.name === values?.branch) ??
+                values?.branch ??
+                null
+              }
+              onChange={(_e: any, newValue: any) => {
+                dispatch({
+                  type: 'CHANGE_VALUES',
+                  payload: {
+                    branch:
+                      typeof newValue === 'string'
+                        ? newValue
+                        : newValue?.name ?? '',
+                  },
+                });
+              }}
+              onInputChange={(_e: any, newInput: string, reason: string) => {
+                if (reason === 'input') {
+                  dispatch({
+                    type: 'CHANGE_VALUES',
+                    payload: { branch: newInput },
+                  });
+                }
+              }}
+              renderOption={(props, option) => (
+                <li {...props}>
+                  {option.name}
+                  {option.isDefault && (
+                    <span style={{ color: '#999', marginLeft: 6 }}>
+                      default
+                    </span>
+                  )}
+                </li>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Branch"
+                  variant="outlined"
+                  placeholder={libConfig?.config?.branch || 'Default branch'}
+                  helperText="Leave empty to use the branch from SDK config"
+                  onKeyDown={handleKeyDown}
+                />
+              )}
+            />
+          )}
         <Box
           display="flex"
           justifyContent="space-between"

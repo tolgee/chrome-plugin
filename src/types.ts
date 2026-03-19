@@ -5,6 +5,7 @@ export type LibConfig = {
   config: {
     apiUrl: '';
     apiKey: '';
+    branch?: string;
     // @deprecated older versions
     mode?: 'production' | 'development';
   };
