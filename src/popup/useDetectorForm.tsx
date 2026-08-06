@@ -4,8 +4,15 @@ import { useEffect, useReducer } from 'react';
 import { LibConfig } from '../types';
 import { loadAppliedValues } from './loadConfig';
 import { sendMessage } from './sendMessage';
+import { sendToBackground } from './sendToBackground';
 import { loadValues, storeValues } from './storage';
-import { compareValues, normalizeUrl, validateValues, Values } from './tools';
+import {
+  compareValues,
+  isOAuth,
+  normalizeUrl,
+  validateValues,
+  Values,
+} from './tools';
 import { useApplier } from './useApplier';
 import { RuntimeMessage } from '../content/Messages';
 
@@ -17,7 +24,12 @@ type ProjectInfo = {
   branchingEnabled: boolean;
 };
 
-type CredentialsCheck = null | 'loading' | 'invalid' | ProjectInfo;
+type OAuthUser = {
+  oauth: true;
+  userFullName: string;
+};
+
+type CredentialsCheck = null | 'loading' | 'invalid' | ProjectInfo | OAuthUser;
 type TolgeePresent = 'loading' | 'present' | 'not_present' | 'legacy';
 
 type BranchOption = {
@@ -52,6 +64,7 @@ type Action =
   | { type: 'CLEAR_ALL' }
   | { type: 'STORE_VALUES' }
   | { type: 'LOAD_VALUES' }
+  | { type: 'OAUTH_APPLY'; payload: { apiUrl: string; authToken: string } }
   | { type: 'SET_BRANCHES'; payload: BranchOption[] | null };
 
 export const useDetectorForm = () => {
@@ -112,8 +125,10 @@ export const useDetectorForm = () => {
         // sync values with storage/localStorage
         apply();
         const branchEnabled =
+          state.credentialsCheck !== null &&
           typeof state.credentialsCheck === 'object' &&
-          state.credentialsCheck?.branchingEnabled;
+          'branchingEnabled' in state.credentialsCheck &&
+          state.credentialsCheck.branchingEnabled;
         const effectiveBranch = branchEnabled
           ? state.values?.branch
           : undefined;
@@ -139,6 +154,19 @@ export const useDetectorForm = () => {
           storedValues: null,
           values: null,
           libConfig: null,
+        };
+      }
+      case 'OAUTH_APPLY': {
+        apply();
+        const oauthValues = {
+          apiUrl: action.payload.apiUrl,
+          authToken: action.payload.authToken,
+        };
+        return {
+          ...state,
+          values: oauthValues,
+          appliedValues: oauthValues,
+          storedValues: oauthValues,
         };
       }
       case 'STORE_VALUES':
@@ -218,7 +246,18 @@ export const useDetectorForm = () => {
     }
 
     const storedData = await loadValues();
-    if (validateValues(storedData)) {
+    if (storedData.oauth && storedData.apiUrl) {
+      // OAuth sessions store no token; ask the service worker for a fresh (auto-refreshed) one.
+      const res = (await sendToBackground('OAUTH_GET_TOKEN', {
+        apiUrl: storedData.apiUrl,
+      })) as { accessToken?: string };
+      if (res?.accessToken) {
+        dispatch({
+          type: 'LOAD_STORED_VALUES',
+          payload: { apiUrl: storedData.apiUrl, authToken: res.accessToken },
+        });
+      }
+    } else if (validateValues(storedData)) {
       dispatch({ type: 'LOAD_STORED_VALUES', payload: storedData });
     }
   };
@@ -268,43 +307,69 @@ export const useDetectorForm = () => {
 
       const url = normalizeUrl(checkableValues!.apiUrl);
 
-      fetch(`${url}/v2/api-keys/current?ak=${checkableValues!.apiKey}`)
-        .then((r) => {
-          if (r.ok) {
-            return r.json();
-          } else {
-            throw r.json();
-          }
+      if (isOAuth(checkableValues)) {
+        // OAuth tokens are not tied to a single project; confirm the token and show the connected user instead.
+        fetch(`${url}/v2/user`, {
+          headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
         })
-        .catch(() => {
-          !cancelled && setCredentialsCheck('invalid');
-        })
-        .then((data) => {
-          !cancelled &&
-            data &&
-            setCredentialsCheck({
-              projectName: data.projectName,
-              projectId: data.projectId,
-              scopes: data.scopes,
-              userFullName: data.userFullName,
-              branchingEnabled: data.branchingEnabled ?? false,
-            });
-        });
+          .then((r) => {
+            if (r.ok) {
+              return r.json();
+            }
+            throw new Error('Invalid token');
+          })
+          .then((data) => {
+            !cancelled &&
+              setCredentialsCheck({ oauth: true, userFullName: data.name });
+          })
+          .catch(() => {
+            !cancelled && setCredentialsCheck('invalid');
+          });
+      } else {
+        fetch(`${url}/v2/api-keys/current?ak=${checkableValues!.apiKey}`)
+          .then((r) => {
+            if (r.ok) {
+              return r.json();
+            } else {
+              throw r.json();
+            }
+          })
+          .catch(() => {
+            !cancelled && setCredentialsCheck('invalid');
+          })
+          .then((data) => {
+            !cancelled &&
+              data &&
+              setCredentialsCheck({
+                projectName: data.projectName,
+                projectId: data.projectId,
+                scopes: data.scopes,
+                userFullName: data.userFullName,
+                branchingEnabled: data.branchingEnabled ?? false,
+              });
+          });
+      }
     } else {
       setCredentialsCheck(null);
     }
     return () => {
       cancelled = true;
     };
-  }, [checkableValues?.apiUrl, checkableValues?.apiKey]);
+  }, [
+    checkableValues?.apiUrl,
+    checkableValues?.apiKey,
+    checkableValues?.authToken,
+  ]);
 
   // fetch branches when credentials are valid and branching is enabled
   useEffect(() => {
     let cancelled = false;
     const check = state.credentialsCheck;
     if (
+      check !== null &&
       typeof check === 'object' &&
-      check?.branchingEnabled &&
+      'branchingEnabled' in check &&
+      check.branchingEnabled &&
       validateValues(checkableValues)
     ) {
       const url = normalizeUrl(checkableValues!.apiUrl);

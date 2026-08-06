@@ -1,6 +1,7 @@
 import {
   API_KEY_LOCAL_STORAGE,
   API_URL_LOCAL_STORAGE,
+  AUTH_TOKEN_LOCAL_STORAGE,
   BRANCH_LOCAL_STORAGE,
 } from '../constants';
 import { LibConfig } from '../types';
@@ -18,7 +19,19 @@ const getAppliedCredenials = () => {
     apiKey: sessionStorage.getItem(API_KEY_LOCAL_STORAGE),
     apiUrl: sessionStorage.getItem(API_URL_LOCAL_STORAGE),
     branch: sessionStorage.getItem(BRANCH_LOCAL_STORAGE),
+    authToken: sessionStorage.getItem(AUTH_TOKEN_LOCAL_STORAGE),
   };
+};
+
+const sameOrigin = (a: string | null, b: string | null) => {
+  if (!a || !b) {
+    return false;
+  }
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch (e) {
+    return false;
+  }
 };
 
 // handshake with library
@@ -82,6 +95,18 @@ messages.listenRuntime('SET_CREDENTIALS', async (data) => {
   } else {
     sessionStorage.removeItem(BRANCH_LOCAL_STORAGE);
   }
+  if (data.authToken) {
+    sessionStorage.setItem(AUTH_TOKEN_LOCAL_STORAGE, data.authToken);
+  } else {
+    sessionStorage.removeItem(AUTH_TOKEN_LOCAL_STORAGE);
+  }
   location.reload();
   updateState(configuration, messages);
+});
+
+// Background pushes a rotated access token here on refresh; update it in place so the SDK picks it up without a reload.
+messages.listenRuntime('UPDATE_AUTH_TOKEN', async (data) => {
+  if (sameOrigin(sessionStorage.getItem(API_URL_LOCAL_STORAGE), data.apiUrl)) {
+    sessionStorage.setItem(AUTH_TOKEN_LOCAL_STORAGE, data.authToken);
+  }
 });

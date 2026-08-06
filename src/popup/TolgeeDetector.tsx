@@ -13,11 +13,13 @@ import {
 
 import { useDetectorForm } from './useDetectorForm';
 import { validateValues } from './tools';
+import { sendToBackground } from './sendToBackground';
 
 const POPUP_WIDTH = 400;
 
 export const TolgeeDetector = () => {
   const [state, dispatch] = useDetectorForm();
+  const [connecting, setConnecting] = useState(false);
 
   const {
     error,
@@ -43,6 +45,28 @@ export const TolgeeDetector = () => {
     // on enter
     if (e.keyCode === 13 && validateValues(values)) {
       dispatch({ type: 'APPLY_VALUES' });
+    }
+  };
+
+  const handleConnect = async () => {
+    const apiUrl = values?.apiUrl;
+    if (!apiUrl) {
+      return;
+    }
+    setConnecting(true);
+    try {
+      const res = (await sendToBackground('OAUTH_LOGIN', { apiUrl })) as {
+        accessToken?: string;
+        error?: string;
+      };
+      if (res?.accessToken) {
+        dispatch({
+          type: 'OAUTH_APPLY',
+          payload: { apiUrl, authToken: res.accessToken },
+        });
+      }
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -123,6 +147,10 @@ export const TolgeeDetector = () => {
               '...'
             ) : credentialsCheck === 'invalid' ? (
               'Invalid'
+            ) : 'oauth' in credentialsCheck ? (
+              <span style={{ color: 'green' }}>
+                Connected as {credentialsCheck.userFullName}
+              </span>
             ) : (
               <span style={{ color: 'green' }}>
                 {credentialsCheck.projectName}
@@ -130,8 +158,19 @@ export const TolgeeDetector = () => {
             )}
           </FormHelperText>
         </FormControl>
-        {typeof credentialsCheck === 'object' &&
-          credentialsCheck?.branchingEnabled && (
+        <Button
+          size="small"
+          variant="outlined"
+          color="primary"
+          disabled={!values?.apiUrl || connecting}
+          onClick={handleConnect}
+        >
+          {connecting ? 'Connecting…' : 'Connect with Tolgee'}
+        </Button>
+        {credentialsCheck !== null &&
+          typeof credentialsCheck === 'object' &&
+          'branchingEnabled' in credentialsCheck &&
+          credentialsCheck.branchingEnabled && (
             <Autocomplete
               style={{ marginBottom: branchOpen ? 150 : 0 }}
               open={branchOpen}
