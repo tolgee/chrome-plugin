@@ -32,7 +32,10 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await saveSession(data.apiUrl, tokens);
           sendResponse({ accessToken: tokens.accessToken });
         })
-        .catch((e) => sendResponse({ error: String(e) }));
+        .catch((e) => {
+          console.error('[tolgee-oauth] login failed', e);
+          sendResponse({ error: String(e) });
+        });
       return true;
     case 'OAUTH_GET_TOKEN':
       getValidAccessToken(data.apiUrl).then((accessToken) =>

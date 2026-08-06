@@ -34,7 +34,8 @@ const postToken = async (
     body: new URLSearchParams(params),
   });
   if (!res.ok) {
-    throw new Error(`Tolgee token endpoint returned ${res.status}`);
+    const body = await res.text().catch(() => '');
+    throw new Error(`Tolgee token endpoint returned ${res.status}: ${body}`);
   }
   return parseTokenResponse(await res.json(), previousRefreshToken);
 };
