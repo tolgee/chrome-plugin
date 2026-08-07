@@ -298,7 +298,7 @@ export const TolgeeDetector = () => {
                   color="primary"
                   disabled={!validateValues(values) || valuesNotChanged}
                 >
-                  Apply
+                  Connect with API key
                 </Button>
               </Box>
             </Box>
