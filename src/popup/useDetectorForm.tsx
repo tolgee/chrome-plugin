@@ -8,6 +8,7 @@ import { sendToBackground } from './sendToBackground';
 import { loadValues, storeValues } from './storage';
 import {
   compareValues,
+  decodeTokenProjectSet,
   isOAuth,
   normalizeUrl,
   validateValues,
@@ -37,6 +38,11 @@ type BranchOption = {
   isDefault: boolean;
 };
 
+type ProjectOption = {
+  id: number;
+  name: string;
+};
+
 const initialState = {
   values: null as Values | null,
   storedValues: null as Values | null,
@@ -47,6 +53,7 @@ const initialState = {
   error: null as string | null,
   frameId: null as number | null,
   branches: null as BranchOption[] | null,
+  projects: null as ProjectOption[] | null,
 };
 
 type State = typeof initialState;
@@ -65,7 +72,9 @@ type Action =
   | { type: 'STORE_VALUES' }
   | { type: 'LOAD_VALUES' }
   | { type: 'OAUTH_APPLY'; payload: { apiUrl: string; authToken: string } }
-  | { type: 'SET_BRANCHES'; payload: BranchOption[] | null };
+  | { type: 'OAUTH_SET_PROJECT'; payload: { projectId: number | undefined } }
+  | { type: 'SET_BRANCHES'; payload: BranchOption[] | null }
+  | { type: 'SET_PROJECTS'; payload: ProjectOption[] | null };
 
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
@@ -158,9 +167,11 @@ export const useDetectorForm = () => {
       }
       case 'OAUTH_APPLY': {
         apply();
+        // Keep any project the user already picked for this backend (restored from storage) across a re-connect.
         const oauthValues = {
           apiUrl: action.payload.apiUrl,
           authToken: action.payload.authToken,
+          projectId: state.values?.projectId,
         };
         return {
           ...state,
@@ -169,6 +180,24 @@ export const useDetectorForm = () => {
           storedValues: oauthValues,
         };
       }
+      case 'OAUTH_SET_PROJECT': {
+        apply();
+        const oauthValues = {
+          ...state.values,
+          projectId: action.payload.projectId,
+        };
+        return {
+          ...state,
+          values: oauthValues,
+          appliedValues: oauthValues,
+          storedValues: oauthValues,
+        };
+      }
+      case 'SET_PROJECTS':
+        return {
+          ...state,
+          projects: action.payload,
+        };
       case 'STORE_VALUES':
         apply();
         return {
@@ -254,7 +283,11 @@ export const useDetectorForm = () => {
       if (res?.accessToken) {
         dispatch({
           type: 'LOAD_STORED_VALUES',
-          payload: { apiUrl: storedData.apiUrl, authToken: res.accessToken },
+          payload: {
+            apiUrl: storedData.apiUrl,
+            authToken: res.accessToken,
+            projectId: storedData.projectId,
+          },
         });
       }
     } else if (validateValues(storedData)) {
@@ -407,6 +440,75 @@ export const useDetectorForm = () => {
     return () => {
       cancelled = true;
     };
+  }, [state.credentialsCheck]);
+
+  // OAuth tokens carry no project, so once the token is confirmed, load the user's accessible projects to pick from.
+  useEffect(() => {
+    let cancelled = false;
+    const check = state.credentialsCheck;
+    if (
+      check !== null &&
+      typeof check === 'object' &&
+      'oauth' in check &&
+      isOAuth(checkableValues)
+    ) {
+      const url = normalizeUrl(checkableValues!.apiUrl);
+      fetch(`${url}/v2/projects?size=1000`, {
+        headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
+      })
+        .then((r) => {
+          if (!r.ok) {
+            throw new Error('Failed to load projects');
+          }
+          return r.json();
+        })
+        .then((data) => {
+          if (!cancelled) {
+            dispatch({
+              type: 'SET_PROJECTS',
+              payload:
+                data?._embedded?.projects?.map((p: any) => ({
+                  id: p.id,
+                  name: p.name,
+                })) ?? [],
+            });
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            dispatch({ type: 'SET_PROJECTS', payload: null });
+          }
+        });
+    } else {
+      dispatch({ type: 'SET_PROJECTS', payload: null });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [state.credentialsCheck]);
+
+  // A token bound to a single project (chosen on the consent screen) auto-selects it — no popup pick needed. Only the
+  // "all projects" case falls back to the dropdown above.
+  useEffect(() => {
+    const check = state.credentialsCheck;
+    if (
+      check !== null &&
+      typeof check === 'object' &&
+      'oauth' in check &&
+      isOAuth(checkableValues)
+    ) {
+      const projectSet = decodeTokenProjectSet(checkableValues!.authToken);
+      if (
+        Array.isArray(projectSet) &&
+        projectSet.length === 1 &&
+        state.values?.projectId !== projectSet[0]
+      ) {
+        dispatch({
+          type: 'OAUTH_SET_PROJECT',
+          payload: { projectId: projectSet[0] },
+        });
+      }
+    }
   }, [state.credentialsCheck]);
 
   return [state, dispatch] as const;

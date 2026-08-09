@@ -3,6 +3,7 @@ import {
   API_URL_LOCAL_STORAGE,
   AUTH_TOKEN_LOCAL_STORAGE,
   BRANCH_LOCAL_STORAGE,
+  PROJECT_ID_LOCAL_STORAGE,
 } from '../constants';
 import { LibConfig } from '../types';
 import { injectUiLib } from './injectUiLib';
@@ -20,6 +21,7 @@ const getAppliedCredenials = () => {
     apiUrl: sessionStorage.getItem(API_URL_LOCAL_STORAGE),
     branch: sessionStorage.getItem(BRANCH_LOCAL_STORAGE),
     authToken: sessionStorage.getItem(AUTH_TOKEN_LOCAL_STORAGE),
+    projectId: sessionStorage.getItem(PROJECT_ID_LOCAL_STORAGE),
   };
 };
 
@@ -99,6 +101,11 @@ messages.listenRuntime('SET_CREDENTIALS', async (data) => {
     sessionStorage.setItem(AUTH_TOKEN_LOCAL_STORAGE, data.authToken);
   } else {
     sessionStorage.removeItem(AUTH_TOKEN_LOCAL_STORAGE);
+  }
+  if (data.projectId) {
+    sessionStorage.setItem(PROJECT_ID_LOCAL_STORAGE, String(data.projectId));
+  } else {
+    sessionStorage.removeItem(PROJECT_ID_LOCAL_STORAGE);
   }
   location.reload();
   updateState(configuration, messages);

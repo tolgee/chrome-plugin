@@ -4,9 +4,11 @@ type Values = {
   apiUrl?: string;
   apiKey?: string;
   branch?: string;
-  // OAuth sessions persist only a marker + backend url here; the token itself lives in the service worker's
-  // tokenStore (kept fresh via refresh) and is re-fetched on load, so a short-lived token is never stored stale.
+  // OAuth sessions persist only a marker + backend url (+ the picked project) here; the token itself lives in the
+  // service worker's tokenStore (kept fresh via refresh) and is re-fetched on load, so a short-lived token is never
+  // stored stale.
   oauth?: boolean;
+  projectId?: number;
 };
 
 const getCurrentTab = async () => {
@@ -28,7 +30,11 @@ export const storeValues = async (
 
     if (values?.authToken && values?.apiUrl) {
       browser.storage.local.set({
-        [origin]: { apiUrl: values.apiUrl, oauth: true },
+        [origin]: {
+          apiUrl: values.apiUrl,
+          oauth: true,
+          projectId: values.projectId,
+        },
       });
     } else if (values?.apiKey && values?.apiUrl) {
       browser.storage.local.set({
@@ -58,6 +64,7 @@ export const loadValues = async () => {
       apiUrl: data?.apiUrl,
       branch: data?.branch,
       oauth: data?.oauth,
+      projectId: data?.projectId,
     };
   } catch (e) {
     console.error(e);

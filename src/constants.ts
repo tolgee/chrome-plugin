@@ -3,6 +3,9 @@ export const API_URL_LOCAL_STORAGE = '__tolgee_apiUrl';
 export const BRANCH_LOCAL_STORAGE = '__tolgee_branch';
 // OAuth access token injected into the page alongside the api key; the SDK (tolgee-js) reads it as a Bearer token.
 export const AUTH_TOKEN_LOCAL_STORAGE = '__tolgee_authToken';
+// Project id injected for the OAuth path: OAuth tokens carry no embedded project (unlike a PAK), so the user
+// picks one in the popup and the SDK reads it here to know which project to fetch/edit.
+export const PROJECT_ID_LOCAL_STORAGE = '__tolgee_projectId';
 
 // Fixed public client id pre-registered on every Tolgee backend (see PreRegisteredClients on the platform).
 export const OAUTH_CLIENT_ID = 'tolgee-browser-extension';

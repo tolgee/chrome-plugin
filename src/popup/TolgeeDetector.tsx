@@ -13,7 +13,7 @@ import {
 } from '@mui/material';
 
 import { useDetectorForm } from './useDetectorForm';
-import { validateValues } from './tools';
+import { decodeTokenProjectSet, validateValues } from './tools';
 import { sendToBackground } from './sendToBackground';
 
 const POPUP_WIDTH = 400;
@@ -32,8 +32,20 @@ export const TolgeeDetector = () => {
     tolgeePresent,
     credentialsCheck,
     branches,
+    projects,
   } = state;
   const [branchOpen, setBranchOpen] = useState(false);
+
+  const oauthUser =
+    credentialsCheck !== null &&
+    typeof credentialsCheck === 'object' &&
+    'oauth' in credentialsCheck
+      ? credentialsCheck
+      : null;
+
+  // A single-project token auto-selects its project (done in the reducer); only an "all projects" token needs the
+  // manual picker below.
+  const allProjectsToken = decodeTokenProjectSet(values?.authToken) === '*';
 
   const handleApplyChange = async () => {
     if (appliedValues) {
@@ -57,7 +69,16 @@ export const TolgeeDetector = () => {
     }
     setConnecting(true);
     try {
-      const res = (await sendToBackground('OAUTH_LOGIN', { apiUrl })) as {
+      // Hint the project the page is configured for (exposed via the handshake), so the consent screen pre-selects it
+      // and the minted token is scoped to it. On a public project the hint resolves via the community floor.
+      const hinted = (libConfig?.config as { projectId?: number | string })
+        ?.projectId;
+      const projectId =
+        hinted !== undefined && hinted !== '' ? Number(hinted) : undefined;
+      const res = (await sendToBackground('OAUTH_LOGIN', {
+        apiUrl,
+        projectId,
+      })) as {
         accessToken?: string;
         error?: string;
       };
@@ -133,6 +154,39 @@ export const TolgeeDetector = () => {
         >
           {connecting ? 'Connecting…' : 'Connect with Tolgee'}
         </Button>
+        {oauthUser && (
+          <>
+            <Typography style={{ fontSize: 12, color: 'green' }}>
+              Connected as {oauthUser.userFullName}
+            </Typography>
+            {allProjectsToken && (
+              <Autocomplete
+                size="small"
+                options={projects ?? []}
+                loading={projects === null}
+                getOptionLabel={(option) => option.name}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                value={
+                  projects?.find((p) => p.id === values?.projectId) ?? null
+                }
+                onChange={(_e, newValue) => {
+                  dispatch({
+                    type: 'OAUTH_SET_PROJECT',
+                    payload: { projectId: newValue?.id },
+                  });
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Project"
+                    variant="outlined"
+                    helperText="Select the project to edit in-context"
+                  />
+                )}
+              />
+            )}
+          </>
+        )}
         <Button
           size="small"
           variant="text"
