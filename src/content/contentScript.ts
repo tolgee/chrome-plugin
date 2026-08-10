@@ -81,33 +81,31 @@ messages.listenRuntime('DETECT_TOLGEE', async () => {
 
 messages.listenRuntime('GET_CREDENTIALS', async () => getAppliedCredenials());
 
+const setOrRemove = (key: string, value: string | undefined | null) => {
+  const next = value ? String(value) : null;
+  if (sessionStorage.getItem(key) === next) {
+    return false;
+  }
+  if (next === null) {
+    sessionStorage.removeItem(key);
+  } else {
+    sessionStorage.setItem(key, next);
+  }
+  return true;
+};
+
 messages.listenRuntime('SET_CREDENTIALS', async (data) => {
-  if (data.apiKey) {
-    sessionStorage.setItem(API_KEY_LOCAL_STORAGE, data.apiKey);
-  } else {
-    sessionStorage.removeItem(API_KEY_LOCAL_STORAGE);
+  // Bitwise-or so every key is written before we decide; reload only when something actually changed, so a redundant
+  // push (e.g. both the popup and the background inject on connect) doesn't reload the page twice.
+  const changed =
+    Number(setOrRemove(API_KEY_LOCAL_STORAGE, data.apiKey)) |
+    Number(setOrRemove(API_URL_LOCAL_STORAGE, data.apiUrl)) |
+    Number(setOrRemove(BRANCH_LOCAL_STORAGE, data.branch)) |
+    Number(setOrRemove(AUTH_TOKEN_LOCAL_STORAGE, data.authToken)) |
+    Number(setOrRemove(PROJECT_ID_LOCAL_STORAGE, data.projectId));
+  if (changed) {
+    location.reload();
   }
-  if (data.apiUrl) {
-    sessionStorage.setItem(API_URL_LOCAL_STORAGE, data.apiUrl);
-  } else {
-    sessionStorage.removeItem(API_URL_LOCAL_STORAGE);
-  }
-  if (data.branch) {
-    sessionStorage.setItem(BRANCH_LOCAL_STORAGE, data.branch);
-  } else {
-    sessionStorage.removeItem(BRANCH_LOCAL_STORAGE);
-  }
-  if (data.authToken) {
-    sessionStorage.setItem(AUTH_TOKEN_LOCAL_STORAGE, data.authToken);
-  } else {
-    sessionStorage.removeItem(AUTH_TOKEN_LOCAL_STORAGE);
-  }
-  if (data.projectId) {
-    sessionStorage.setItem(PROJECT_ID_LOCAL_STORAGE, String(data.projectId));
-  } else {
-    sessionStorage.removeItem(PROJECT_ID_LOCAL_STORAGE);
-  }
-  location.reload();
   updateState(configuration, messages);
 });
 

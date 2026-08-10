@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import browser from 'webextension-polyfill';
 import {
   Autocomplete,
   Box,
@@ -75,9 +76,16 @@ export const TolgeeDetector = () => {
         ?.projectId;
       const projectId =
         hinted !== undefined && hinted !== '' ? Number(hinted) : undefined;
+      // Capture the target tab now: launchWebAuthFlow closes the popup, so the background does the injection and needs
+      // the tab id up front.
+      const [activeTab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
       const res = (await sendToBackground('OAUTH_LOGIN', {
         apiUrl,
         projectId,
+        tabId: activeTab?.id,
       })) as {
         accessToken?: string;
         error?: string;

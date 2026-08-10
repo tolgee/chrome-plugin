@@ -30,6 +30,15 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       login(data.apiUrl, data.projectId)
         .then(async (tokens) => {
           await saveSession(data.apiUrl, tokens);
+          // launchWebAuthFlow steals focus, which closes the popup before it can push credentials to the page, so
+          // inject from here. data.tabId is the tab the popup was acting on, captured before the auth window opened.
+          if (data.tabId != null) {
+            await injectCredentials(data.tabId, {
+              apiUrl: data.apiUrl,
+              authToken: tokens.accessToken,
+              projectId: data.projectId,
+            });
+          }
           sendResponse({ accessToken: tokens.accessToken });
         })
         .catch((e) => {
@@ -55,6 +64,17 @@ const setStateIcon = (state: State, tabId: number) => {
     path: { 128: `/icons/${state}.png` },
     tabId,
   });
+};
+
+// Inject the full credential set into a page on connect (the content script writes them to sessionStorage and reloads
+// so the SDK picks them up). Runs from the service worker because the popup is already gone by the time login resolves.
+const injectCredentials = async (
+  tabId: number,
+  data: { apiUrl: string; authToken: string; projectId?: number }
+) => {
+  await browser.tabs
+    .sendMessage(tabId, { type: 'SET_CREDENTIALS', data })
+    .catch(() => undefined);
 };
 
 // Keep stored sessions fresh so the popup and the injected page token don't expire mid-use. Rotation means each
