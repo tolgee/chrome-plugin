@@ -16,7 +16,9 @@
     "preview": "vite preview",
     "release": "semantic-release",
     "release-dry": "semantic-release --no-ci -d",
-    "release-dry-debug": "semantic-release --no-ci -d --debug"
+    "release-dry-debug": "semantic-release --no-ci -d --debug",
+    "test": "vitest run",
+    "test-watch": "vitest"
   },
   "dependencies": {
     "@emotion/react": "^11.11.3",
@@ -46,7 +48,8 @@
     "semantic-release": "^17.4.7",
     "typescript": "^5.2.2",
     "vite": "^3.2.7",
-    "vite-plugin-zip-pack": "^1.0.7"
+    "vite-plugin-zip-pack": "^1.0.7",
+    "vitest": "^0.34.6"
   },
   "release": {
     "plugins": [

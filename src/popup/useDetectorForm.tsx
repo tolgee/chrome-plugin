@@ -1,14 +1,12 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import browser, { type Runtime } from 'webextension-polyfill';
 import { useEffect, useReducer } from 'react';
-import { LibConfig } from '../types';
 import { loadAppliedValues } from './loadConfig';
 import { sendMessage } from './sendMessage';
 import { sendToBackground } from './sendToBackground';
 import { loadValues, storeValues } from './storage';
 import {
   compareValues,
-  decodeTokenProjectSet,
   isOAuth,
   normalizeUrl,
   validateValues,
@@ -16,213 +14,12 @@ import {
 } from './tools';
 import { useApplier } from './useApplier';
 import { RuntimeMessage } from '../content/Messages';
-
-type ProjectInfo = {
-  projectName: string;
-  projectId: number;
-  scopes: string[];
-  userFullName: string;
-  branchingEnabled: boolean;
-};
-
-type OAuthUser = {
-  oauth: true;
-  userFullName: string;
-};
-
-type CredentialsCheck = null | 'loading' | 'invalid' | ProjectInfo | OAuthUser;
-type TolgeePresent = 'loading' | 'present' | 'not_present' | 'legacy';
-
-type BranchOption = {
-  name: string;
-  isDefault: boolean;
-};
-
-type ProjectOption = {
-  id: number;
-  name: string;
-};
-
-const initialState = {
-  values: null as Values | null,
-  storedValues: null as Values | null,
-  appliedValues: null as Values | null | undefined,
-  tolgeePresent: 'loading' as TolgeePresent,
-  credentialsCheck: null as CredentialsCheck,
-  libConfig: null as LibConfig | null,
-  error: null as string | null,
-  frameId: null as number | null,
-  branches: null as BranchOption[] | null,
-  projects: null as ProjectOption[] | null,
-};
-
-type State = typeof initialState;
-type Action =
-  | { type: 'CHANGE_VALUES'; payload: Partial<Values> }
-  | {
-      type: 'CHANGE_LIB_CONFIG';
-      payload: { libData: LibConfig | null; frameId: number | null };
-    }
-  | { type: 'SET_ERROR'; payload: string }
-  | { type: 'SET_APPLIED_VALUES'; payload: Values | null }
-  | { type: 'SET_CREDENTIALS_CHECK'; payload: CredentialsCheck }
-  | { type: 'LOAD_STORED_VALUES'; payload: Values | null }
-  | { type: 'APPLY_VALUES' }
-  | { type: 'CLEAR_ALL' }
-  | { type: 'STORE_VALUES' }
-  | { type: 'LOAD_VALUES' }
-  | { type: 'OAUTH_APPLY'; payload: { apiUrl: string; authToken: string } }
-  | { type: 'OAUTH_SET_PROJECT'; payload: { projectId: number | undefined } }
-  | { type: 'SET_BRANCHES'; payload: BranchOption[] | null }
-  | { type: 'SET_PROJECTS'; payload: ProjectOption[] | null };
+import { CredentialsCheck, createReducer, initialState } from './reducer';
 
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
 
-  const reducer = (state: State, action: Action): State => {
-    switch (action.type) {
-      case 'CHANGE_VALUES':
-        return { ...state, values: { ...state.values, ...action.payload } };
-      case 'CHANGE_LIB_CONFIG': {
-        const { libData, frameId } = action.payload;
-        const newValues = {
-          apiKey: libData?.config?.apiKey,
-          apiUrl: libData?.config?.apiUrl,
-          branch: libData?.config?.branch,
-        };
-        if (state.libConfig !== null && state.frameId !== frameId) {
-          return {
-            ...state,
-            error: 'Detected multiple Tolgee instances',
-          };
-        }
-        return {
-          ...state,
-          libConfig: libData,
-          frameId,
-          values: validateValues(state.values) || newValues,
-          tolgeePresent: !libData
-            ? 'not_present'
-            : libData.uiPresent === undefined
-              ? 'legacy'
-              : 'present',
-        };
-      }
-      case 'SET_ERROR':
-        return {
-          ...state,
-          tolgeePresent: 'not_present',
-          error: action.payload,
-        };
-      case 'SET_APPLIED_VALUES':
-        return {
-          ...state,
-          appliedValues: action.payload,
-        };
-      case 'SET_CREDENTIALS_CHECK':
-        return {
-          ...state,
-          credentialsCheck: action.payload,
-        };
-      case 'LOAD_STORED_VALUES':
-        return {
-          ...state,
-          storedValues: action.payload,
-          values: action.payload,
-        };
-      case 'APPLY_VALUES': {
-        // sync values with storage/localStorage
-        apply();
-        const branchEnabled =
-          state.credentialsCheck !== null &&
-          typeof state.credentialsCheck === 'object' &&
-          'branchingEnabled' in state.credentialsCheck &&
-          state.credentialsCheck.branchingEnabled;
-        const effectiveBranch = branchEnabled
-          ? state.values?.branch
-          : undefined;
-        return {
-          ...state,
-          appliedValues: {
-            apiKey: state.values?.apiKey,
-            apiUrl: state.values?.apiUrl,
-            branch: effectiveBranch,
-          },
-          storedValues: {
-            apiKey: state.values?.apiKey,
-            apiUrl: state.values?.apiUrl,
-            branch: effectiveBranch,
-          },
-        };
-      }
-      case 'CLEAR_ALL': {
-        apply();
-        return {
-          ...state,
-          appliedValues: undefined,
-          storedValues: null,
-          values: null,
-          libConfig: null,
-        };
-      }
-      case 'OAUTH_APPLY': {
-        apply();
-        // Keep any project the user already picked for this backend (restored from storage) across a re-connect.
-        const oauthValues = {
-          apiUrl: action.payload.apiUrl,
-          authToken: action.payload.authToken,
-          projectId: state.values?.projectId,
-        };
-        return {
-          ...state,
-          values: oauthValues,
-          appliedValues: oauthValues,
-          storedValues: oauthValues,
-        };
-      }
-      case 'OAUTH_SET_PROJECT': {
-        apply();
-        const oauthValues = {
-          ...state.values,
-          projectId: action.payload.projectId,
-        };
-        return {
-          ...state,
-          values: oauthValues,
-          appliedValues: oauthValues,
-          storedValues: oauthValues,
-        };
-      }
-      case 'SET_PROJECTS':
-        return {
-          ...state,
-          projects: action.payload,
-        };
-      case 'STORE_VALUES':
-        apply();
-        return {
-          ...state,
-          storedValues: state.appliedValues || null,
-          values: state.appliedValues || null,
-          appliedValues: null,
-        };
-      case 'LOAD_VALUES':
-        apply();
-        return {
-          ...state,
-          appliedValues: state.storedValues,
-          values: state.storedValues,
-        };
-      case 'SET_BRANCHES':
-        return {
-          ...state,
-          branches: action.payload,
-        };
-      default:
-        // @ts-expect-error action type is type uknown
-        throw new Error(`Unknown action ${action.type}`);
-    }
-  };
+  const reducer = createReducer(apply);
 
   const [state, dispatch] = useReducer(reducer, initialState);
   const { storedValues, appliedValues, libConfig } = state;
@@ -442,73 +239,60 @@ export const useDetectorForm = () => {
     };
   }, [state.credentialsCheck]);
 
-  // OAuth tokens carry no project, so once the token is confirmed, load the user's accessible projects to pick from.
+  // The page declares which project it edits (required by the extension), but an OAuth token isn't inherently bound to
+  // it. Resolve that declared id against the connected server: bind it when the user can edit it there, or flag it
+  // inaccessible — otherwise the token stays unscoped and in-context editing fails with "project not selected".
   useEffect(() => {
     let cancelled = false;
     const check = state.credentialsCheck;
-    if (
+    const isOauthCheck =
       check !== null &&
       typeof check === 'object' &&
       'oauth' in check &&
-      isOAuth(checkableValues)
-    ) {
-      const url = normalizeUrl(checkableValues!.apiUrl);
-      fetch(`${url}/v2/projects?size=1000`, {
-        headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
-      })
-        .then((r) => {
-          if (!r.ok) {
-            throw new Error('Failed to load projects');
-          }
-          return r.json();
-        })
-        .then((data) => {
-          if (!cancelled) {
-            dispatch({
-              type: 'SET_PROJECTS',
-              payload:
-                data?._embedded?.projects?.map((p: any) => ({
-                  id: p.id,
-                  name: p.name,
-                })) ?? [],
-            });
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            dispatch({ type: 'SET_PROJECTS', payload: null });
-          }
-        });
-    } else {
-      dispatch({ type: 'SET_PROJECTS', payload: null });
+      isOAuth(checkableValues);
+    const declaredId = Number(
+      (libConfig?.config as { projectId?: number | string } | undefined)
+        ?.projectId
+    );
+    if (!isOauthCheck || !declaredId) {
+      dispatch({
+        type: 'RESOLVE_PROJECT',
+        payload: { project: null, inaccessible: false },
+      });
+      return;
     }
+    const url = normalizeUrl(checkableValues!.apiUrl);
+    fetch(`${url}/v2/projects/${declaredId}`, {
+      headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
+    })
+      .then((r) => {
+        if (!r.ok) {
+          throw new Error('inaccessible');
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (!cancelled) {
+          dispatch({
+            type: 'RESOLVE_PROJECT',
+            payload: {
+              project: { id: data.id, name: data.name },
+              inaccessible: false,
+            },
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          dispatch({
+            type: 'RESOLVE_PROJECT',
+            payload: { project: null, inaccessible: true },
+          });
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [state.credentialsCheck]);
-
-  // A token bound to a single project (chosen on the consent screen) auto-selects it — no popup pick needed. Only the
-  // "all projects" case falls back to the dropdown above.
-  useEffect(() => {
-    const check = state.credentialsCheck;
-    if (
-      check !== null &&
-      typeof check === 'object' &&
-      'oauth' in check &&
-      isOAuth(checkableValues)
-    ) {
-      const projectSet = decodeTokenProjectSet(checkableValues!.authToken);
-      if (
-        Array.isArray(projectSet) &&
-        projectSet.length === 1 &&
-        state.values?.projectId !== projectSet[0]
-      ) {
-        dispatch({
-          type: 'OAUTH_SET_PROJECT',
-          payload: { projectId: projectSet[0] },
-        });
-      }
-    }
   }, [state.credentialsCheck]);
 
   return [state, dispatch] as const;

@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import browser from 'webextension-polyfill';
 import {
+  Alert,
   Autocomplete,
   Box,
   Button,
   CircularProgress,
-  Collapse,
   FormControl,
   FormHelperText,
+  Link,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material';
@@ -18,11 +21,20 @@ import { decodeTokenProjectSet, validateValues } from './tools';
 import { sendToBackground } from './sendToBackground';
 
 const POPUP_WIDTH = 400;
+const DEFAULT_SERVER = 'https://app.tolgee.io';
+const LEARN_MORE_PROJECT_ID =
+  'https://docs.tolgee.io/js-sdk/api/core_package/options#projectid';
+const API_KEY_HELP =
+  'https://docs.tolgee.io/platform/account_settings/api_keys_and_pat_tokens';
+// Sentinel option for an unscoped ("all projects") token; a negative id can't collide with a real project id.
+const ALL_PROJECTS_OPTION = { id: -1, name: 'All projects' };
 
 export const TolgeeDetector = () => {
   const [state, dispatch] = useDetectorForm();
   const [connecting, setConnecting] = useState(false);
-  const [keySigninOpen, setKeySigninOpen] = useState(false);
+  const [tab, setTab] = useState<'login' | 'apiKey'>('login');
+  const [serverOpen, setServerOpen] = useState(false);
+  const [branchOpen, setBranchOpen] = useState(false);
 
   const {
     error,
@@ -33,9 +45,9 @@ export const TolgeeDetector = () => {
     tolgeePresent,
     credentialsCheck,
     branches,
-    projects,
+    declaredProject,
+    declaredProjectInaccessible,
   } = state;
-  const [branchOpen, setBranchOpen] = useState(false);
 
   const oauthUser =
     credentialsCheck !== null &&
@@ -47,6 +59,13 @@ export const TolgeeDetector = () => {
   // A single-project token auto-selects its project (done in the reducer); only an "all projects" token needs the
   // manual picker below.
   const allProjectsToken = decodeTokenProjectSet(values?.authToken) === '*';
+
+  // A restored API-key session should reopen on the API KEY tab; an OAuth session stays on LOGIN.
+  useEffect(() => {
+    if (values?.apiKey && !values?.authToken) {
+      setTab('apiKey');
+    }
+  }, [values?.apiKey, values?.authToken]);
 
   const handleApplyChange = async () => {
     if (appliedValues) {
@@ -64,10 +83,7 @@ export const TolgeeDetector = () => {
   };
 
   const handleConnect = async () => {
-    const apiUrl = values?.apiUrl;
-    if (!apiUrl) {
-      return;
-    }
+    const apiUrl = values?.apiUrl || DEFAULT_SERVER;
     setConnecting(true);
     try {
       // Hint the project the page is configured for (exposed via the handshake), so the consent screen pre-selects it
@@ -102,6 +118,129 @@ export const TolgeeDetector = () => {
   };
 
   const dataPresent = storedValues || appliedValues;
+
+  const serverField = (
+    <FormControl fullWidth>
+      <TextField
+        label="Server"
+        variant="outlined"
+        value={values?.apiUrl ?? ''}
+        placeholder={DEFAULT_SERVER}
+        onChange={(e) =>
+          dispatch({
+            type: 'CHANGE_VALUES',
+            payload: { apiUrl: e.target.value },
+          })
+        }
+        onKeyDown={handleKeyDown}
+        size="small"
+      />
+    </FormControl>
+  );
+
+  const branchField = credentialsCheck !== null &&
+    typeof credentialsCheck === 'object' &&
+    'branchingEnabled' in credentialsCheck &&
+    credentialsCheck.branchingEnabled && (
+      <Autocomplete
+        style={{ marginBottom: branchOpen ? 150 : 0 }}
+        open={branchOpen}
+        onOpen={() => setBranchOpen(true)}
+        onClose={() => setBranchOpen(false)}
+        freeSolo
+        size="small"
+        disablePortal
+        slotProps={{
+          popper: {
+            placement: 'bottom',
+            modifiers: [{ name: 'flip', enabled: false }],
+          },
+        }}
+        ListboxProps={{ style: { maxHeight: 150 } }}
+        options={branches ?? []}
+        getOptionLabel={(option) =>
+          typeof option === 'string' ? option : option.name
+        }
+        value={
+          branches?.find((b) => b.name === values?.branch) ??
+          values?.branch ??
+          null
+        }
+        onChange={(_e: any, newValue: any) => {
+          dispatch({
+            type: 'CHANGE_VALUES',
+            payload: {
+              branch:
+                typeof newValue === 'string' ? newValue : newValue?.name ?? '',
+            },
+          });
+        }}
+        onInputChange={(_e: any, newInput: string, reason: string) => {
+          if (reason === 'input') {
+            dispatch({
+              type: 'CHANGE_VALUES',
+              payload: { branch: newInput },
+            });
+          }
+        }}
+        renderOption={(props, option) => (
+          <li {...props}>
+            {option.name}
+            {option.isDefault && (
+              <span style={{ color: '#999', marginLeft: 6 }}>default</span>
+            )}
+          </li>
+        )}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Branch"
+            variant="outlined"
+            placeholder={libConfig?.config?.branch || 'Default branch'}
+            helperText="Leave empty to use the branch from SDK config"
+            onKeyDown={handleKeyDown}
+          />
+        )}
+      />
+    );
+
+  const appliedControls = (isInDevelopmentMode: boolean) => (
+    <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+      <Box display="flex" style={{ gap: 5 }}>
+        {dataPresent ? (
+          <>
+            <Switch
+              size="small"
+              checked={Boolean(appliedValues)}
+              onChange={handleApplyChange}
+              color="primary"
+            />
+            <Typography>Applied</Typography>
+          </>
+        ) : isInDevelopmentMode ? (
+          <Typography style={{ fontSize: 12, color: '#535353' }}>
+            Api key is included directly in Tolgee configuration. <br /> Use
+            this setup only in development environment.
+          </Typography>
+        ) : (
+          ''
+        )}
+      </Box>
+      <Box display="flex" style={{ gap: 10 }}>
+        {dataPresent && (
+          <Button
+            size="small"
+            onClick={() => dispatch({ type: 'CLEAR_ALL' })}
+            variant="contained"
+            color="secondary"
+          >
+            Clear
+          </Button>
+        )}
+      </Box>
+    </Box>
+  );
+
   if (error) {
     return (
       <Box width={POPUP_WIDTH} p={1} color="red">
@@ -127,86 +266,164 @@ export const TolgeeDetector = () => {
       libConfig?.config.apiUrl === values?.apiUrl &&
       (libConfig?.config.branch || '') === (values?.branch || '');
 
+    const detectedProjectId = (
+      libConfig?.config as { projectId?: number | string }
+    )?.projectId;
+    const projectDetected =
+      detectedProjectId !== undefined && detectedProjectId !== '';
+
+    let serverHost = values?.apiUrl || DEFAULT_SERVER;
+    try {
+      serverHost = new URL(serverHost).host;
+    } catch {
+      // keep the raw value if it's not a full URL yet
+    }
+
     return (
       <Box
-        p={1}
+        p={2}
         width={POPUP_WIDTH}
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 15,
-        }}
+        style={{ display: 'flex', flexDirection: 'column', gap: 15 }}
       >
-        <Typography variant="subtitle1" style={{ paddingBottom: 8 }}>
-          Tolgee settings
-        </Typography>
-        <TextField
-          label="API url"
-          variant="outlined"
-          value={values?.apiUrl || ''}
-          onChange={(e) =>
-            dispatch({
-              type: 'CHANGE_VALUES',
-              payload: { apiUrl: e.target.value },
-            })
-          }
-          onKeyDown={handleKeyDown}
-          size="small"
-        />
-        <Button
-          size="small"
-          variant="contained"
-          color="primary"
-          disabled={!values?.apiUrl || connecting}
-          onClick={handleConnect}
+        <Typography variant="h6">Tolgee plugin</Typography>
+
+        <Tabs
+          value={tab}
+          onChange={(_e, v) => setTab(v)}
+          textColor="primary"
+          indicatorColor="primary"
         >
-          {connecting ? 'Connecting…' : 'Connect with Tolgee'}
-        </Button>
-        {oauthUser && (
-          <>
-            <Typography style={{ fontSize: 12, color: 'green' }}>
-              Connected as {oauthUser.userFullName}
-            </Typography>
-            {allProjectsToken && (
-              <Autocomplete
-                size="small"
-                options={projects ?? []}
-                loading={projects === null}
-                getOptionLabel={(option) => option.name}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                value={
-                  projects?.find((p) => p.id === values?.projectId) ?? null
-                }
-                onChange={(_e, newValue) => {
-                  dispatch({
-                    type: 'OAUTH_SET_PROJECT',
-                    payload: { projectId: newValue?.id },
-                  });
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Project"
-                    variant="outlined"
-                    helperText="Select the project to edit in-context"
-                  />
-                )}
-              />
-            )}
-          </>
-        )}
-        <Button
-          size="small"
-          variant="text"
-          color="inherit"
-          onClick={() => setKeySigninOpen((o) => !o)}
-          style={{ justifyContent: 'flex-start', textTransform: 'none' }}
-        >
-          {keySigninOpen ? '▾' : '▸'} API key sign in
-        </Button>
-        <Collapse in={keySigninOpen}>
+          <Tab value="login" label="Login" />
+          <Tab value="apiKey" label="API key" />
+        </Tabs>
+
+        {tab === 'login' &&
+          (oauthUser ? (
+            <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
+              <Typography style={{ fontSize: 12, color: 'green' }}>
+                Connected as {oauthUser.userFullName}
+              </Typography>
+              {declaredProjectInaccessible ? (
+                <Alert severity="error" variant="outlined">
+                  This site requests a project you can’t edit on {serverHost}.
+                  Check the projectId in the site’s Tolgee configuration, or ask
+                  for access.
+                </Alert>
+              ) : declaredProject ? (
+                <Autocomplete
+                  size="small"
+                  disableClearable
+                  options={
+                    allProjectsToken
+                      ? [declaredProject, ALL_PROJECTS_OPTION]
+                      : [declaredProject]
+                  }
+                  getOptionLabel={(option) => option.name}
+                  isOptionEqualToValue={(option, value) =>
+                    option.id === value.id
+                  }
+                  value={
+                    values?.projectId != null
+                      ? declaredProject
+                      : ALL_PROJECTS_OPTION
+                  }
+                  onChange={(_e, newValue) => {
+                    dispatch({
+                      type: 'OAUTH_SET_PROJECT',
+                      payload: {
+                        projectId:
+                          newValue && newValue.id !== ALL_PROJECTS_OPTION.id
+                            ? newValue.id
+                            : undefined,
+                      },
+                    });
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Project"
+                      variant="outlined"
+                      helperText="Project to edit in-context"
+                    />
+                  )}
+                />
+              ) : (
+                <Box display="flex" justifyContent="center">
+                  <CircularProgress size={20} />
+                </Box>
+              )}
+              {appliedControls(isInDevelopmentMode)}
+            </Box>
+          ) : projectDetected ? (
+            <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
+              {serverOpen ? (
+                serverField
+              ) : (
+                <Typography variant="body2">
+                  Connect to your account on{' '}
+                  <Link
+                    href={values?.apiUrl || DEFAULT_SERVER}
+                    target="_blank"
+                    rel="noreferrer"
+                    underline="hover"
+                  >
+                    {serverHost}
+                  </Link>{' '}
+                  and start translating.
+                </Typography>
+              )}
+              <Button
+                variant="contained"
+                color="primary"
+                disabled={connecting}
+                onClick={handleConnect}
+              >
+                {connecting ? 'Connecting…' : 'Connect to Tolgee'}
+              </Button>
+              {serverOpen ? (
+                <Typography style={{ fontSize: 12, color: '#535353' }}>
+                  Change if you have your own instance of Tolgee.
+                </Typography>
+              ) : (
+                <Box display="flex" justifyContent="center">
+                  <Link
+                    component="button"
+                    type="button"
+                    underline="hover"
+                    onClick={() => setServerOpen(true)}
+                  >
+                    Change server
+                  </Link>
+                </Box>
+              )}
+            </Box>
+          ) : (
+            <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
+              <Typography variant="body2" fontWeight="bold">
+                Project not detected
+              </Typography>
+              <Typography variant="body2">
+                Ask the website administrator to add projectId to the Tolgee
+                configuration.{' '}
+                <Link
+                  href={LEARN_MORE_PROJECT_ID}
+                  target="_blank"
+                  rel="noreferrer"
+                  underline="hover"
+                >
+                  Learn more
+                </Link>
+              </Typography>
+              <Button variant="contained" color="primary" disabled>
+                Connect to Tolgee
+              </Button>
+            </Box>
+          ))}
+
+        {tab === 'apiKey' && (
           <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
-            <FormControl>
+            {serverField}
+            <FormControl fullWidth>
               <TextField
                 label="API key"
                 variant="outlined"
@@ -222,7 +439,7 @@ export const TolgeeDetector = () => {
               />
               <FormHelperText
                 error={credentialsCheck === 'invalid'}
-                style={{ height: 15 }}
+                style={{ minHeight: 15 }}
                 sx={{ marginLeft: 0 }}
               >
                 {credentialsCheck === null ? (
@@ -242,130 +459,30 @@ export const TolgeeDetector = () => {
                 )}
               </FormHelperText>
             </FormControl>
-            {credentialsCheck !== null &&
-              typeof credentialsCheck === 'object' &&
-              'branchingEnabled' in credentialsCheck &&
-              credentialsCheck.branchingEnabled && (
-                <Autocomplete
-                  style={{ marginBottom: branchOpen ? 150 : 0 }}
-                  open={branchOpen}
-                  onOpen={() => setBranchOpen(true)}
-                  onClose={() => setBranchOpen(false)}
-                  freeSolo
-                  size="small"
-                  disablePortal
-                  slotProps={{
-                    popper: {
-                      placement: 'bottom',
-                      modifiers: [{ name: 'flip', enabled: false }],
-                    },
-                  }}
-                  ListboxProps={{ style: { maxHeight: 150 } }}
-                  options={branches ?? []}
-                  getOptionLabel={(option) =>
-                    typeof option === 'string' ? option : option.name
-                  }
-                  value={
-                    branches?.find((b) => b.name === values?.branch) ??
-                    values?.branch ??
-                    null
-                  }
-                  onChange={(_e: any, newValue: any) => {
-                    dispatch({
-                      type: 'CHANGE_VALUES',
-                      payload: {
-                        branch:
-                          typeof newValue === 'string'
-                            ? newValue
-                            : newValue?.name ?? '',
-                      },
-                    });
-                  }}
-                  onInputChange={(
-                    _e: any,
-                    newInput: string,
-                    reason: string
-                  ) => {
-                    if (reason === 'input') {
-                      dispatch({
-                        type: 'CHANGE_VALUES',
-                        payload: { branch: newInput },
-                      });
-                    }
-                  }}
-                  renderOption={(props, option) => (
-                    <li {...props}>
-                      {option.name}
-                      {option.isDefault && (
-                        <span style={{ color: '#999', marginLeft: 6 }}>
-                          default
-                        </span>
-                      )}
-                    </li>
-                  )}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Branch"
-                      variant="outlined"
-                      placeholder={
-                        libConfig?.config?.branch || 'Default branch'
-                      }
-                      helperText="Leave empty to use the branch from SDK config"
-                      onKeyDown={handleKeyDown}
-                    />
-                  )}
-                />
-              )}
-            <Box
-              display="flex"
-              justifyContent="space-between"
-              alignItems="flex-start"
+            <Typography variant="body2">
+              Where can I get an{' '}
+              <Link
+                href={API_KEY_HELP}
+                target="_blank"
+                rel="noreferrer"
+                underline="hover"
+              >
+                API key
+              </Link>
+              ?
+            </Typography>
+            {branchField}
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => dispatch({ type: 'APPLY_VALUES' })}
+              disabled={!validateValues(values) || valuesNotChanged}
             >
-              <Box display="flex" style={{ gap: 5 }}>
-                {dataPresent ? (
-                  <>
-                    <Switch
-                      size="small"
-                      checked={Boolean(appliedValues)}
-                      onChange={handleApplyChange}
-                      color="primary"
-                    />
-                    <Typography>Applied</Typography>
-                  </>
-                ) : isInDevelopmentMode ? (
-                  <Typography style={{ fontSize: 12, color: '#535353' }}>
-                    Api key is included directly in Tolgee configuration. <br />{' '}
-                    Use this setup only in development environment.
-                  </Typography>
-                ) : (
-                  ''
-                )}
-              </Box>
-              <Box display="flex" style={{ gap: 10 }}>
-                {dataPresent && (
-                  <Button
-                    size="small"
-                    onClick={() => dispatch({ type: 'CLEAR_ALL' })}
-                    variant="contained"
-                    color="secondary"
-                  >
-                    Clear
-                  </Button>
-                )}
-                <Button
-                  size="small"
-                  onClick={() => dispatch({ type: 'APPLY_VALUES' })}
-                  variant="contained"
-                  color="primary"
-                  disabled={!validateValues(values) || valuesNotChanged}
-                >
-                  Connect with API key
-                </Button>
-              </Box>
-            </Box>
+              Connect with API key
+            </Button>
+            {appliedControls(isInDevelopmentMode)}
           </Box>
-        </Collapse>
+        )}
       </Box>
     );
   } else if (tolgeePresent === 'legacy') {
