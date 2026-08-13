@@ -40,6 +40,39 @@ const postToken = async (
   return parseTokenResponse(await res.json(), previousRefreshToken);
 };
 
+const AUTH_MAX_ATTEMPTS = 3;
+const AUTH_RETRY_DELAY_MS = 500;
+
+const wasCancelledByUser = (message: string) =>
+  /cancel|did not approve|denied|closed by the user/i.test(message);
+
+// launchWebAuthFlow runs the authorize flow in an isolated window that intermittently fails to load the bootstrap SPA
+// ("Authorization page could not be loaded"), even though a retry succeeds. Reopen it a couple of times on such a
+// transient failure, but never after the user closes/denies the window (that decision is final).
+const launchAuthWithRetry = async (url: string): Promise<string> => {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await browser.identity.launchWebAuthFlow({
+        url,
+        interactive: true,
+      });
+    } catch (e) {
+      lastError = e;
+      const message = e instanceof Error ? e.message : String(e);
+      if (wasCancelledByUser(message) || attempt === AUTH_MAX_ATTEMPTS) {
+        throw e;
+      }
+      console.warn(
+        `[tolgee-oauth] authorization attempt ${attempt} failed, retrying`,
+        message
+      );
+      await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
+    }
+  }
+  throw lastError;
+};
+
 export const login = async (
   apiUrl: string,
   projectId?: number
@@ -63,10 +96,7 @@ export const login = async (
     authorizeUrl.searchParams.set('project', String(projectId));
   }
 
-  const redirectResponse = await browser.identity.launchWebAuthFlow({
-    url: authorizeUrl.toString(),
-    interactive: true,
-  });
+  const redirectResponse = await launchAuthWithRetry(authorizeUrl.toString());
   const code = new URL(redirectResponse).searchParams.get('code');
   if (!code) {
     throw new Error('Tolgee authorization did not return a code');
