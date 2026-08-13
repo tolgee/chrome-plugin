@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 
 import { useDetectorForm } from './useDetectorForm';
-import { decodeTokenProjectSet, validateValues } from './tools';
+import { decodeTokenProjectSet, isOAuth, validateValues } from './tools';
 import { sendToBackground } from './sendToBackground';
 
 const POPUP_WIDTH = 400;
@@ -119,6 +119,21 @@ export const TolgeeDetector = () => {
 
   const dataPresent = storedValues || appliedValues;
 
+  // Which credentials the session is actually built on, regardless of the Applied toggle: applied when live, otherwise
+  // the stored ones (an OAuth session's token is re-fetched into storedValues on load).
+  const activeValues = appliedValues || storedValues || values;
+  const isOauthSession = isOAuth(activeValues);
+
+  // OAuth Disconnect drops the local token (service worker + storage) but keeps the server-side consent, so reconnecting
+  // is silent. API-key Disconnect is just the old Clear. Either way the local session is wiped.
+  const handleDisconnect = async () => {
+    const apiUrl = activeValues?.apiUrl;
+    if (isOauthSession && apiUrl) {
+      await sendToBackground('OAUTH_LOGOUT', { apiUrl });
+    }
+    dispatch({ type: 'CLEAR_ALL' });
+  };
+
   const serverField = (
     <FormControl fullWidth>
       <TextField
@@ -204,40 +219,59 @@ export const TolgeeDetector = () => {
       />
     );
 
-  const appliedControls = (isInDevelopmentMode: boolean) => (
-    <Box display="flex" justifyContent="space-between" alignItems="flex-start">
-      <Box display="flex" style={{ gap: 5 }}>
-        {dataPresent ? (
-          <>
-            <Switch
-              size="small"
-              checked={Boolean(appliedValues)}
-              onChange={handleApplyChange}
-              color="primary"
-            />
-            <Typography>Applied</Typography>
-          </>
-        ) : isInDevelopmentMode ? (
-          <Typography style={{ fontSize: 12, color: '#535353' }}>
-            Api key is included directly in Tolgee configuration. <br /> Use
-            this setup only in development environment.
-          </Typography>
-        ) : (
-          ''
-        )}
+  const projectPicker = declaredProject && (
+    <Autocomplete
+      size="small"
+      disableClearable
+      options={
+        allProjectsToken
+          ? [declaredProject, ALL_PROJECTS_OPTION]
+          : [declaredProject]
+      }
+      getOptionLabel={(option) => option.name}
+      isOptionEqualToValue={(option, value) => option.id === value.id}
+      value={values?.projectId != null ? declaredProject : ALL_PROJECTS_OPTION}
+      onChange={(_e, newValue) => {
+        dispatch({
+          type: 'OAUTH_SET_PROJECT',
+          payload: {
+            projectId:
+              newValue && newValue.id !== ALL_PROJECTS_OPTION.id
+                ? newValue.id
+                : undefined,
+          },
+        });
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Project"
+          variant="outlined"
+          helperText="Project to edit in-context"
+        />
+      )}
+    />
+  );
+
+  const footer = (
+    <Box display="flex" justifyContent="space-between" alignItems="center">
+      <Box display="flex" alignItems="center" style={{ gap: 5 }}>
+        <Switch
+          size="small"
+          checked={Boolean(appliedValues)}
+          onChange={handleApplyChange}
+          color="primary"
+        />
+        <Typography>Applied</Typography>
       </Box>
-      <Box display="flex" style={{ gap: 10 }}>
-        {dataPresent && (
-          <Button
-            size="small"
-            onClick={() => dispatch({ type: 'CLEAR_ALL' })}
-            variant="contained"
-            color="secondary"
-          >
-            Clear
-          </Button>
-        )}
-      </Box>
+      <Button
+        size="small"
+        onClick={handleDisconnect}
+        variant="contained"
+        color="secondary"
+      >
+        Disconnect
+      </Button>
     </Box>
   );
 
@@ -279,6 +313,66 @@ export const TolgeeDetector = () => {
       // keep the raw value if it's not a full URL yet
     }
 
+    // Once a session exists (either auth method) the popup is a single status view — no tabs, no auth-key field.
+    if (dataPresent) {
+      return (
+        <Box
+          p={2}
+          width={POPUP_WIDTH}
+          style={{ display: 'flex', flexDirection: 'column', gap: 15 }}
+        >
+          <Typography variant="h6">Tolgee plugin</Typography>
+
+          <FormControl fullWidth>
+            <TextField
+              label="Server"
+              variant="outlined"
+              size="small"
+              value={values?.apiUrl ?? ''}
+              InputProps={{ readOnly: true }}
+            />
+          </FormControl>
+
+          {isOauthSession ? (
+            <>
+              <Typography style={{ fontSize: 12, color: 'green' }}>
+                {oauthUser
+                  ? `Connected as ${oauthUser.userFullName}`
+                  : 'Connected'}
+              </Typography>
+              {declaredProjectInaccessible ? (
+                <Alert severity="error" variant="outlined">
+                  This site requests a project you can’t edit on {serverHost}.
+                  Check the projectId in the site’s Tolgee configuration, or ask
+                  for access.
+                </Alert>
+              ) : (
+                projectPicker
+              )}
+            </>
+          ) : (
+            <>
+              {credentialsCheck !== null &&
+              typeof credentialsCheck === 'object' &&
+              'projectName' in credentialsCheck ? (
+                <Typography style={{ fontSize: 12, color: 'green' }}>
+                  {credentialsCheck.projectName}
+                </Typography>
+              ) : credentialsCheck === 'invalid' ? (
+                <Typography style={{ fontSize: 12, color: 'red' }}>
+                  Invalid API key
+                </Typography>
+              ) : null}
+              {branchField}
+            </>
+          )}
+
+          {footer}
+        </Box>
+      );
+    }
+
+    // No session yet — let the user pick how to connect.
     return (
       <Box
         p={2}
@@ -298,63 +392,7 @@ export const TolgeeDetector = () => {
         </Tabs>
 
         {tab === 'login' &&
-          (oauthUser ? (
-            <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
-              <Typography style={{ fontSize: 12, color: 'green' }}>
-                Connected as {oauthUser.userFullName}
-              </Typography>
-              {declaredProjectInaccessible ? (
-                <Alert severity="error" variant="outlined">
-                  This site requests a project you can’t edit on {serverHost}.
-                  Check the projectId in the site’s Tolgee configuration, or ask
-                  for access.
-                </Alert>
-              ) : declaredProject ? (
-                <Autocomplete
-                  size="small"
-                  disableClearable
-                  options={
-                    allProjectsToken
-                      ? [declaredProject, ALL_PROJECTS_OPTION]
-                      : [declaredProject]
-                  }
-                  getOptionLabel={(option) => option.name}
-                  isOptionEqualToValue={(option, value) =>
-                    option.id === value.id
-                  }
-                  value={
-                    values?.projectId != null
-                      ? declaredProject
-                      : ALL_PROJECTS_OPTION
-                  }
-                  onChange={(_e, newValue) => {
-                    dispatch({
-                      type: 'OAUTH_SET_PROJECT',
-                      payload: {
-                        projectId:
-                          newValue && newValue.id !== ALL_PROJECTS_OPTION.id
-                            ? newValue.id
-                            : undefined,
-                      },
-                    });
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Project"
-                      variant="outlined"
-                      helperText="Project to edit in-context"
-                    />
-                  )}
-                />
-              ) : (
-                <Box display="flex" justifyContent="center">
-                  <CircularProgress size={20} />
-                </Box>
-              )}
-              {appliedControls(isInDevelopmentMode)}
-            </Box>
-          ) : projectDetected ? (
+          (projectDetected ? (
             <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
               {serverOpen ? (
                 serverField
@@ -442,21 +480,13 @@ export const TolgeeDetector = () => {
                 style={{ minHeight: 15 }}
                 sx={{ marginLeft: 0 }}
               >
-                {credentialsCheck === null ? (
-                  ''
-                ) : credentialsCheck === 'loading' ? (
-                  '...'
-                ) : credentialsCheck === 'invalid' ? (
-                  'Invalid'
-                ) : 'oauth' in credentialsCheck ? (
-                  <span style={{ color: 'green' }}>
-                    Connected as {credentialsCheck.userFullName}
-                  </span>
-                ) : (
-                  <span style={{ color: 'green' }}>
-                    {credentialsCheck.projectName}
-                  </span>
-                )}
+                {credentialsCheck === null
+                  ? ''
+                  : credentialsCheck === 'loading'
+                    ? '...'
+                    : credentialsCheck === 'invalid'
+                      ? 'Invalid'
+                      : ''}
               </FormHelperText>
             </FormControl>
             <Typography variant="body2">
@@ -471,7 +501,6 @@ export const TolgeeDetector = () => {
               </Link>
               ?
             </Typography>
-            {branchField}
             <Button
               variant="contained"
               color="primary"
@@ -480,7 +509,12 @@ export const TolgeeDetector = () => {
             >
               Connect with API key
             </Button>
-            {appliedControls(isInDevelopmentMode)}
+            {isInDevelopmentMode && (
+              <Typography style={{ fontSize: 12, color: '#535353' }}>
+                Api key is included directly in Tolgee configuration. <br /> Use
+                this setup only in development environment.
+              </Typography>
+            )}
           </Box>
         )}
       </Box>
