@@ -19,6 +19,7 @@ import {
 import { useDetectorForm } from './useDetectorForm';
 import { decodeTokenProjectSet, isOAuth, validateValues } from './tools';
 import { sendToBackground } from './sendToBackground';
+import { useApiKeyCheck } from './useApiKeyCheck';
 
 const POPUP_WIDTH = 400;
 const DEFAULT_SERVER = 'https://app.tolgee.io';
@@ -55,6 +56,19 @@ export const TolgeeDetector = () => {
     'oauth' in credentialsCheck
       ? credentialsCheck
       : null;
+
+  // Live-validate the key being typed on the API KEY tab (before it's applied), so a key that's invalid for the target
+  // server can't be silently connected.
+  const notConnected = !storedValues && !appliedValues;
+  const apiKeyCheck = useApiKeyCheck(
+    values?.apiUrl,
+    values?.apiKey,
+    tab === 'apiKey' && notConnected
+  );
+  const apiKeyValid =
+    apiKeyCheck !== null &&
+    typeof apiKeyCheck === 'object' &&
+    'projectName' in apiKeyCheck;
 
   // A single-project token auto-selects its project (done in the reducer); only an "all projects" token needs the
   // manual picker below.
@@ -472,21 +486,33 @@ export const TolgeeDetector = () => {
                     payload: { apiKey: e.target.value },
                   })
                 }
-                onKeyDown={handleKeyDown}
+                onKeyDown={(e) => {
+                  if (
+                    e.keyCode === 13 &&
+                    validateValues(values) &&
+                    apiKeyValid
+                  ) {
+                    dispatch({ type: 'APPLY_VALUES' });
+                  }
+                }}
                 size="small"
               />
               <FormHelperText
-                error={credentialsCheck === 'invalid'}
+                error={apiKeyCheck === 'invalid'}
                 style={{ minHeight: 15 }}
                 sx={{ marginLeft: 0 }}
               >
-                {credentialsCheck === null
-                  ? ''
-                  : credentialsCheck === 'loading'
-                    ? '...'
-                    : credentialsCheck === 'invalid'
-                      ? 'Invalid'
-                      : ''}
+                {apiKeyCheck === null ? (
+                  ''
+                ) : apiKeyCheck === 'loading' ? (
+                  '...'
+                ) : apiKeyCheck === 'invalid' ? (
+                  'Invalid API key for this server'
+                ) : (
+                  <span style={{ color: 'green' }}>
+                    {apiKeyCheck.projectName}
+                  </span>
+                )}
               </FormHelperText>
             </FormControl>
             <Typography variant="body2">
@@ -505,7 +531,9 @@ export const TolgeeDetector = () => {
               variant="contained"
               color="primary"
               onClick={() => dispatch({ type: 'APPLY_VALUES' })}
-              disabled={!validateValues(values) || valuesNotChanged}
+              disabled={
+                !validateValues(values) || valuesNotChanged || !apiKeyValid
+              }
             >
               Connect with API key
             </Button>
