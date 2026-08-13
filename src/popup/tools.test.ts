@@ -120,4 +120,17 @@ describe('compareValues', () => {
     expect(compareValues(base, { ...base, projectId: 3 })).toBe(false);
     expect(compareValues(base, { ...base, authToken: 'jwt' })).toBe(false);
   });
+
+  it('treats a string projectId and a numeric projectId as equal', () => {
+    expect(
+      compareValues({ ...base, projectId: '2' as any }, { ...base })
+    ).toBe(true);
+  });
+
+  it('treats a null apiKey and an undefined apiKey as equal', () => {
+    const oauth = { apiUrl: base.apiUrl, authToken: 'jwt', projectId: 1 };
+    expect(
+      compareValues({ ...oauth, apiKey: null as any }, { ...oauth })
+    ).toBe(true);
+  });
 });
