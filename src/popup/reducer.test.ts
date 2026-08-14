@@ -137,6 +137,22 @@ describe('detector reducer', () => {
       const next = reduce(enabled, { type: 'APPLY_VALUES' });
       expect(next.appliedValues?.branch).toBe('feature');
     });
+
+    it('preserves the OAuth token and project (Enter in the Server field must not drop them)', () => {
+      const oauth: State = {
+        ...initialState,
+        values: {
+          apiUrl: 'https://app.tolgee.io',
+          authToken: 'access-token',
+          projectId: 7,
+        },
+      };
+      const next = reduce(oauth, { type: 'APPLY_VALUES' });
+      expect(next.appliedValues?.authToken).toBe('access-token');
+      expect(next.appliedValues?.projectId).toBe(7);
+      expect(next.storedValues?.authToken).toBe('access-token');
+      expect(next.storedValues?.projectId).toBe(7);
+    });
   });
 
   describe('CLEAR_ALL', () => {

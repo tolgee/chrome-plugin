@@ -33,6 +33,7 @@ const ALL_PROJECTS_OPTION = { id: -1, name: 'All projects' };
 export const TolgeeDetector = () => {
   const [state, dispatch] = useDetectorForm();
   const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [tab, setTab] = useState<'login' | 'apiKey'>('login');
   const [serverOpen, setServerOpen] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
@@ -99,6 +100,7 @@ export const TolgeeDetector = () => {
   const handleConnect = async () => {
     const apiUrl = values?.apiUrl || DEFAULT_SERVER;
     setConnecting(true);
+    setConnectError(null);
     try {
       // Hint the project the page is configured for (exposed via the handshake), so the consent screen pre-selects it
       // and the minted token is scoped to it. On a public project the hint resolves via the community floor.
@@ -125,6 +127,8 @@ export const TolgeeDetector = () => {
           type: 'OAUTH_APPLY',
           payload: { apiUrl, authToken: res.accessToken },
         });
+      } else {
+        setConnectError(res?.error || 'Connection failed');
       }
     } finally {
       setConnecting(false);
@@ -321,8 +325,15 @@ export const TolgeeDetector = () => {
       detectedProjectId !== undefined && detectedProjectId !== '';
 
     let serverHost = values?.apiUrl || DEFAULT_SERVER;
+    // Restrict the link target to http(s): the Server field is editable, and a value like `javascript:...` would become
+    // an executable link running with extension privileges. Fall back to the default when it isn't a valid web URL yet.
+    let serverLink = DEFAULT_SERVER;
     try {
-      serverHost = new URL(serverHost).host;
+      const parsed = new URL(values?.apiUrl || DEFAULT_SERVER);
+      serverHost = parsed.host;
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        serverLink = parsed.toString();
+      }
     } catch {
       // keep the raw value if it's not a full URL yet
     }
@@ -414,7 +425,7 @@ export const TolgeeDetector = () => {
                 <Typography variant="body2">
                   Connect to your account on{' '}
                   <Link
-                    href={values?.apiUrl || DEFAULT_SERVER}
+                    href={serverLink}
                     target="_blank"
                     rel="noreferrer"
                     underline="hover"
@@ -432,6 +443,7 @@ export const TolgeeDetector = () => {
               >
                 {connecting ? 'Connecting…' : 'Connect to Tolgee'}
               </Button>
+              {connectError && <Alert severity="error">{connectError}</Alert>}
               {serverOpen ? (
                 <Typography style={{ fontSize: 12, color: '#535353' }}>
                   Change if you have your own instance of Tolgee.

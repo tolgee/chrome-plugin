@@ -139,18 +139,19 @@ export const createReducer =
         const effectiveBranch = branchEnabled
           ? state.values?.branch
           : undefined;
+        // Carry the OAuth fields through: this action also fires on the Login tab (Enter in the Server field), and
+        // dropping authToken/projectId there would wipe the token from state and remove the stored OAuth session.
+        const nextValues = {
+          apiKey: state.values?.apiKey,
+          apiUrl: state.values?.apiUrl,
+          branch: effectiveBranch,
+          authToken: state.values?.authToken,
+          projectId: state.values?.projectId,
+        };
         return {
           ...state,
-          appliedValues: {
-            apiKey: state.values?.apiKey,
-            apiUrl: state.values?.apiUrl,
-            branch: effectiveBranch,
-          },
-          storedValues: {
-            apiKey: state.values?.apiKey,
-            apiUrl: state.values?.apiUrl,
-            branch: effectiveBranch,
-          },
+          appliedValues: nextValues,
+          storedValues: nextValues,
         };
       }
       case 'CLEAR_ALL': {
