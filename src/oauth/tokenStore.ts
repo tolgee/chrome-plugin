@@ -30,6 +30,33 @@ export const loadAllSessions = async (): Promise<StoredSession[]> => {
     .map(([, value]) => value as StoredSession);
 };
 
+// A token-endpoint 4xx means the refresh token is dead (rotated away or revoked) — terminal, clear the session. A
+// network failure (fetch rejects, no status) is transient — keep the session so a later call can retry instead of
+// logging the user out on a blip. postToken throws `... returned <status>: ...` for non-ok responses.
+const isTerminalRefreshFailure = (e: unknown) =>
+  e instanceof Error && /returned 4\d\d/.test(e.message);
+
+// A refresh rotates the refresh token, so two concurrent refreshes for the same backend would both spend the same
+// (single-use) token: the first wins, the second gets invalid_grant and clears the just-refreshed session. The alarm
+// handler and an OAUTH_GET_TOKEN message can land in the same worker at once, so share one in-flight refresh per origin.
+const inFlightRefresh = new Map<string, Promise<string | null>>();
+
+const refreshSession = async (
+  apiUrl: string,
+  refreshToken: string
+): Promise<string | null> => {
+  try {
+    const refreshed = await refresh(apiUrl, refreshToken);
+    await saveSession(apiUrl, refreshed);
+    return refreshed.accessToken;
+  } catch (e) {
+    if (isTerminalRefreshFailure(e)) {
+      await clearSession(apiUrl);
+    }
+    return null;
+  }
+};
+
 // Returns a valid access token, refreshing (and persisting) if it is expired or near expiry.
 // Returns null (and clears the session) when there is nothing valid to fall back on — the caller must re-login.
 export const getValidAccessToken = async (
@@ -46,12 +73,14 @@ export const getValidAccessToken = async (
     await clearSession(apiUrl);
     return null;
   }
-  try {
-    const refreshed = await refresh(apiUrl, session.refreshToken);
-    await saveSession(apiUrl, refreshed);
-    return refreshed.accessToken;
-  } catch (e) {
-    await clearSession(apiUrl);
-    return null;
+  const key = keyFor(apiUrl);
+  const existing = inFlightRefresh.get(key);
+  if (existing) {
+    return existing;
   }
+  const pending = refreshSession(apiUrl, session.refreshToken).finally(() =>
+    inFlightRefresh.delete(key)
+  );
+  inFlightRefresh.set(key, pending);
+  return pending;
 };

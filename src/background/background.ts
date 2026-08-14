@@ -26,6 +26,14 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       setStateIcon(data, sender.tab!.id!);
       sendResponse({});
       break;
+    case 'OPEN_POPUP':
+      // Best effort: chrome.action.openPopup() is only available on newer Chrome; if it's missing or the call is
+      // refused, the in-context alert still tells the user to click the extension icon.
+      (browser.action as { openPopup?: () => Promise<void> })
+        .openPopup?.()
+        .catch(() => undefined);
+      sendResponse({});
+      break;
     case 'OAUTH_LOGIN':
       login(data.apiUrl, data.projectId)
         .then(async (tokens) => {
@@ -47,12 +55,20 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       return true;
     case 'OAUTH_GET_TOKEN':
-      getValidAccessToken(data.apiUrl).then((accessToken) =>
-        sendResponse({ accessToken })
-      );
+      getValidAccessToken(data.apiUrl)
+        .then((accessToken) => sendResponse({ accessToken }))
+        .catch((e) => {
+          console.error('[tolgee-oauth] token lookup failed', e);
+          sendResponse({ accessToken: null, error: String(e) });
+        });
       return true;
     case 'OAUTH_LOGOUT':
-      clearSession(data.apiUrl).then(() => sendResponse({}));
+      clearSession(data.apiUrl)
+        .then(() => sendResponse({}))
+        .catch((e) => {
+          console.error('[tolgee-oauth] logout failed', e);
+          sendResponse({ error: String(e) });
+        });
       return true;
     default:
       sendResponse({});
@@ -79,7 +95,14 @@ const injectCredentials = async (
 
 // Keep stored sessions fresh so the popup and the injected page token don't expire mid-use. Rotation means each
 // refresh mints a new access + refresh token; getValidAccessToken persists them and pushes the access token to tabs.
-browser.alarms.create(REFRESH_ALARM, { periodInMinutes: 10 });
+// This top-level code re-runs every time the MV3 worker wakes; re-creating an existing alarm resets its schedule, so a
+// worker that wakes more often than the period would never let the alarm fire — only create it when it's absent.
+const ensureRefreshAlarm = async () => {
+  if (!(await browser.alarms.get(REFRESH_ALARM))) {
+    await browser.alarms.create(REFRESH_ALARM, { periodInMinutes: 10 });
+  }
+};
+ensureRefreshAlarm();
 browser.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== REFRESH_ALARM) {
     return;

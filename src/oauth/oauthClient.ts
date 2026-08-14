@@ -11,17 +11,30 @@ export type OAuthTokens = {
 
 const normalizeUrl = (url: string) => url.replace(/\/$/, '');
 
+// Fallback lifetime when the token endpoint omits expires_in, so getValidAccessToken doesn't read the token as already
+// expired (expiresAt === now) and trigger a refresh — and, with rotation, a refresh — on every single read.
+const DEFAULT_TOKEN_LIFETIME_SECONDS = 5 * 60;
+
 export const getRedirectUri = () => browser.identity.getRedirectURL();
 
 const parseTokenResponse = (
   data: Record<string, any>,
   previousRefreshToken?: string
-): OAuthTokens => ({
-  accessToken: data.access_token,
-  // rotation returns a fresh refresh token; if a response omits it, keep the previous one
-  refreshToken: data.refresh_token ?? previousRefreshToken,
-  expiresAt: Date.now() + (data.expires_in ?? 0) * 1000,
-});
+): OAuthTokens => {
+  if (typeof data.access_token !== 'string' || !data.access_token) {
+    throw new Error('Tolgee token endpoint returned no access_token');
+  }
+  const expiresIn =
+    typeof data.expires_in === 'number' && data.expires_in > 0
+      ? data.expires_in
+      : DEFAULT_TOKEN_LIFETIME_SECONDS;
+  return {
+    accessToken: data.access_token,
+    // rotation returns a fresh refresh token; if a response omits it, keep the previous one
+    refreshToken: data.refresh_token ?? previousRefreshToken,
+    expiresAt: Date.now() + expiresIn * 1000,
+  };
+};
 
 const postToken = async (
   base: string,
@@ -91,13 +104,26 @@ export const login = async (
     await challengeFromVerifier(verifier)
   );
   authorizeUrl.searchParams.set('code_challenge_method', 'S256');
-  authorizeUrl.searchParams.set('state', randomUrlSafe());
+  const state = randomUrlSafe();
+  authorizeUrl.searchParams.set('state', state);
   if (projectId != null) {
     authorizeUrl.searchParams.set('project', String(projectId));
   }
 
   const redirectResponse = await launchAuthWithRetry(authorizeUrl.toString());
-  const code = new URL(redirectResponse).searchParams.get('code');
+  const redirectParams = new URL(redirectResponse).searchParams;
+  if (redirectParams.get('state') !== state) {
+    throw new Error('Tolgee authorization returned an unexpected state');
+  }
+  const error = redirectParams.get('error');
+  if (error) {
+    throw new Error(
+      `Tolgee authorization failed: ${
+        redirectParams.get('error_description') || error
+      }`
+    );
+  }
+  const code = redirectParams.get('code');
   if (!code) {
     throw new Error('Tolgee authorization did not return a code');
   }

@@ -70,6 +70,11 @@ messages.listenWindow('TOLGEE_TAKE_SCREENSHOT', () => {
   });
 });
 
+// in-context editor asks to open the popup (e.g. so the user can re-connect after their OAuth session expired)
+messages.listenWindow('TOLGEE_OPEN_PLUGIN', () => {
+  messages.sendToPlugin('OPEN_POPUP');
+});
+
 messages.startRuntimeListening();
 
 // popup will ask if tolgee is present on the page
@@ -111,7 +116,11 @@ messages.listenRuntime('SET_CREDENTIALS', async (data) => {
 
 // Background pushes a rotated access token here on refresh; update it in place so the SDK picks it up without a reload.
 messages.listenRuntime('UPDATE_AUTH_TOKEN', async (data) => {
-  if (sameOrigin(sessionStorage.getItem(API_URL_LOCAL_STORAGE), data.apiUrl)) {
+  // Skip an empty token: setItem would store the literal string "undefined" and the SDK would send `Bearer undefined`.
+  if (
+    data.authToken &&
+    sameOrigin(sessionStorage.getItem(API_URL_LOCAL_STORAGE), data.apiUrl)
+  ) {
     sessionStorage.setItem(AUTH_TOKEN_LOCAL_STORAGE, data.authToken);
   }
 });
