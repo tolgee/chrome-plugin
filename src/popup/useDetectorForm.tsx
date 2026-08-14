@@ -156,7 +156,10 @@ export const useDetectorForm = () => {
             !cancelled && setCredentialsCheck('invalid');
           });
       } else {
-        fetch(`${url}/v2/api-keys/current?ak=${checkableValues!.apiKey}`)
+        // Send the key in the header, not the query string, so it can't leak via URLs/history/logs.
+        fetch(`${url}/v2/api-keys/current`, {
+          headers: { 'X-API-Key': checkableValues!.apiKey! },
+        })
           .then((r) => {
             if (r.ok) {
               return r.json();

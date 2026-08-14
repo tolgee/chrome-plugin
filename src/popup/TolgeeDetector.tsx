@@ -510,7 +510,9 @@ export const TolgeeDetector = () => {
                 size="small"
               />
               <FormHelperText
-                error={apiKeyCheck === 'invalid'}
+                error={
+                  apiKeyCheck === 'invalid' || apiKeyCheck === 'unreachable'
+                }
                 style={{ minHeight: 15 }}
                 sx={{ marginLeft: 0 }}
               >
@@ -520,6 +522,8 @@ export const TolgeeDetector = () => {
                   '...'
                 ) : apiKeyCheck === 'invalid' ? (
                   'Invalid API key for this server'
+                ) : apiKeyCheck === 'unreachable' ? (
+                  'Could not reach the server'
                 ) : (
                   <span style={{ color: 'green' }}>
                     {apiKeyCheck.projectName}
