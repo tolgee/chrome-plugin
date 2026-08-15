@@ -73,9 +73,11 @@ export const useDetectorForm = () => {
 
     const storedData = await loadValues();
     if (storedData.oauth && storedData.apiUrl) {
-      // OAuth sessions store no token; ask the service worker for a fresh (auto-refreshed) one.
+      // OAuth sessions store no token; ask the service worker for a fresh (auto-refreshed) one for this project (its
+      // own session if concrete, else the all-projects one).
       const res = (await sendToBackground('OAUTH_GET_TOKEN', {
         apiUrl: storedData.apiUrl,
+        projectId: storedData.projectId,
       })) as { accessToken?: string };
       if (res?.accessToken) {
         dispatch({

@@ -142,12 +142,15 @@ export const TolgeeDetector = () => {
   const activeValues = appliedValues || storedValues || values;
   const isOauthSession = isOAuth(activeValues);
 
-  // OAuth Disconnect drops the local token (service worker + storage) but keeps the server-side consent, so reconnecting
-  // is silent. API-key Disconnect is just the old Clear. Either way the local session is wiped.
+  // OAuth Disconnect drops this project's local token (service worker + storage); the server keeps the consent, so
+  // reconnecting the same account skips the consent screen (by design). API-key Disconnect is just the old Clear.
   const handleDisconnect = async () => {
     const apiUrl = activeValues?.apiUrl;
     if (isOauthSession && apiUrl) {
-      await sendToBackground('OAUTH_LOGOUT', { apiUrl });
+      await sendToBackground('OAUTH_LOGOUT', {
+        apiUrl,
+        projectId: activeValues?.projectId,
+      });
     }
     dispatch({ type: 'CLEAR_ALL' });
   };

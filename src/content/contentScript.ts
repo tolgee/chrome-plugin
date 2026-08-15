@@ -116,9 +116,18 @@ messages.listenRuntime('SET_CREDENTIALS', async (data) => {
 
 // Background pushes a rotated access token here on refresh; update it in place so the SDK picks it up without a reload.
 messages.listenRuntime('UPDATE_AUTH_TOKEN', async (data) => {
+  // Only take a push whose session serves this page's project: '*' (all projects) serves any, a concrete key only its
+  // own. Without this, a project-2 refresh would clobber a project-3 page's token on the same backend. An absent
+  // projectKey (older background) matches anything, preserving the previous single-session behaviour.
+  const pageProjectId = sessionStorage.getItem(PROJECT_ID_LOCAL_STORAGE);
+  const scopeServesPage =
+    data.projectKey === undefined ||
+    data.projectKey === '*' ||
+    data.projectKey === pageProjectId;
   // Skip an empty token: setItem would store the literal string "undefined" and the SDK would send `Bearer undefined`.
   if (
     data.authToken &&
+    scopeServesPage &&
     sameOrigin(sessionStorage.getItem(API_URL_LOCAL_STORAGE), data.apiUrl)
   ) {
     sessionStorage.setItem(AUTH_TOKEN_LOCAL_STORAGE, data.authToken);

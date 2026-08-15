@@ -35,27 +35,15 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({});
       break;
     case 'OAUTH_LOGIN':
-      login(data.apiUrl, data.projectId)
-        .then(async (tokens) => {
-          await saveSession(data.apiUrl, tokens);
-          // launchWebAuthFlow steals focus, which closes the popup before it can push credentials to the page, so
-          // inject from here. data.tabId is the tab the popup was acting on, captured before the auth window opened.
-          if (data.tabId != null) {
-            await injectCredentials(data.tabId, {
-              apiUrl: data.apiUrl,
-              authToken: tokens.accessToken,
-              projectId: data.projectId,
-            });
-          }
-          sendResponse({ accessToken: tokens.accessToken });
-        })
+      connect(data)
+        .then((accessToken) => sendResponse({ accessToken }))
         .catch((e) => {
           console.error('[tolgee-oauth] login failed', e);
           sendResponse({ error: String(e) });
         });
       return true;
     case 'OAUTH_GET_TOKEN':
-      getValidAccessToken(data.apiUrl)
+      getValidAccessToken(data.apiUrl, data.projectId)
         .then((accessToken) => sendResponse({ accessToken }))
         .catch((e) => {
           console.error('[tolgee-oauth] token lookup failed', e);
@@ -63,7 +51,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       return true;
     case 'OAUTH_LOGOUT':
-      clearSession(data.apiUrl)
+      clearSession(data.apiUrl, data.projectId)
         .then(() => sendResponse({}))
         .catch((e) => {
           console.error('[tolgee-oauth] logout failed', e);
@@ -80,6 +68,32 @@ const setStateIcon = (state: State, tabId: number) => {
     path: { 128: `/icons/${state}.png` },
     tabId,
   });
+};
+
+// Reuse an existing usable session before launching the OAuth flow: a matching concrete-project session, or an
+// all-projects one, connects a second site on the same backend with no extra round trip — this is what makes an
+// all-projects login "just work" everywhere. Only when nothing serves the requested project do we run the flow.
+const connect = async (data: {
+  apiUrl: string;
+  projectId?: number;
+  tabId?: number;
+}): Promise<string> => {
+  let accessToken = await getValidAccessToken(data.apiUrl, data.projectId);
+  if (!accessToken) {
+    const tokens = await login(data.apiUrl, data.projectId);
+    await saveSession(data.apiUrl, tokens);
+    accessToken = tokens.accessToken;
+  }
+  // launchWebAuthFlow steals focus, which closes the popup before it can push credentials to the page, so inject from
+  // here. data.tabId is the tab the popup was acting on, captured before the auth window opened.
+  if (data.tabId != null) {
+    await injectCredentials(data.tabId, {
+      apiUrl: data.apiUrl,
+      authToken: accessToken,
+      projectId: data.projectId,
+    });
+  }
+  return accessToken;
 };
 
 // Inject the full credential set into a page on connect (the content script writes them to sessionStorage and reloads
@@ -112,15 +126,25 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
     if (session.expiresAt - OAUTH_REFRESH_SKEW_MS > Date.now()) {
       continue;
     }
-    const accessToken = await getValidAccessToken(session.apiUrl);
+    // Passing the session's own project scope refreshes exactly this session (a concrete id finds it, '*' the
+    // all-projects one), so rotating one project's token never disturbs another's.
+    const accessToken = await getValidAccessToken(
+      session.apiUrl,
+      session.projectKey
+    );
     if (accessToken) {
-      await pushTokenToTabs(session.apiUrl, accessToken);
+      await pushTokenToTabs(session.apiUrl, session.projectKey, accessToken);
     }
   }
 });
 
-// Update the injected access token in every tab whose applied backend matches, without reloading the page.
-const pushTokenToTabs = async (apiUrl: string, accessToken: string) => {
+// Update the injected access token in every tab whose applied backend and project the refreshed session serves, without
+// reloading the page. An all-projects ('*') session serves any project; a concrete session only its own.
+const pushTokenToTabs = async (
+  apiUrl: string,
+  projectKey: string,
+  accessToken: string
+) => {
   const tabs = await browser.tabs.query({});
   await Promise.all(
     tabs.map((tab) =>
@@ -129,7 +153,7 @@ const pushTokenToTabs = async (apiUrl: string, accessToken: string) => {
         : browser.tabs
             .sendMessage(tab.id, {
               type: 'UPDATE_AUTH_TOKEN',
-              data: { apiUrl, authToken: accessToken },
+              data: { apiUrl, projectKey, authToken: accessToken },
             })
             .catch(() => undefined)
     )

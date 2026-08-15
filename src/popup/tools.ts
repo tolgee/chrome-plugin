@@ -41,27 +41,6 @@ export function normalizeUrl(url: string | undefined) {
   return url?.replace(/\/$/, '');
 }
 
-// Reads the `tg.prj` (project set) claim the backend stamped into the OAuth access token. '*' means all projects
-// (the user must then pick one to edit); a single id means the token is bound to that project and we can auto-select it.
-export function decodeTokenProjectSet(
-  token: string | undefined
-): '*' | number[] | undefined {
-  if (!token) {
-    return undefined;
-  }
-  try {
-    const payload = JSON.parse(
-      atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))
-    );
-    const prj = payload['tg.prj'];
-    if (prj === '*') {
-      return '*';
-    }
-    if (Array.isArray(prj)) {
-      return prj.map((x) => Number(x)).filter((n) => !Number.isNaN(n));
-    }
-    return undefined;
-  } catch (e) {
-    return undefined;
-  }
-}
+// The project-set decoder lives with the OAuth token store so the service worker can key sessions by scope; re-exported
+// here for the popup, which reads it to drive the project picker.
+export { decodeTokenProjectSet } from '../oauth/tokenScope';
