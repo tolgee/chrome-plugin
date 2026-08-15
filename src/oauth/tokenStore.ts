@@ -51,7 +51,8 @@ const loadByKey = async (
 };
 
 // The session serving a page on `projectId`: its own concrete-project session when one exists, otherwise an
-// all-projects session (whose token covers every project on the backend).
+// all-projects session (whose token covers every project on the backend). Strict — no guessing — so disconnect
+// (clearSession) never removes a session the caller didn't ask for.
 export const loadSession = async (
   apiUrl: string,
   projectId?: number | string
@@ -64,6 +65,18 @@ export const loadSession = async (
     }
   }
   return loadByKey(apiUrl, ALL_PROJECTS_KEY);
+};
+
+// The sole session for an origin, or null when there are zero or several. The read path falls back to this so a caller
+// that doesn't know the project yet (e.g. the popup reopening before it re-resolves the page's project) still resolves
+// its one session instead of being told "not connected".
+const soleOriginSession = async (
+  apiUrl: string
+): Promise<StoredSession | null> => {
+  const originSessions = (await loadAllSessions()).filter(
+    (s) => originOf(s.apiUrl) === originOf(apiUrl)
+  );
+  return originSessions.length === 1 ? originSessions[0] : null;
 };
 
 export const clearSession = async (
@@ -113,12 +126,14 @@ const refreshSession = async (
 };
 
 // Returns a valid access token for the given project, refreshing (and persisting) if it is expired or near expiry.
-// Falls back to an all-projects session; returns null (clearing the session) when there is nothing valid to serve it.
+// Falls back to an all-projects session, then to the origin's sole session; returns null when there is nothing valid
+// to serve it.
 export const getValidAccessToken = async (
   apiUrl: string,
   projectId?: number | string
 ): Promise<string | null> => {
-  const session = await loadSession(apiUrl, projectId);
+  const session =
+    (await loadSession(apiUrl, projectId)) ?? (await soleOriginSession(apiUrl));
   if (!session) {
     return null;
   }

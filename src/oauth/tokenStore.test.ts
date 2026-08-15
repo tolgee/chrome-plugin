@@ -84,6 +84,24 @@ describe('tokenStore per-project keying', () => {
     expect((await loadSession(URL_A, 5))?.projectKey).toBe('*');
   });
 
+  it('serves the sole origin session when the requested project is unknown or mismatched', async () => {
+    // The popup reopens and asks with no (or a stale) projectId before it re-resolves the page's project. With a single
+    // session for the backend, getValidAccessToken must still resolve it — otherwise the popup treats it as
+    // disconnected and wipes it. (loadSession itself stays strict, so disconnect never clears the wrong session.)
+    await saveSession(URL_A, tokens('2'));
+
+    expect(await getValidAccessToken(URL_A, undefined)).toBe('token-2');
+    expect(await getValidAccessToken(URL_A, 999)).toBe('token-2');
+    expect(await loadSession(URL_A, 999)).toBeNull();
+  });
+
+  it('does not guess when multiple sessions exist and no project matches', async () => {
+    await saveSession(URL_A, tokens('2'));
+    await saveSession(URL_A, tokens('3'));
+
+    expect(await getValidAccessToken(URL_A, undefined)).toBeNull();
+  });
+
   it('clears only the session serving the given project', async () => {
     await saveSession(URL_A, tokens('2'));
     await saveSession(URL_A, tokens('3'));
