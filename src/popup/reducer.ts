@@ -20,6 +20,13 @@ export type CredentialsCheck =
   | 'invalid'
   | ProjectInfo
   | OAuthUser;
+
+export const isProjectInfo = (c: CredentialsCheck): c is ProjectInfo =>
+  c !== null && typeof c === 'object' && 'projectName' in c;
+
+export const isOAuthUser = (c: CredentialsCheck): c is OAuthUser =>
+  c !== null && typeof c === 'object' && 'oauth' in c;
+
 export type TolgeePresent = 'loading' | 'present' | 'not_present' | 'legacy';
 
 export type BranchOption = {
@@ -63,7 +70,10 @@ export type Action =
   | { type: 'CLEAR_ALL' }
   | { type: 'STORE_VALUES' }
   | { type: 'LOAD_VALUES' }
-  | { type: 'OAUTH_APPLY'; payload: { apiUrl: string; authToken: string } }
+  | {
+      type: 'OAUTH_APPLY';
+      payload: { apiUrl: string; authToken: string; projectId?: number };
+    }
   | { type: 'OAUTH_SET_PROJECT'; payload: { projectId: number | undefined } }
   | { type: 'SET_BRANCHES'; payload: BranchOption[] | null }
   | {
@@ -71,10 +81,6 @@ export type Action =
       payload: { project: ProjectOption | null; inaccessible: boolean };
     };
 
-/**
- * The reducer is a pure state transition, but a few actions also need to flag that the new state must be synced out to
- * storage/sessionStorage. That side effect is injected as `apply` so the reducer stays testable without React.
- */
 export const createReducer =
   (apply: () => void) =>
   (state: State, action: Action): State => {
@@ -129,18 +135,13 @@ export const createReducer =
           values: action.payload,
         };
       case 'APPLY_VALUES': {
-        // sync values with storage/localStorage
         apply();
         const branchEnabled =
-          state.credentialsCheck !== null &&
-          typeof state.credentialsCheck === 'object' &&
-          'branchingEnabled' in state.credentialsCheck &&
+          isProjectInfo(state.credentialsCheck) &&
           state.credentialsCheck.branchingEnabled;
         const effectiveBranch = branchEnabled
           ? state.values?.branch
           : undefined;
-        // Carry the OAuth fields through: this action also fires on the Login tab (Enter in the Server field), and
-        // dropping authToken/projectId there would wipe the token from state and remove the stored OAuth session.
         const nextValues = {
           apiKey: state.values?.apiKey,
           apiUrl: state.values?.apiUrl,
@@ -168,11 +169,10 @@ export const createReducer =
       }
       case 'OAUTH_APPLY': {
         apply();
-        // Keep any project the user already picked for this backend (restored from storage) across a re-connect.
         const oauthValues = {
           apiUrl: action.payload.apiUrl,
           authToken: action.payload.authToken,
-          projectId: state.values?.projectId,
+          projectId: action.payload.projectId ?? state.values?.projectId,
         };
         return {
           ...state,
@@ -205,8 +205,6 @@ export const createReducer =
             declaredProjectInaccessible: inaccessible,
           };
         }
-        // Bind the declared project so in-context editing has a target: an all-projects token carries none, and even a
-        // single-project token needs the id sent explicitly on every request.
         apply();
         const oauthValues = { ...state.values, projectId: project.id };
         return {
@@ -239,7 +237,7 @@ export const createReducer =
           branches: action.payload,
         };
       default:
-        // @ts-expect-error action type is type uknown
+        // @ts-expect-error action type is unknown
         throw new Error(`Unknown action ${action.type}`);
     }
   };

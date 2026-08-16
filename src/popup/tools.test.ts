@@ -1,11 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import {
   compareValues,
+  declaredProjectId,
   decodeTokenProjectSet,
   isOAuth,
   normalizeUrl,
   validateValues,
 } from './tools';
+import { LibConfig } from '../types';
+
+const withProjectId = (projectId: unknown) =>
+  ({ config: { projectId } }) as unknown as LibConfig;
+
+describe('declaredProjectId', () => {
+  it('returns the numeric project id and coerces a string id', () => {
+    expect(declaredProjectId(withProjectId(7))).toBe(7);
+    expect(declaredProjectId(withProjectId('7'))).toBe(7);
+  });
+
+  it('is undefined for blank, absent, or non-numeric', () => {
+    expect(declaredProjectId(withProjectId(''))).toBeUndefined();
+    expect(declaredProjectId(withProjectId(undefined))).toBeUndefined();
+    expect(declaredProjectId(undefined)).toBeUndefined();
+    expect(declaredProjectId(withProjectId('abc'))).toBeUndefined();
+  });
+});
 
 // Builds a JWT-shaped string (header.payload.signature) whose payload base64url-encodes the given claims, so we can
 // exercise the token parsing without a real signature.

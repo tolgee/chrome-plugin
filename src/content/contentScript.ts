@@ -6,6 +6,8 @@ import {
   PROJECT_ID_LOCAL_STORAGE,
 } from '../constants';
 import { LibConfig } from '../types';
+import { acceptsCredentialDelivery } from './acceptsCredentialDelivery';
+import { acceptTokenPush, writeCredentials } from './credentialSink';
 import { injectUiLib } from './injectUiLib';
 import { Messages } from './Messages';
 import { updateState } from './updateState';
@@ -15,7 +17,7 @@ let configuration: LibConfig | undefined = undefined;
 const messages = new Messages();
 messages.startWindowListening();
 
-const getAppliedCredenials = () => {
+const getAppliedCredentials = () => {
   return {
     apiKey: sessionStorage.getItem(API_KEY_LOCAL_STORAGE),
     apiUrl: sessionStorage.getItem(API_URL_LOCAL_STORAGE),
@@ -25,28 +27,22 @@ const getAppliedCredenials = () => {
   };
 };
 
-const sameOrigin = (a: string | null, b: string | null) => {
-  if (!a || !b) {
-    return false;
-  }
-  try {
-    return new URL(a).origin === new URL(b).origin;
-  } catch (e) {
-    return false;
-  }
-};
-
 // handshake with library
 messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
   const firstHandshake = !configuration;
   configuration = c;
-  const appliedCredentials = getAppliedCredenials();
+  const appliedCredentials = getAppliedCredentials();
   if (
     appliedCredentials.apiKey &&
     c.uiPresent === false &&
     (c.mode || c.config?.mode) === 'development'
   ) {
     injectUiLib(c.uiVersion);
+  }
+  if (appliedCredentials.authToken && appliedCredentials.apiUrl) {
+    messages.sendToPlugin('OAUTH_TAB_CONNECTED', {
+      apiUrl: appliedCredentials.apiUrl,
+    });
   }
   updateState(configuration, messages);
   if (firstHandshake) {
@@ -70,7 +66,6 @@ messages.listenWindow('TOLGEE_TAKE_SCREENSHOT', () => {
   });
 });
 
-// in-context editor asks to open the popup (e.g. so the user can re-connect after their OAuth session expired)
 messages.listenWindow('TOLGEE_OPEN_PLUGIN', () => {
   messages.sendToPlugin('OPEN_POPUP');
 });
@@ -84,52 +79,27 @@ messages.listenRuntime('DETECT_TOLGEE', async () => {
   }
 });
 
-messages.listenRuntime('GET_CREDENTIALS', async () => getAppliedCredenials());
+messages.listenRuntime('GET_CREDENTIALS', async () => getAppliedCredentials());
 
-const setOrRemove = (key: string, value: string | undefined | null) => {
-  const next = value ? String(value) : null;
-  if (sessionStorage.getItem(key) === next) {
-    return false;
-  }
-  if (next === null) {
-    sessionStorage.removeItem(key);
-  } else {
-    sessionStorage.setItem(key, next);
-  }
-  return true;
-};
+const acceptsDelivery = (pageOrigin?: string) =>
+  acceptsCredentialDelivery({
+    currentOrigin: window.location.origin,
+    isTopFrame: window.top === window.self,
+    pageOrigin,
+  });
 
 messages.listenRuntime('SET_CREDENTIALS', async (data) => {
-  // Bitwise-or so every key is written before we decide; reload only when something actually changed, so a redundant
-  // push (e.g. both the popup and the background inject on connect) doesn't reload the page twice.
-  const changed =
-    Number(setOrRemove(API_KEY_LOCAL_STORAGE, data.apiKey)) |
-    Number(setOrRemove(API_URL_LOCAL_STORAGE, data.apiUrl)) |
-    Number(setOrRemove(BRANCH_LOCAL_STORAGE, data.branch)) |
-    Number(setOrRemove(AUTH_TOKEN_LOCAL_STORAGE, data.authToken)) |
-    Number(setOrRemove(PROJECT_ID_LOCAL_STORAGE, data.projectId));
-  if (changed) {
+  if (!acceptsDelivery(data.pageOrigin)) {
+    return;
+  }
+  if (writeCredentials(sessionStorage, data)) {
     location.reload();
   }
   updateState(configuration, messages);
 });
 
-// Background pushes a rotated access token here on refresh; update it in place so the SDK picks it up without a reload.
 messages.listenRuntime('UPDATE_AUTH_TOKEN', async (data) => {
-  // Only take a push whose session serves this page's project: '*' (all projects) serves any, a concrete key only its
-  // own. Without this, a project-2 refresh would clobber a project-3 page's token on the same backend. An absent
-  // projectKey (older background) matches anything, preserving the previous single-session behaviour.
-  const pageProjectId = sessionStorage.getItem(PROJECT_ID_LOCAL_STORAGE);
-  const scopeServesPage =
-    data.projectKey === undefined ||
-    data.projectKey === '*' ||
-    data.projectKey === pageProjectId;
-  // Skip an empty token: setItem would store the literal string "undefined" and the SDK would send `Bearer undefined`.
-  if (
-    data.authToken &&
-    scopeServesPage &&
-    sameOrigin(sessionStorage.getItem(API_URL_LOCAL_STORAGE), data.apiUrl)
-  ) {
-    sessionStorage.setItem(AUTH_TOKEN_LOCAL_STORAGE, data.authToken);
+  if (acceptsDelivery(data.pageOrigin)) {
+    acceptTokenPush(sessionStorage, data);
   }
 });

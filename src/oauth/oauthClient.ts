@@ -1,90 +1,25 @@
 import browser from 'webextension-polyfill';
 import { OAUTH_CLIENT_ID, OAUTH_SCOPES } from '../constants';
 import { challengeFromVerifier, randomUrlSafe } from './pkce';
+import { normalizeUrl } from './url';
 
 export type OAuthTokens = {
   accessToken: string;
   refreshToken?: string;
-  // epoch milliseconds at which the access token expires
   expiresAt: number;
 };
 
-const normalizeUrl = (url: string) => url.replace(/\/$/, '');
-
-// Fallback lifetime when the token endpoint omits expires_in, so getValidAccessToken doesn't read the token as already
-// expired (expiresAt === now) and trigger a refresh — and, with rotation, a refresh — on every single read.
-const DEFAULT_TOKEN_LIFETIME_SECONDS = 5 * 60;
+export class OAuthTokenEndpointError extends Error {
+  constructor(
+    readonly status: number,
+    body: string
+  ) {
+    super(`Tolgee token endpoint returned ${status}: ${body}`);
+    this.name = 'OAuthTokenEndpointError';
+  }
+}
 
 export const getRedirectUri = () => browser.identity.getRedirectURL();
-
-const parseTokenResponse = (
-  data: Record<string, any>,
-  previousRefreshToken?: string
-): OAuthTokens => {
-  if (typeof data.access_token !== 'string' || !data.access_token) {
-    throw new Error('Tolgee token endpoint returned no access_token');
-  }
-  const expiresIn =
-    typeof data.expires_in === 'number' && data.expires_in > 0
-      ? data.expires_in
-      : DEFAULT_TOKEN_LIFETIME_SECONDS;
-  return {
-    accessToken: data.access_token,
-    // rotation returns a fresh refresh token; if a response omits it, keep the previous one
-    refreshToken: data.refresh_token ?? previousRefreshToken,
-    expiresAt: Date.now() + expiresIn * 1000,
-  };
-};
-
-const postToken = async (
-  base: string,
-  params: Record<string, string>,
-  previousRefreshToken?: string
-): Promise<OAuthTokens> => {
-  const res = await fetch(`${base}/oauth2/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(params),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Tolgee token endpoint returned ${res.status}: ${body}`);
-  }
-  return parseTokenResponse(await res.json(), previousRefreshToken);
-};
-
-const AUTH_MAX_ATTEMPTS = 3;
-const AUTH_RETRY_DELAY_MS = 500;
-
-const wasCancelledByUser = (message: string) =>
-  /cancel|did not approve|denied|closed by the user/i.test(message);
-
-// launchWebAuthFlow runs the authorize flow in an isolated window that intermittently fails to load the bootstrap SPA
-// ("Authorization page could not be loaded"), even though a retry succeeds. Reopen it a couple of times on such a
-// transient failure, but never after the user closes/denies the window (that decision is final).
-const launchAuthWithRetry = async (url: string): Promise<string> => {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS; attempt++) {
-    try {
-      return await browser.identity.launchWebAuthFlow({
-        url,
-        interactive: true,
-      });
-    } catch (e) {
-      lastError = e;
-      const message = e instanceof Error ? e.message : String(e);
-      if (wasCancelledByUser(message) || attempt === AUTH_MAX_ATTEMPTS) {
-        throw e;
-      }
-      console.warn(
-        `[tolgee-oauth] authorization attempt ${attempt} failed, retrying`,
-        message
-      );
-      await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
-    }
-  }
-  throw lastError;
-};
 
 export const login = async (
   apiUrl: string,
@@ -150,3 +85,71 @@ export const refresh = (
     },
     refreshToken
   );
+
+export const parseTokenResponse = (
+  data: Record<string, any>,
+  previousRefreshToken?: string
+): OAuthTokens => {
+  if (typeof data.access_token !== 'string' || !data.access_token) {
+    throw new Error('Tolgee token endpoint returned no access_token');
+  }
+  const expiresIn =
+    typeof data.expires_in === 'number' && data.expires_in > 0
+      ? data.expires_in
+      : DEFAULT_TOKEN_LIFETIME_SECONDS;
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token ?? previousRefreshToken,
+    expiresAt: Date.now() + expiresIn * 1000,
+  };
+};
+
+export const wasCancelledByUser = (message: string) =>
+  /cancel|did not approve|denied|closed by the user/i.test(message);
+
+const DEFAULT_TOKEN_LIFETIME_SECONDS = 5 * 60;
+
+const postToken = async (
+  base: string,
+  params: Record<string, string>,
+  previousRefreshToken?: string
+): Promise<OAuthTokens> => {
+  const res = await fetch(`${base}/oauth2/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new OAuthTokenEndpointError(res.status, body);
+  }
+  return parseTokenResponse(await res.json(), previousRefreshToken);
+};
+
+const AUTH_MAX_ATTEMPTS = 3;
+const AUTH_RETRY_DELAY_MS = 500;
+
+// launchWebAuthFlow intermittently fails to load the bootstrap SPA; retry any launch failure but never a user cancel.
+const launchAuthWithRetry = async (url: string): Promise<string> => {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await browser.identity.launchWebAuthFlow({
+        url,
+        interactive: true,
+      });
+    } catch (e) {
+      lastError = e;
+      const message = e instanceof Error ? e.message : String(e);
+      if (wasCancelledByUser(message) || attempt === AUTH_MAX_ATTEMPTS) {
+        throw e;
+      }
+      console.warn(
+        `[tolgee] authorization attempt ${attempt} failed, retrying`,
+        message
+      );
+      await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
+    }
+  }
+  throw lastError;
+};

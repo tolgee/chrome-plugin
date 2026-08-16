@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 // neither the extension bundler plugins nor a DOM.
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
     environment: 'node',
   },
 });

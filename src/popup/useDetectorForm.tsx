@@ -1,12 +1,15 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import browser, { type Runtime } from 'webextension-polyfill';
 import { useEffect, useReducer } from 'react';
+import { getActiveTab } from './activeTab';
 import { loadAppliedValues } from './loadConfig';
 import { sendMessage } from './sendMessage';
 import { sendToBackground } from './sendToBackground';
 import { loadValues, storeValues } from './storage';
+import { safeOrigin } from '../oauth/url';
 import {
   compareValues,
+  declaredProjectId,
   isOAuth,
   normalizeUrl,
   validateValues,
@@ -14,7 +17,13 @@ import {
 } from './tools';
 import { useApplier } from './useApplier';
 import { RuntimeMessage } from '../content/Messages';
-import { CredentialsCheck, createReducer, initialState } from './reducer';
+import {
+  CredentialsCheck,
+  createReducer,
+  initialState,
+  isOAuthUser,
+  isProjectInfo,
+} from './reducer';
 
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
@@ -34,7 +43,16 @@ export const useDetectorForm = () => {
   useEffect(() => {
     // sync applied values
     if (applyRequired) {
-      sendMessage('SET_CREDENTIALS', { ...appliedValues });
+      // Stamp the connected page's origin so the content script delivers only to that frame, not a cross-origin iframe.
+      getActiveTab()
+        .then((tab) =>
+          sendMessage('SET_CREDENTIALS', {
+            ...appliedValues,
+            pageOrigin: safeOrigin(tab?.url),
+          })
+        )
+        // The tab may be mid-reload (no content script to receive) right after connect; a failed delivery is harmless.
+        .catch(() => undefined);
     }
   }, [appliedValues]);
 
@@ -66,15 +84,14 @@ export const useDetectorForm = () => {
   // after tolgee config is loaded
   // get applied values and stored values
   const onLibConfigChange = async () => {
-    const appliedValues = await loadAppliedValues();
-    if (validateValues(appliedValues)) {
-      dispatch({ type: 'SET_APPLIED_VALUES', payload: appliedValues });
+    const pageApplied = await loadAppliedValues();
+    if (validateValues(pageApplied)) {
+      dispatch({ type: 'SET_APPLIED_VALUES', payload: pageApplied });
     }
 
     const storedData = await loadValues();
     if (storedData.oauth && storedData.apiUrl) {
-      // OAuth sessions store no token; ask the service worker for a fresh (auto-refreshed) one for this project (its
-      // own session if concrete, else the all-projects one).
+      // OAuth sessions store no token; ask the service worker for a fresh (auto-refreshed) one for this project.
       const res = (await sendToBackground('OAUTH_GET_TOKEN', {
         apiUrl: storedData.apiUrl,
         projectId: storedData.projectId,
@@ -116,7 +133,7 @@ export const useDetectorForm = () => {
       return undefined;
     };
     browser.runtime.onMessage.addListener(listener);
-    () => browser.runtime.onMessage.removeListener(listener);
+    return () => browser.runtime.onMessage.removeListener(listener);
   }, []);
 
   const setCredentialsCheck = (val: CredentialsCheck) => {
@@ -126,7 +143,7 @@ export const useDetectorForm = () => {
   let checkableValues: Values | undefined | null;
 
   // we want to check validity of values, that are displayed and applied
-  const valuesToCompare = appliedValues || libConfig?.config;
+  const valuesToCompare = appliedValues || (libConfig?.config as Values);
   if (!storedValues || compareValues(valuesToCompare, storedValues)) {
     checkableValues = validateValues(valuesToCompare);
   }
@@ -158,7 +175,6 @@ export const useDetectorForm = () => {
             !cancelled && setCredentialsCheck('invalid');
           });
       } else {
-        // Send the key in the header, not the query string, so it can't leak via URLs/history/logs.
         fetch(`${url}/v2/api-keys/current`, {
           headers: { 'X-API-Key': checkableValues!.apiKey! },
         })
@@ -201,18 +217,14 @@ export const useDetectorForm = () => {
     let cancelled = false;
     const check = state.credentialsCheck;
     if (
-      check !== null &&
-      typeof check === 'object' &&
-      'branchingEnabled' in check &&
+      isProjectInfo(check) &&
       check.branchingEnabled &&
       validateValues(checkableValues)
     ) {
       const url = normalizeUrl(checkableValues!.apiUrl);
-      fetch(
-        `${url}/v2/projects/${check.projectId}/branches?ak=${
-          checkableValues!.apiKey
-        }&size=100`
-      )
+      fetch(`${url}/v2/projects/${check.projectId}/branches?size=100`, {
+        headers: { 'X-API-Key': checkableValues!.apiKey! },
+      })
         .then((r) => {
           if (!r.ok) {
             throw new Error('Failed to load branches');
@@ -244,22 +256,14 @@ export const useDetectorForm = () => {
     };
   }, [state.credentialsCheck]);
 
-  // The page declares which project it edits (required by the extension), but an OAuth token isn't inherently bound to
-  // it. Resolve that declared id against the connected server: bind it when the user can edit it there, or flag it
-  // inaccessible — otherwise the token stays unscoped and in-context editing fails with "project not selected".
+  // Bind the page's declared project to the OAuth token by resolving it against the connected server, or flag it
+  // inaccessible — else the token stays unscoped and in-context editing fails with "project not selected".
+  const declaredId = declaredProjectId(libConfig);
   useEffect(() => {
     let cancelled = false;
     const check = state.credentialsCheck;
-    const isOauthCheck =
-      check !== null &&
-      typeof check === 'object' &&
-      'oauth' in check &&
-      isOAuth(checkableValues);
-    const declaredId = Number(
-      (libConfig?.config as { projectId?: number | string } | undefined)
-        ?.projectId
-    );
-    if (!isOauthCheck || !declaredId) {
+    const isOauthCheck = isOAuthUser(check) && isOAuth(checkableValues);
+    if (!isOauthCheck || declaredId === undefined) {
       dispatch({
         type: 'RESOLVE_PROJECT',
         payload: { project: null, inaccessible: false },
@@ -298,7 +302,7 @@ export const useDetectorForm = () => {
     return () => {
       cancelled = true;
     };
-  }, [state.credentialsCheck]);
+  }, [state.credentialsCheck, declaredId]);
 
   return [state, dispatch] as const;
 };

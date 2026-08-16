@@ -3,12 +3,20 @@ import { ScreenshotMaker } from './ScreenshotMaker';
 import { RuntimeMessage } from '../content/Messages';
 import { login } from '../oauth/oauthClient';
 import {
-  clearSession,
+  clearSessionByKey,
+  clearSessionIfUnreferenced,
+  ensureFreshToken,
   getValidAccessToken,
-  loadAllSessions,
+  isTokenFresh,
+  loadSession,
+  resolveSessionForTab,
   saveSession,
+  sessionKey,
+  StoredSession,
 } from '../oauth/tokenStore';
-import { OAUTH_REFRESH_SKEW_MS } from '../constants';
+import { safeOrigin, sameOrigin } from '../oauth/url';
+import { projectKeyForToken } from '../oauth/tokenScope';
+import { loadOAuthMarker, storeOAuthMarker } from '../oauth/marker';
 
 type State = 'present' | 'active' | 'inactive';
 
@@ -38,25 +46,38 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       connect(data)
         .then((accessToken) => sendResponse({ accessToken }))
         .catch((e) => {
-          console.error('[tolgee-oauth] login failed', e);
+          console.error('[tolgee] login failed', e);
           sendResponse({ error: String(e) });
         });
       return true;
     case 'OAUTH_GET_TOKEN':
-      getValidAccessToken(data.apiUrl, data.projectId)
+      getValidAccessToken(data.apiUrl, data.projectId, {
+        soleOriginFallback: true,
+      })
         .then((accessToken) => sendResponse({ accessToken }))
         .catch((e) => {
-          console.error('[tolgee-oauth] token lookup failed', e);
+          console.error('[tolgee] token lookup failed', e);
           sendResponse({ accessToken: null, error: String(e) });
         });
       return true;
     case 'OAUTH_LOGOUT':
-      clearSession(data.apiUrl, data.projectId)
+      disconnect(data)
         .then(() => sendResponse({}))
         .catch((e) => {
-          console.error('[tolgee-oauth] logout failed', e);
+          console.error('[tolgee] logout failed', e);
           sendResponse({ error: String(e) });
         });
+      return true;
+    case 'OAUTH_TAB_CONNECTED':
+      // Respond only after the registration resolves: returning true keeps the MV3 worker alive for the async work, so a
+      // torn-down worker can't drop the registration and leave the tab without token refreshes.
+      registerConnectedTab(
+        sender.tab?.id,
+        safeOrigin(sender.tab?.url),
+        data.apiUrl
+      )
+        .catch((e) => console.error('[tolgee] tab register failed', e))
+        .finally(() => sendResponse({}));
       return true;
     default:
       sendResponse({});
@@ -70,9 +91,128 @@ const setStateIcon = (state: State, tabId: number) => {
   });
 };
 
-// Reuse an existing usable session before launching the OAuth flow: a matching concrete-project session, or an
-// all-projects one, connects a second site on the same backend with no extra round trip — this is what makes an
-// all-projects login "just work" everywhere. Only when nothing serves the requested project do we run the flow.
+const INJECTED_TABS_KEY = 'injectedTabs';
+type InjectedTab = {
+  apiUrl: string;
+  pageOrigin: string;
+  projectKey: string;
+};
+type InjectedTabs = Record<string, InjectedTab>;
+
+// Register the tab from the unforgeable marker, never the page's message: the marker's projectKey pins WHICH keyed
+// session serves this tab, so a connected origin can't claim another project's projectId to harvest its token.
+const registerConnectedTab = async (
+  tabId: number | undefined,
+  pageOrigin: string | undefined,
+  apiUrl: string
+) => {
+  if (tabId == null || !pageOrigin) {
+    return;
+  }
+  const marker = await loadOAuthMarker(pageOrigin);
+  if (marker?.projectKey && sameOrigin(marker.apiUrl, apiUrl)) {
+    await recordInjectedTab(
+      tabId,
+      marker.apiUrl,
+      pageOrigin,
+      marker.projectKey
+    );
+  }
+};
+
+const recordInjectedTab = (
+  tabId: number,
+  apiUrl: string,
+  pageOrigin: string,
+  projectKey: string
+) =>
+  withRegistry(async (tabs) => {
+    tabs[tabId] = { apiUrl, pageOrigin, projectKey };
+    await saveInjectedTabs(tabs);
+  });
+
+const forgetInjectedTab = (tabId: number) =>
+  withRegistry(async (tabs) => {
+    if (tabs[tabId]) {
+      await dropTab(tabs, tabId);
+    }
+  });
+
+// Drop every registered tab on a given page origin, so a disconnected site stops receiving refreshed-token pushes.
+const forgetInjectedTabsForOrigin = (pageOrigin: string) =>
+  withRegistry(async (tabs) => {
+    const survivors = Object.entries(tabs).filter(
+      ([, tab]) => tab.pageOrigin !== pageOrigin
+    );
+    if (survivors.length !== Object.keys(tabs).length) {
+      await saveInjectedTabs(Object.fromEntries(survivors));
+    }
+  });
+
+const dropTab = (tabs: InjectedTabs, tabId: number) => {
+  delete tabs[tabId];
+  return saveInjectedTabs(tabs);
+};
+
+const loadInjectedTabs = async (): Promise<InjectedTabs> =>
+  ((await browser.storage.local.get(INJECTED_TABS_KEY))[
+    INJECTED_TABS_KEY
+  ] as InjectedTabs) ?? {};
+
+const saveInjectedTabs = (tabs: InjectedTabs) =>
+  browser.storage.local.set({ [INJECTED_TABS_KEY]: tabs });
+
+// Serialize load→mutate→store so concurrent tab events can't read the same snapshot and clobber each other's write.
+let registryQueue: Promise<unknown> = Promise.resolve();
+const withRegistry = <T>(
+  fn: (tabs: InjectedTabs) => Promise<T> | T
+): Promise<T> => {
+  const run = registryQueue.then(async () => fn(await loadInjectedTabs()));
+  registryQueue = run.catch(() => undefined);
+  return run;
+};
+
+browser.tabs.onRemoved.addListener((tabId) => {
+  forgetInjectedTab(tabId);
+});
+browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (!changeInfo.url) {
+    return;
+  }
+  withRegistry(async (tabs) => {
+    const tab = tabs[tabId];
+    if (tab && tab.pageOrigin !== safeOrigin(changeInfo.url)) {
+      await dropTab(tabs, tabId);
+    }
+  });
+});
+// Tab ids are reissued after a restart, so a persisted entry could misroute a token to an unrelated new tab.
+browser.runtime.onStartup.addListener(() => {
+  browser.storage.local.remove(INJECTED_TABS_KEY);
+});
+
+const disconnect = async (data: {
+  apiUrl: string;
+  authToken?: string;
+  projectId?: number;
+  pageOrigin?: string;
+}) => {
+  const projectKey = data.authToken
+    ? projectKeyForToken(data.authToken)
+    : (await loadSession(data.apiUrl, data.projectId))?.projectKey;
+  if (data.pageOrigin) {
+    await forgetInjectedTabsForOrigin(data.pageOrigin);
+  }
+  if (projectKey === undefined) {
+    return;
+  }
+  if (data.pageOrigin) {
+    await clearSessionIfUnreferenced(data.apiUrl, projectKey, data.pageOrigin);
+  } else {
+    await clearSessionByKey(data.apiUrl, projectKey);
+  }
+};
+
 const connect = async (data: {
   apiUrl: string;
   projectId?: number;
@@ -84,33 +224,42 @@ const connect = async (data: {
     await saveSession(data.apiUrl, tokens);
     accessToken = tokens.accessToken;
   }
-  // launchWebAuthFlow steals focus, which closes the popup before it can push credentials to the page, so inject from
-  // here. data.tabId is the tab the popup was acting on, captured before the auth window opened.
-  if (data.tabId != null) {
+  const pageOrigin = safeOrigin(
+    data.tabId != null
+      ? (await browser.tabs.get(data.tabId).catch(() => undefined))?.url
+      : undefined
+  );
+  if (data.tabId != null && pageOrigin) {
     await injectCredentials(data.tabId, {
       apiUrl: data.apiUrl,
       authToken: accessToken,
       projectId: data.projectId,
+      pageOrigin,
+    });
+    await storeOAuthMarker(pageOrigin, {
+      apiUrl: data.apiUrl,
+      projectId: data.projectId,
+      projectKey: projectKeyForToken(accessToken),
     });
   }
   return accessToken;
 };
 
-// Inject the full credential set into a page on connect (the content script writes them to sessionStorage and reloads
-// so the SDK picks them up). Runs from the service worker because the popup is already gone by the time login resolves.
 const injectCredentials = async (
   tabId: number,
-  data: { apiUrl: string; authToken: string; projectId?: number }
+  data: {
+    apiUrl: string;
+    authToken: string;
+    projectId?: number;
+    pageOrigin: string;
+  }
 ) => {
   await browser.tabs
     .sendMessage(tabId, { type: 'SET_CREDENTIALS', data })
     .catch(() => undefined);
 };
 
-// Keep stored sessions fresh so the popup and the injected page token don't expire mid-use. Rotation means each
-// refresh mints a new access + refresh token; getValidAccessToken persists them and pushes the access token to tabs.
-// This top-level code re-runs every time the MV3 worker wakes; re-creating an existing alarm resets its schedule, so a
-// worker that wakes more often than the period would never let the alarm fire — only create it when it's absent.
+// Create the alarm only when absent: re-creating it resets the schedule, and MV3 re-runs this on every worker wake.
 const ensureRefreshAlarm = async () => {
   if (!(await browser.alarms.get(REFRESH_ALARM))) {
     await browser.alarms.create(REFRESH_ALARM, { periodInMinutes: 10 });
@@ -121,41 +270,48 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== REFRESH_ALARM) {
     return;
   }
-  const sessions = await loadAllSessions();
-  for (const session of sessions) {
-    if (session.expiresAt - OAUTH_REFRESH_SKEW_MS > Date.now()) {
+  // Refresh only sessions a live tab resolves to (1:1), so an abandoned session with no owning tab isn't kept alive.
+  const owning = new Map<string, StoredSession>();
+  for (const tab of Object.values(await loadInjectedTabs())) {
+    const session = await resolveSessionForTab(tab);
+    if (session) {
+      owning.set(sessionKey(session), session);
+    }
+  }
+  for (const session of owning.values()) {
+    if (isTokenFresh(session)) {
       continue;
     }
-    // Passing the session's own project scope refreshes exactly this session (a concrete id finds it, '*' the
-    // all-projects one), so rotating one project's token never disturbs another's.
-    const accessToken = await getValidAccessToken(
-      session.apiUrl,
-      session.projectKey
-    );
+    const accessToken = await ensureFreshToken(session);
     if (accessToken) {
-      await pushTokenToTabs(session.apiUrl, session.projectKey, accessToken);
+      await pushTokenToSession(session, accessToken);
     }
   }
 });
 
-// Update the injected access token in every tab whose applied backend and project the refreshed session serves, without
-// reloading the page. An all-projects ('*') session serves any project; a concrete session only its own.
-const pushTokenToTabs = async (
-  apiUrl: string,
-  projectKey: string,
+const pushTokenToSession = async (
+  session: StoredSession,
   accessToken: string
 ) => {
-  const tabs = await browser.tabs.query({});
+  const key = sessionKey(session);
+  const injected = Object.entries(await loadInjectedTabs());
   await Promise.all(
-    tabs.map((tab) =>
-      tab.id == null
-        ? undefined
-        : browser.tabs
-            .sendMessage(tab.id, {
-              type: 'UPDATE_AUTH_TOKEN',
-              data: { apiUrl, projectKey, authToken: accessToken },
-            })
-            .catch(() => undefined)
-    )
+    injected.map(async ([tabId, tab]) => {
+      const owning = await resolveSessionForTab(tab);
+      if (!owning || sessionKey(owning) !== key) {
+        return;
+      }
+      await browser.tabs
+        .sendMessage(Number(tabId), {
+          type: 'UPDATE_AUTH_TOKEN',
+          data: {
+            apiUrl: session.apiUrl,
+            projectKey: session.projectKey,
+            authToken: accessToken,
+            pageOrigin: tab.pageOrigin,
+          },
+        })
+        .catch(() => undefined);
+    })
   );
 };

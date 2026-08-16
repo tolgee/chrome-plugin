@@ -1,11 +1,12 @@
 import browser from 'webextension-polyfill';
+import { getActiveTab } from './activeTab';
 
 export const sendMessage = async (type: string, data?: any) => {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-  const response = await browser.tabs.sendMessage(tabs[0].id as number, {
-    type,
-    data,
-  });
+  const tab = await getActiveTab();
+  if (tab?.id == null) {
+    throw new Error('No active tab to message');
+  }
+  const response = await browser.tabs.sendMessage(tab.id, { type, data });
 
   if (browser.runtime.lastError) {
     throw browser.runtime.lastError;

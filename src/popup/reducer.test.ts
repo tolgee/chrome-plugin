@@ -56,6 +56,24 @@ describe('detector reducer', () => {
       expect(next.tolgeePresent).toBe('not_present');
     });
 
+    it('preserves a restored OAuth session instead of overwriting it with the page config', () => {
+      const restored: State = {
+        ...initialState,
+        values: { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' },
+      };
+      const next = reduce(restored, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: {
+          libData: lib({
+            config: { apiUrl: 'https://x.io', apiKey: 'tgpak_x' } as any,
+          }),
+          frameId: 0,
+        },
+      });
+      expect(next.values?.authToken).toBe('jwt');
+      expect(next.values?.apiKey).toBeUndefined();
+    });
+
     it('errors when a second instance is detected in another frame', () => {
       const first = reduce(initialState, {
         type: 'CHANGE_LIB_CONFIG',
@@ -87,6 +105,22 @@ describe('detector reducer', () => {
       expect(next.appliedValues).toEqual(next.values);
       expect(next.storedValues).toEqual(next.values);
       expect(apply).toHaveBeenCalledOnce();
+    });
+
+    it('prefers the projectId from the connect-flow payload over a previously picked one', () => {
+      const restored: State = {
+        ...initialState,
+        values: { apiUrl: 'https://app.tolgee.io', projectId: 42 },
+      };
+      const next = reduce(restored, {
+        type: 'OAUTH_APPLY',
+        payload: {
+          apiUrl: 'https://app.tolgee.io',
+          authToken: 'jwt',
+          projectId: 7,
+        },
+      });
+      expect(next.values?.projectId).toBe(7);
     });
   });
 
@@ -169,6 +203,32 @@ describe('detector reducer', () => {
       expect(next.storedValues).toBeNull();
       expect(next.appliedValues).toBeUndefined();
       expect(next.libConfig).toBeNull();
+      expect(apply).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('STORE_VALUES / LOAD_VALUES restore roundtrip', () => {
+    const applied = { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' };
+
+    it('STORE_VALUES promotes appliedValues to stored and clears applied', () => {
+      const next = reduce(
+        { ...initialState, appliedValues: applied },
+        { type: 'STORE_VALUES' }
+      );
+      expect(next.storedValues).toEqual(applied);
+      expect(next.values).toEqual(applied);
+      expect(next.appliedValues).toBeNull();
+      expect(apply).toHaveBeenCalledOnce();
+    });
+
+    it('LOAD_VALUES restores the stored session into values and applied', () => {
+      const next = reduce(
+        { ...initialState, storedValues: applied },
+        { type: 'LOAD_VALUES' }
+      );
+      expect(next.appliedValues).toEqual(applied);
+      expect(next.values).toEqual(applied);
+      expect(next.storedValues).toEqual(applied);
       expect(apply).toHaveBeenCalledOnce();
     });
   });

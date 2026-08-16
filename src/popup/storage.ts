@@ -1,43 +1,32 @@
 import browser from 'webextension-polyfill';
+import { storeOAuthMarker } from '../oauth/marker';
+import { projectKeyForToken } from '../oauth/tokenScope';
+import { originOf } from '../oauth/url';
+import { getActiveTab } from './activeTab';
+import { Values } from './tools';
 
-type Values = {
+// The per-origin record persisted in browser.storage.local — distinct from the live form `Values`: it carries the
+// OAuth `oauth` marker flag and never the short-lived `authToken` (the token lives in the service worker's tokenStore).
+type PersistedValues = {
   apiUrl?: string;
   apiKey?: string;
   branch?: string;
-  // OAuth sessions persist only a marker + backend url (+ the picked project) here; the token itself lives in the
-  // service worker's tokenStore (kept fresh via refresh) and is re-fetched on load, so a short-lived token is never
-  // stored stale.
   oauth?: boolean;
   projectId?: number;
 };
 
-const getCurrentTab = async () => {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-
-  return tabs[0];
-};
-
-const getCurrentTabOrigin = async () => {
-  const url = new URL((await getCurrentTab()).url!);
-  return url.origin;
-};
-
-export const storeValues = async (
-  values: (Values & { authToken?: string }) | null
-) => {
+export const storeValues = async (values: Values | null) => {
   try {
     const origin = await getCurrentTabOrigin();
 
     if (values?.authToken && values?.apiUrl) {
-      browser.storage.local.set({
-        [origin]: {
-          apiUrl: values.apiUrl,
-          oauth: true,
-          projectId: values.projectId,
-        },
+      await storeOAuthMarker(origin, {
+        apiUrl: values.apiUrl,
+        projectId: values.projectId,
+        projectKey: projectKeyForToken(values.authToken),
       });
     } else if (values?.apiKey && values?.apiUrl) {
-      browser.storage.local.set({
+      await browser.storage.local.set({
         [origin]: {
           apiUrl: values.apiUrl,
           apiKey: values.apiKey,
@@ -45,10 +34,10 @@ export const storeValues = async (
         },
       });
     } else {
-      browser.storage.local.remove(origin);
+      await browser.storage.local.remove(origin);
     }
   } catch (e) {
-    console.error(e);
+    console.error('[tolgee] storage error', e);
     return;
   }
 };
@@ -57,7 +46,7 @@ export const loadValues = async () => {
   try {
     const origin = await getCurrentTabOrigin();
     const keys = await browser.storage.local.get(origin);
-    const data = keys[origin] as Values;
+    const data = keys[origin] as PersistedValues;
 
     return {
       apiKey: data?.apiKey,
@@ -67,7 +56,9 @@ export const loadValues = async () => {
       projectId: data?.projectId,
     };
   } catch (e) {
-    console.error(e);
+    console.error('[tolgee] storage error', e);
     return {};
   }
 };
+
+const getCurrentTabOrigin = async () => originOf((await getActiveTab()).url!);

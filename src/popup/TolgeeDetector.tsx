@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import browser from 'webextension-polyfill';
 import {
   Alert,
   Autocomplete,
@@ -17,9 +16,17 @@ import {
 } from '@mui/material';
 
 import { useDetectorForm } from './useDetectorForm';
-import { decodeTokenProjectSet, isOAuth, validateValues } from './tools';
+import {
+  declaredProjectId,
+  decodeTokenProjectSet,
+  isOAuth,
+  validateValues,
+} from './tools';
 import { sendToBackground } from './sendToBackground';
-import { useApiKeyCheck } from './useApiKeyCheck';
+import { getActiveTab } from './activeTab';
+import { safeOrigin } from '../oauth/url';
+import { isApiKeyValid, useApiKeyCheck } from './useApiKeyCheck';
+import { isOAuthUser, isProjectInfo } from './reducer';
 
 const POPUP_WIDTH = 400;
 const DEFAULT_SERVER = 'https://app.tolgee.io';
@@ -51,38 +58,25 @@ export const TolgeeDetector = () => {
     declaredProjectInaccessible,
   } = state;
 
-  const oauthUser =
-    credentialsCheck !== null &&
-    typeof credentialsCheck === 'object' &&
-    'oauth' in credentialsCheck
-      ? credentialsCheck
-      : null;
+  const oauthUser = isOAuthUser(credentialsCheck) ? credentialsCheck : null;
 
-  // Live-validate the key being typed on the API KEY tab (before it's applied), so a key that's invalid for the target
-  // server can't be silently connected.
-  const notConnected = !storedValues && !appliedValues;
+  const hasSession = Boolean(storedValues || appliedValues);
+  const notConnected = !hasSession;
   const apiKeyCheck = useApiKeyCheck(
     values?.apiUrl,
     values?.apiKey,
     tab === 'apiKey' && notConnected
   );
-  const apiKeyValid =
-    apiKeyCheck !== null &&
-    typeof apiKeyCheck === 'object' &&
-    'projectName' in apiKeyCheck;
-
-  // A single-project token auto-selects its project (done in the reducer); only an "all projects" token needs the
-  // manual picker below.
+  const apiKeyValid = isApiKeyValid(apiKeyCheck);
   const allProjectsToken = decodeTokenProjectSet(values?.authToken) === '*';
 
-  // A restored API-key session should reopen on the API KEY tab; an OAuth session stays on LOGIN.
   useEffect(() => {
     if (values?.apiKey && !values?.authToken) {
       setTab('apiKey');
     }
   }, [values?.apiKey, values?.authToken]);
 
-  const handleApplyChange = async () => {
+  const handleApplyChange = () => {
     if (appliedValues) {
       dispatch({ type: 'STORE_VALUES' });
     } else {
@@ -91,8 +85,12 @@ export const TolgeeDetector = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    // on enter
-    if (e.keyCode === 13 && validateValues(values)) {
+    // On the API-key tab, Enter must also respect the live key check (like the field's own handler and the button).
+    if (
+      e.key === 'Enter' &&
+      validateValues(values) &&
+      (tab !== 'apiKey' || apiKeyValid)
+    ) {
       dispatch({ type: 'APPLY_VALUES' });
     }
   };
@@ -102,18 +100,10 @@ export const TolgeeDetector = () => {
     setConnecting(true);
     setConnectError(null);
     try {
-      // Hint the project the page is configured for (exposed via the handshake), so the consent screen pre-selects it
-      // and the minted token is scoped to it. On a public project the hint resolves via the community floor.
-      const hinted = (libConfig?.config as { projectId?: number | string })
-        ?.projectId;
-      const projectId =
-        hinted !== undefined && hinted !== '' ? Number(hinted) : undefined;
+      const projectId = declaredProjectId(libConfig);
       // Capture the target tab now: launchWebAuthFlow closes the popup, so the background does the injection and needs
       // the tab id up front.
-      const [activeTab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
+      const activeTab = await getActiveTab();
       const res = (await sendToBackground('OAUTH_LOGIN', {
         apiUrl,
         projectId,
@@ -125,7 +115,7 @@ export const TolgeeDetector = () => {
       if (res?.accessToken) {
         dispatch({
           type: 'OAUTH_APPLY',
-          payload: { apiUrl, authToken: res.accessToken },
+          payload: { apiUrl, authToken: res.accessToken, projectId },
         });
       } else {
         setConnectError(res?.error || 'Connection failed');
@@ -135,21 +125,18 @@ export const TolgeeDetector = () => {
     }
   };
 
-  const dataPresent = storedValues || appliedValues;
-
-  // Which credentials the session is actually built on, regardless of the Applied toggle: applied when live, otherwise
-  // the stored ones (an OAuth session's token is re-fetched into storedValues on load).
   const activeValues = appliedValues || storedValues || values;
   const isOauthSession = isOAuth(activeValues);
 
-  // OAuth Disconnect drops this project's local token (service worker + storage); the server keeps the consent, so
-  // reconnecting the same account skips the consent screen (by design). API-key Disconnect is just the old Clear.
   const handleDisconnect = async () => {
     const apiUrl = activeValues?.apiUrl;
     if (isOauthSession && apiUrl) {
+      const tab = await getActiveTab();
       await sendToBackground('OAUTH_LOGOUT', {
         apiUrl,
+        authToken: activeValues?.authToken,
         projectId: activeValues?.projectId,
+        pageOrigin: safeOrigin(tab?.url),
       });
     }
     dispatch({ type: 'CLEAR_ALL' });
@@ -174,9 +161,7 @@ export const TolgeeDetector = () => {
     </FormControl>
   );
 
-  const branchField = credentialsCheck !== null &&
-    typeof credentialsCheck === 'object' &&
-    'branchingEnabled' in credentialsCheck &&
+  const branchField = isProjectInfo(credentialsCheck) &&
     credentialsCheck.branchingEnabled && (
       <Autocomplete
         style={{ marginBottom: branchOpen ? 150 : 0 }}
@@ -321,28 +306,23 @@ export const TolgeeDetector = () => {
       libConfig?.config.apiUrl === values?.apiUrl &&
       (libConfig?.config.branch || '') === (values?.branch || '');
 
-    const detectedProjectId = (
-      libConfig?.config as { projectId?: number | string }
-    )?.projectId;
-    const projectDetected =
-      detectedProjectId !== undefined && detectedProjectId !== '';
+    const projectDetected = declaredProjectId(libConfig) !== undefined;
 
-    let serverHost = values?.apiUrl || DEFAULT_SERVER;
+    const rawServer = values?.apiUrl || DEFAULT_SERVER;
+    let serverHost = rawServer;
     // Restrict the link target to http(s): the Server field is editable, and a value like `javascript:...` would become
     // an executable link running with extension privileges. Fall back to the default when it isn't a valid web URL yet.
     let serverLink = DEFAULT_SERVER;
     try {
-      const parsed = new URL(values?.apiUrl || DEFAULT_SERVER);
+      const parsed = new URL(rawServer);
       serverHost = parsed.host;
       if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
         serverLink = parsed.toString();
       }
     } catch {
-      // keep the raw value if it's not a full URL yet
+      serverLink = DEFAULT_SERVER;
     }
-
-    // Once a session exists (either auth method) the popup is a single status view — no tabs, no auth-key field.
-    if (dataPresent) {
+    if (hasSession) {
       return (
         <Box
           p={2}
@@ -380,9 +360,7 @@ export const TolgeeDetector = () => {
             </>
           ) : (
             <>
-              {credentialsCheck !== null &&
-              typeof credentialsCheck === 'object' &&
-              'projectName' in credentialsCheck ? (
+              {isProjectInfo(credentialsCheck) ? (
                 <Typography style={{ fontSize: 12, color: 'green' }}>
                   {credentialsCheck.projectName}
                 </Typography>
@@ -399,8 +377,6 @@ export const TolgeeDetector = () => {
         </Box>
       );
     }
-
-    // No session yet — let the user pick how to connect.
     return (
       <Box
         p={2}
@@ -501,15 +477,7 @@ export const TolgeeDetector = () => {
                     payload: { apiKey: e.target.value },
                   })
                 }
-                onKeyDown={(e) => {
-                  if (
-                    e.keyCode === 13 &&
-                    validateValues(values) &&
-                    apiKeyValid
-                  ) {
-                    dispatch({ type: 'APPLY_VALUES' });
-                  }
-                }}
+                onKeyDown={handleKeyDown}
                 size="small"
               />
               <FormHelperText

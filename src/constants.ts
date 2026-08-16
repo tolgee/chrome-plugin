@@ -1,18 +1,12 @@
 export const API_KEY_LOCAL_STORAGE = '__tolgee_apiKey';
 export const API_URL_LOCAL_STORAGE = '__tolgee_apiUrl';
 export const BRANCH_LOCAL_STORAGE = '__tolgee_branch';
-// OAuth access token injected into the page alongside the api key; the SDK (tolgee-js) reads it as a Bearer token.
 export const AUTH_TOKEN_LOCAL_STORAGE = '__tolgee_authToken';
-// Project id injected for the OAuth path: OAuth tokens carry no embedded project (unlike a PAK), so the user
-// picks one in the popup and the SDK reads it here to know which project to fetch/edit.
 export const PROJECT_ID_LOCAL_STORAGE = '__tolgee_projectId';
 
-// Fixed public client id pre-registered on every Tolgee backend (see PreRegisteredClients on the platform).
+// Public client id pre-registered on every Tolgee backend (see PreRegisteredClients on the platform).
 export const OAUTH_CLIENT_ID = 'tolgee-browser-extension';
-// Access tokens are short-lived; refresh this many milliseconds before expiry.
 export const OAUTH_REFRESH_SKEW_MS = 60_000;
-// Scopes the extension requests for in-context editing. The backend intersects them with the user's live
-// permissions, so requesting a broad set never grants more than the user actually holds.
 export const OAUTH_SCOPES = [
   'translations.view',
   'translations.edit',
