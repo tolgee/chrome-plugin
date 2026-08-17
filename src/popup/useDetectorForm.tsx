@@ -57,12 +57,28 @@ export const useDetectorForm = () => {
   }, [appliedValues]);
 
   useEffect(() => {
-    sendMessage('DETECT_TOLGEE').catch(() => {
-      dispatch({
-        type: 'SET_ERROR',
-        payload: 'No access to this page, try to refresh',
+    let cancelled = false;
+    // Applying/un-applying reloads the page, so the content script is briefly gone. Retry before declaring the page
+    // inaccessible, otherwise opening the popup mid-reload sticks on the error screen with no recovery.
+    const detect = (attemptsLeft: number) => {
+      sendMessage('DETECT_TOLGEE').catch(() => {
+        if (cancelled) {
+          return;
+        }
+        if (attemptsLeft > 0) {
+          setTimeout(() => detect(attemptsLeft - 1), 250);
+          return;
+        }
+        dispatch({
+          type: 'SET_ERROR',
+          payload: 'No access to this page, try to refresh',
+        });
       });
-    });
+    };
+    detect(16);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // timeout when Tolgee is not detected
@@ -143,7 +159,10 @@ export const useDetectorForm = () => {
   let checkableValues: Values | undefined | null;
 
   // we want to check validity of values, that are displayed and applied
-  const valuesToCompare = appliedValues || (libConfig?.config as Values);
+  // Fall back to the stored session (not just the page's SDK config) so a connected session stays recognized while the
+  // Applied toggle is off — the page config carries no OAuth token, which would otherwise blank the connected state.
+  const valuesToCompare =
+    appliedValues || storedValues || (libConfig?.config as Values);
   if (!storedValues || compareValues(valuesToCompare, storedValues)) {
     checkableValues = validateValues(valuesToCompare);
   }

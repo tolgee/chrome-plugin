@@ -16,12 +16,7 @@ import {
 } from '@mui/material';
 
 import { useDetectorForm } from './useDetectorForm';
-import {
-  declaredProjectId,
-  decodeTokenProjectSet,
-  isOAuth,
-  validateValues,
-} from './tools';
+import { declaredProjectId, isOAuth, validateValues } from './tools';
 import { sendToBackground } from './sendToBackground';
 import { getActiveTab } from './activeTab';
 import { safeOrigin } from '../oauth/url';
@@ -34,8 +29,6 @@ const LEARN_MORE_PROJECT_ID =
   'https://docs.tolgee.io/js-sdk/api/core_package/options#projectid';
 const API_KEY_HELP =
   'https://docs.tolgee.io/platform/account_settings/api_keys_and_pat_tokens';
-// Sentinel option for an unscoped ("all projects") token; a negative id can't collide with a real project id.
-const ALL_PROJECTS_OPTION = { id: -1, name: 'All projects' };
 
 export const TolgeeDetector = () => {
   const [state, dispatch] = useDetectorForm();
@@ -68,7 +61,6 @@ export const TolgeeDetector = () => {
     tab === 'apiKey' && notConnected
   );
   const apiKeyValid = isApiKeyValid(apiKeyCheck);
-  const allProjectsToken = decodeTokenProjectSet(values?.authToken) === '*';
 
   useEffect(() => {
     if (values?.apiKey && !values?.authToken) {
@@ -225,38 +217,17 @@ export const TolgeeDetector = () => {
       />
     );
 
-  const projectPicker = declaredProject && (
-    <Autocomplete
-      size="small"
-      disableClearable
-      options={
-        allProjectsToken
-          ? [declaredProject, ALL_PROJECTS_OPTION]
-          : [declaredProject]
-      }
-      getOptionLabel={(option) => option.name}
-      isOptionEqualToValue={(option, value) => option.id === value.id}
-      value={values?.projectId != null ? declaredProject : ALL_PROJECTS_OPTION}
-      onChange={(_e, newValue) => {
-        dispatch({
-          type: 'OAUTH_SET_PROJECT',
-          payload: {
-            projectId:
-              newValue && newValue.id !== ALL_PROJECTS_OPTION.id
-                ? newValue.id
-                : undefined,
-          },
-        });
-      }}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label="Project"
-          variant="outlined"
-          helperText="Project to edit in-context"
-        />
-      )}
-    />
+  // The project is fixed by the credentials, so show it as a read-only field (same for API-key and OAuth sessions).
+  const projectField = (name: string) => (
+    <FormControl fullWidth>
+      <TextField
+        label="Project"
+        variant="outlined"
+        size="small"
+        value={name}
+        InputProps={{ readOnly: true }}
+      />
+    </FormControl>
   );
 
   const footer = (
@@ -355,15 +326,13 @@ export const TolgeeDetector = () => {
                   for access.
                 </Alert>
               ) : (
-                projectPicker
+                declaredProject && projectField(declaredProject.name)
               )}
             </>
           ) : (
             <>
               {isProjectInfo(credentialsCheck) ? (
-                <Typography style={{ fontSize: 12, color: 'green' }}>
-                  {credentialsCheck.projectName}
-                </Typography>
+                projectField(credentialsCheck.projectName)
               ) : credentialsCheck === 'invalid' ? (
                 <Typography style={{ fontSize: 12, color: 'red' }}>
                   Invalid API key

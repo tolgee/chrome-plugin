@@ -74,7 +74,6 @@ export type Action =
       type: 'OAUTH_APPLY';
       payload: { apiUrl: string; authToken: string; projectId?: number };
     }
-  | { type: 'OAUTH_SET_PROJECT'; payload: { projectId: number | undefined } }
   | { type: 'SET_BRANCHES'; payload: BranchOption[] | null }
   | {
       type: 'RESOLVE_PROJECT';
@@ -183,19 +182,6 @@ export const createReducer =
           declaredProjectInaccessible: false,
         };
       }
-      case 'OAUTH_SET_PROJECT': {
-        apply();
-        const oauthValues = {
-          ...state.values,
-          projectId: action.payload.projectId,
-        };
-        return {
-          ...state,
-          values: oauthValues,
-          appliedValues: oauthValues,
-          storedValues: oauthValues,
-        };
-      }
       case 'RESOLVE_PROJECT': {
         const { project, inaccessible } = action.payload;
         if (!project) {
@@ -207,12 +193,15 @@ export const createReducer =
         }
         apply();
         const oauthValues = { ...state.values, projectId: project.id };
+        // Respect the Applied toggle: binding the page's project must update the (stored) session, but must NOT
+        // re-apply a session the user switched off — otherwise the auto-resolve fights the toggle and the popup flickers.
+        const isApplied = state.appliedValues != null;
         return {
           ...state,
           declaredProject: project,
           declaredProjectInaccessible: false,
           values: oauthValues,
-          appliedValues: oauthValues,
+          appliedValues: isApplied ? oauthValues : state.appliedValues,
           storedValues: oauthValues,
         };
       }

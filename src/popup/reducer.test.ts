@@ -124,23 +124,6 @@ describe('detector reducer', () => {
     });
   });
 
-  describe('OAUTH_SET_PROJECT', () => {
-    it('sets the project across values/applied/stored', () => {
-      const connected: State = {
-        ...initialState,
-        values: { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' },
-      };
-      const next = reduce(connected, {
-        type: 'OAUTH_SET_PROJECT',
-        payload: { projectId: 7 },
-      });
-      expect(next.values?.projectId).toBe(7);
-      expect(next.appliedValues?.projectId).toBe(7);
-      expect(next.storedValues?.projectId).toBe(7);
-      expect(apply).toHaveBeenCalledOnce();
-    });
-  });
-
   describe('APPLY_VALUES', () => {
     const withBranch: State = {
       ...initialState,
@@ -251,7 +234,7 @@ describe('detector reducer', () => {
       values: { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' },
     };
 
-    it('binds the resolved declared project and injects its id', () => {
+    it('binds the resolved declared project into the stored session without applying it while switched off', () => {
       const next = reduce(connected, {
         type: 'RESOLVE_PROJECT',
         payload: { project: { id: 7, name: 'Demo' }, inaccessible: false },
@@ -259,7 +242,23 @@ describe('detector reducer', () => {
       expect(next.declaredProject).toEqual({ id: 7, name: 'Demo' });
       expect(next.declaredProjectInaccessible).toBe(false);
       expect(next.values?.projectId).toBe(7);
+      expect(next.storedValues?.projectId).toBe(7);
+      // Applied toggle is off (no appliedValues): binding must not silently re-apply the session.
+      expect(next.appliedValues).toBeNull();
+      expect(apply).toHaveBeenCalledOnce();
+    });
+
+    it('re-applies the bound project when the session is currently applied', () => {
+      const applied: State = {
+        ...connected,
+        appliedValues: { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' },
+      };
+      const next = reduce(applied, {
+        type: 'RESOLVE_PROJECT',
+        payload: { project: { id: 7, name: 'Demo' }, inaccessible: false },
+      });
       expect(next.appliedValues?.projectId).toBe(7);
+      expect(next.storedValues?.projectId).toBe(7);
       expect(apply).toHaveBeenCalledOnce();
     });
 
