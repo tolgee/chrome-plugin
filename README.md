@@ -44,6 +44,32 @@ You can download our Chrome browser extension on the Chrome Web Store:
 
 [<img src="images/available-on-chrome-banner.png" alt="Available on Chrome Web Store" width="200" />](https://chromewebstore.google.com/detail/tolgee-tools/hacnbapajkkfohnonhbmegojnddagfnj)
 
+## Building from source
+
+### Environment
+
+- Any operating system (Linux, macOS, Windows). Released builds are produced on Ubuntu.
+- [Node.js](https://nodejs.org/) 20.x, with the npm version bundled with it.
+- No other tools, compilers, or system libraries are required.
+
+### Build
+
+```bash
+npm ci
+npm run build
+```
+
+### Output
+
+| Path | Contents |
+|---|---|
+| `dist-chrome/`, `dist-zip/chrome.zip` | Chrome build |
+| `dist-firefox/`, `dist-zip/firefox.zip` | Firefox build |
+
+Both targets are built by Vite from `vite.config.chrome.ts` and `vite.config.firefox.ts`.
+The extension version comes from `manifest.json`, which is committed at release time,
+so building a release tag produces that release's version and configuration.
+
 ## Additional information
 
 To learn more, visit [https://tolgee.io](https://tolgee.io)
