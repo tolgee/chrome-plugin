@@ -1,0 +1,9 @@
+{
+  "name": "tolgee-chrome-publish-tools",
+  "private": true,
+  "description": "Store submission tooling, kept out of the extension's own dependencies so day-to-day installs stay lean.",
+  "devDependencies": {
+    "chrome-webstore-upload-cli": "3.5.0",
+    "web-ext": "10.6.0"
+  }
+}

@@ -1,0 +1,126 @@
+name: Publish to stores
+
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v1.9.0)'
+        required: true
+        type: string
+      stores:
+        description: 'Which stores to submit to'
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - chrome
+          - firefox
+
+concurrency:
+  group: publish-stores-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  chrome:
+    name: Chrome Web Store
+    if: ${{ github.event_name == 'release' || inputs.stores == 'both' || inputs.stores == 'chrome' }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      # Tools come from the default branch, not the tag: releases predating the
+      # publish-tools manifest would otherwise have nothing to install.
+      - name: Checkout publishing tools
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install publishing tools
+        run: npm ci --prefix .github/publish-tools
+
+      - name: Download Chrome bundle from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'Tolgee-chrome-*.zip' \
+            --dir .
+          ls -l Tolgee-chrome-*.zip
+
+      - name: Upload and publish
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          .github/publish-tools/node_modules/.bin/chrome-webstore-upload \
+            --source "$(ls Tolgee-chrome-*.zip)" \
+            --max-await-in-progress 600
+
+  firefox:
+    name: Firefox Add-ons
+    if: ${{ github.event_name == 'release' || inputs.stores == 'both' || inputs.stores == 'firefox' }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Checkout publishing tools
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Checkout released sources
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          path: release-source
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install publishing tools
+        run: npm ci --prefix .github/publish-tools
+
+      - name: Download Firefox bundle from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'Tolgee-firefox-*.zip' \
+            --dir .
+          unzip -q "$(ls Tolgee-firefox-*.zip)" -d dist-firefox
+
+      - name: Lint bundle against AMO rules
+        run: .github/publish-tools/node_modules/.bin/web-ext lint --source-dir dist-firefox
+
+      # AMO rejects bundler output without readable sources, so the tagged tree
+      # is submitted alongside the build.
+      - name: Pack source code for review
+        run: git -C release-source archive --format=zip -o "$GITHUB_WORKSPACE/source.zip" HEAD
+
+      - name: Submit to AMO
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          .github/publish-tools/node_modules/.bin/web-ext sign \
+            --source-dir dist-firefox \
+            --channel listed \
+            --upload-source-code source.zip \
+            --approval-timeout 0
