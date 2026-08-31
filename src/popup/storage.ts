@@ -1,28 +1,32 @@
 import browser from 'webextension-polyfill';
+import { storeOAuthMarker } from '../oauth/marker';
+import { projectKeyForToken } from '../oauth/tokenScope';
+import { originOf } from '../oauth/url';
+import { getActiveTab } from './activeTab';
+import { Values } from './tools';
 
-type Values = {
+// The per-origin record persisted in browser.storage.local — distinct from the live form `Values`: it carries the
+// OAuth `oauth` marker flag and never the short-lived `authToken` (the token lives in the service worker's tokenStore).
+type PersistedValues = {
   apiUrl?: string;
   apiKey?: string;
   branch?: string;
-};
-
-const getCurrentTab = async () => {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-
-  return tabs[0];
-};
-
-const getCurrentTabOrigin = async () => {
-  const url = new URL((await getCurrentTab()).url!);
-  return url.origin;
+  oauth?: boolean;
+  projectId?: number;
 };
 
 export const storeValues = async (values: Values | null) => {
   try {
     const origin = await getCurrentTabOrigin();
 
-    if (values?.apiKey && values?.apiUrl) {
-      browser.storage.local.set({
+    if (values?.authToken && values?.apiUrl) {
+      await storeOAuthMarker(origin, {
+        apiUrl: values.apiUrl,
+        projectId: values.projectId,
+        projectKey: projectKeyForToken(values.authToken),
+      });
+    } else if (values?.apiKey && values?.apiUrl) {
+      await browser.storage.local.set({
         [origin]: {
           apiUrl: values.apiUrl,
           apiKey: values.apiKey,
@@ -30,10 +34,10 @@ export const storeValues = async (values: Values | null) => {
         },
       });
     } else {
-      browser.storage.local.remove(origin);
+      await browser.storage.local.remove(origin);
     }
   } catch (e) {
-    console.error(e);
+    console.error('[tolgee] storage error', e);
     return;
   }
 };
@@ -42,15 +46,19 @@ export const loadValues = async () => {
   try {
     const origin = await getCurrentTabOrigin();
     const keys = await browser.storage.local.get(origin);
-    const data = keys[origin] as Values;
+    const data = keys[origin] as PersistedValues;
 
     return {
       apiKey: data?.apiKey,
       apiUrl: data?.apiUrl,
       branch: data?.branch,
+      oauth: data?.oauth,
+      projectId: data?.projectId,
     };
   } catch (e) {
-    console.error(e);
+    console.error('[tolgee] storage error', e);
     return {};
   }
 };
+
+const getCurrentTabOrigin = async () => originOf((await getActiveTab()).url!);

@@ -2,6 +2,7 @@
   "name": "Tolgee Tools",
   "version": "1.9.0",
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnAWlBy6Y2olMvOiHeL+WSURusjlecxcb7ZYqjVYV0GTz3FvC8QCrb6kb/+nYITxfAjNgzRpZbI2m56JZ55sRSeAwFwEiCYKiH6HLrVhF/43apH8o0qyoybhXuSuH1+5PdI4Rm899MCvHxc2+1TIUbJWg3BTCyCFScF1PytzsBTPygXMtdZwGYdyKX+fuez7sURtBmwctM9KjvNwYjhVz7JAiMnV8c1Y4tkIHqhLIFeWKcwpwCufB+ZirXBRpyN1rijH+Kcz3hDzRMGgRpXQDG73q5zkzlHJmelcpu5gYtp5irwFJC3IvkemfOMBrEjQp/9uO1G6xtcAj6ReuCkvYiQIDAQAB",
   "description": "Translate your web application more effectively with Tolgee plugin!",
   "action": {
     "default_icon": {
@@ -14,7 +15,7 @@
     "service_worker": "src/background/background.ts",
     "type": "module"
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "identity", "alarms"],
   "host_permissions": ["<all_urls>"],
   "icons": {
     "128": "icons/present.png"

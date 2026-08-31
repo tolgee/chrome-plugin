@@ -1,9 +1,13 @@
 import {
   API_KEY_LOCAL_STORAGE,
   API_URL_LOCAL_STORAGE,
+  AUTH_TOKEN_LOCAL_STORAGE,
   BRANCH_LOCAL_STORAGE,
+  PROJECT_ID_LOCAL_STORAGE,
 } from '../constants';
 import { LibConfig } from '../types';
+import { acceptsCredentialDelivery } from './acceptsCredentialDelivery';
+import { acceptTokenPush, writeCredentials } from './credentialSink';
 import { injectUiLib } from './injectUiLib';
 import { Messages } from './Messages';
 import { updateState } from './updateState';
@@ -13,11 +17,13 @@ let configuration: LibConfig | undefined = undefined;
 const messages = new Messages();
 messages.startWindowListening();
 
-const getAppliedCredenials = () => {
+const getAppliedCredentials = () => {
   return {
     apiKey: sessionStorage.getItem(API_KEY_LOCAL_STORAGE),
     apiUrl: sessionStorage.getItem(API_URL_LOCAL_STORAGE),
     branch: sessionStorage.getItem(BRANCH_LOCAL_STORAGE),
+    authToken: sessionStorage.getItem(AUTH_TOKEN_LOCAL_STORAGE),
+    projectId: sessionStorage.getItem(PROJECT_ID_LOCAL_STORAGE),
   };
 };
 
@@ -25,13 +31,18 @@ const getAppliedCredenials = () => {
 messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
   const firstHandshake = !configuration;
   configuration = c;
-  const appliedCredentials = getAppliedCredenials();
+  const appliedCredentials = getAppliedCredentials();
   if (
     appliedCredentials.apiKey &&
     c.uiPresent === false &&
     (c.mode || c.config?.mode) === 'development'
   ) {
     injectUiLib(c.uiVersion);
+  }
+  if (appliedCredentials.authToken && appliedCredentials.apiUrl) {
+    messages.sendToPlugin('OAUTH_TAB_CONNECTED', {
+      apiUrl: appliedCredentials.apiUrl,
+    });
   }
   updateState(configuration, messages);
   if (firstHandshake) {
@@ -55,6 +66,10 @@ messages.listenWindow('TOLGEE_TAKE_SCREENSHOT', () => {
   });
 });
 
+messages.listenWindow('TOLGEE_OPEN_PLUGIN', () => {
+  messages.sendToPlugin('OPEN_POPUP');
+});
+
 messages.startRuntimeListening();
 
 // popup will ask if tolgee is present on the page
@@ -64,24 +79,27 @@ messages.listenRuntime('DETECT_TOLGEE', async () => {
   }
 });
 
-messages.listenRuntime('GET_CREDENTIALS', async () => getAppliedCredenials());
+messages.listenRuntime('GET_CREDENTIALS', async () => getAppliedCredentials());
+
+const acceptsDelivery = (pageOrigin?: string) =>
+  acceptsCredentialDelivery({
+    currentOrigin: window.location.origin,
+    isTopFrame: window.top === window.self,
+    pageOrigin,
+  });
 
 messages.listenRuntime('SET_CREDENTIALS', async (data) => {
-  if (data.apiKey) {
-    sessionStorage.setItem(API_KEY_LOCAL_STORAGE, data.apiKey);
-  } else {
-    sessionStorage.removeItem(API_KEY_LOCAL_STORAGE);
+  if (!acceptsDelivery(data.pageOrigin)) {
+    return;
   }
-  if (data.apiUrl) {
-    sessionStorage.setItem(API_URL_LOCAL_STORAGE, data.apiUrl);
-  } else {
-    sessionStorage.removeItem(API_URL_LOCAL_STORAGE);
+  if (writeCredentials(sessionStorage, data)) {
+    location.reload();
   }
-  if (data.branch) {
-    sessionStorage.setItem(BRANCH_LOCAL_STORAGE, data.branch);
-  } else {
-    sessionStorage.removeItem(BRANCH_LOCAL_STORAGE);
-  }
-  location.reload();
   updateState(configuration, messages);
+});
+
+messages.listenRuntime('UPDATE_AUTH_TOKEN', async (data) => {
+  if (acceptsDelivery(data.pageOrigin)) {
+    acceptTokenPush(sessionStorage, data);
+  }
 });

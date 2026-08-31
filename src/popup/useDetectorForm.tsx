@@ -1,171 +1,34 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import browser, { type Runtime } from 'webextension-polyfill';
 import { useEffect, useReducer } from 'react';
-import { LibConfig } from '../types';
+import { getActiveTab } from './activeTab';
 import { loadAppliedValues } from './loadConfig';
 import { sendMessage } from './sendMessage';
+import { sendToBackground } from './sendToBackground';
 import { loadValues, storeValues } from './storage';
-import { compareValues, normalizeUrl, validateValues, Values } from './tools';
+import { safeOrigin } from '../oauth/url';
+import {
+  compareValues,
+  declaredProjectId,
+  isOAuth,
+  normalizeUrl,
+  validateValues,
+  Values,
+} from './tools';
 import { useApplier } from './useApplier';
 import { RuntimeMessage } from '../content/Messages';
-
-type ProjectInfo = {
-  projectName: string;
-  projectId: number;
-  scopes: string[];
-  userFullName: string;
-  branchingEnabled: boolean;
-};
-
-type CredentialsCheck = null | 'loading' | 'invalid' | ProjectInfo;
-type TolgeePresent = 'loading' | 'present' | 'not_present' | 'legacy';
-
-type BranchOption = {
-  name: string;
-  isDefault: boolean;
-};
-
-const initialState = {
-  values: null as Values | null,
-  storedValues: null as Values | null,
-  appliedValues: null as Values | null | undefined,
-  tolgeePresent: 'loading' as TolgeePresent,
-  credentialsCheck: null as CredentialsCheck,
-  libConfig: null as LibConfig | null,
-  error: null as string | null,
-  frameId: null as number | null,
-  branches: null as BranchOption[] | null,
-};
-
-type State = typeof initialState;
-type Action =
-  | { type: 'CHANGE_VALUES'; payload: Partial<Values> }
-  | {
-      type: 'CHANGE_LIB_CONFIG';
-      payload: { libData: LibConfig | null; frameId: number | null };
-    }
-  | { type: 'SET_ERROR'; payload: string }
-  | { type: 'SET_APPLIED_VALUES'; payload: Values | null }
-  | { type: 'SET_CREDENTIALS_CHECK'; payload: CredentialsCheck }
-  | { type: 'LOAD_STORED_VALUES'; payload: Values | null }
-  | { type: 'APPLY_VALUES' }
-  | { type: 'CLEAR_ALL' }
-  | { type: 'STORE_VALUES' }
-  | { type: 'LOAD_VALUES' }
-  | { type: 'SET_BRANCHES'; payload: BranchOption[] | null };
+import {
+  CredentialsCheck,
+  createReducer,
+  initialState,
+  isOAuthUser,
+  isProjectInfo,
+} from './reducer';
 
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
 
-  const reducer = (state: State, action: Action): State => {
-    switch (action.type) {
-      case 'CHANGE_VALUES':
-        return { ...state, values: { ...state.values, ...action.payload } };
-      case 'CHANGE_LIB_CONFIG': {
-        const { libData, frameId } = action.payload;
-        const newValues = {
-          apiKey: libData?.config?.apiKey,
-          apiUrl: libData?.config?.apiUrl,
-          branch: libData?.config?.branch,
-        };
-        if (state.libConfig !== null && state.frameId !== frameId) {
-          return {
-            ...state,
-            error: 'Detected multiple Tolgee instances',
-          };
-        }
-        return {
-          ...state,
-          libConfig: libData,
-          frameId,
-          values: validateValues(state.values) || newValues,
-          tolgeePresent: !libData
-            ? 'not_present'
-            : libData.uiPresent === undefined
-              ? 'legacy'
-              : 'present',
-        };
-      }
-      case 'SET_ERROR':
-        return {
-          ...state,
-          tolgeePresent: 'not_present',
-          error: action.payload,
-        };
-      case 'SET_APPLIED_VALUES':
-        return {
-          ...state,
-          appliedValues: action.payload,
-        };
-      case 'SET_CREDENTIALS_CHECK':
-        return {
-          ...state,
-          credentialsCheck: action.payload,
-        };
-      case 'LOAD_STORED_VALUES':
-        return {
-          ...state,
-          storedValues: action.payload,
-          values: action.payload,
-        };
-      case 'APPLY_VALUES': {
-        // sync values with storage/localStorage
-        apply();
-        const branchEnabled =
-          typeof state.credentialsCheck === 'object' &&
-          state.credentialsCheck?.branchingEnabled;
-        const effectiveBranch = branchEnabled
-          ? state.values?.branch
-          : undefined;
-        return {
-          ...state,
-          appliedValues: {
-            apiKey: state.values?.apiKey,
-            apiUrl: state.values?.apiUrl,
-            branch: effectiveBranch,
-          },
-          storedValues: {
-            apiKey: state.values?.apiKey,
-            apiUrl: state.values?.apiUrl,
-            branch: effectiveBranch,
-          },
-        };
-      }
-      case 'CLEAR_ALL': {
-        apply();
-        return {
-          ...state,
-          appliedValues: undefined,
-          storedValues: null,
-          values: null,
-          libConfig: null,
-        };
-      }
-      case 'STORE_VALUES':
-        apply();
-        return {
-          ...state,
-          storedValues: state.appliedValues || null,
-          values: state.appliedValues || null,
-          appliedValues: null,
-        };
-      case 'LOAD_VALUES':
-        apply();
-        return {
-          ...state,
-          appliedValues: state.storedValues,
-          values: state.storedValues,
-        };
-      case 'SET_BRANCHES':
-        return {
-          ...state,
-          branches: action.payload,
-        };
-      default:
-        // @ts-expect-error action type is type uknown
-        throw new Error(`Unknown action ${action.type}`);
-    }
-  };
+  const reducer = createReducer(apply);
 
   const [state, dispatch] = useReducer(reducer, initialState);
   const { storedValues, appliedValues, libConfig } = state;
@@ -180,17 +43,42 @@ export const useDetectorForm = () => {
   useEffect(() => {
     // sync applied values
     if (applyRequired) {
-      sendMessage('SET_CREDENTIALS', { ...appliedValues });
+      // Stamp the connected page's origin so the content script delivers only to that frame, not a cross-origin iframe.
+      getActiveTab()
+        .then((tab) =>
+          sendMessage('SET_CREDENTIALS', {
+            ...appliedValues,
+            pageOrigin: safeOrigin(tab?.url),
+          })
+        )
+        // The tab may be mid-reload (no content script to receive) right after connect; a failed delivery is harmless.
+        .catch(() => undefined);
     }
   }, [appliedValues]);
 
   useEffect(() => {
-    sendMessage('DETECT_TOLGEE').catch(() => {
-      dispatch({
-        type: 'SET_ERROR',
-        payload: 'No access to this page, try to refresh',
+    let cancelled = false;
+    // Applying/un-applying reloads the page, so the content script is briefly gone. Retry before declaring the page
+    // inaccessible, otherwise opening the popup mid-reload sticks on the error screen with no recovery.
+    const detect = (attemptsLeft: number) => {
+      sendMessage('DETECT_TOLGEE').catch(() => {
+        if (cancelled) {
+          return;
+        }
+        if (attemptsLeft > 0) {
+          setTimeout(() => detect(attemptsLeft - 1), 250);
+          return;
+        }
+        dispatch({
+          type: 'SET_ERROR',
+          payload: 'No access to this page, try to refresh',
+        });
       });
-    });
+    };
+    detect(16);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // timeout when Tolgee is not detected
@@ -212,13 +100,29 @@ export const useDetectorForm = () => {
   // after tolgee config is loaded
   // get applied values and stored values
   const onLibConfigChange = async () => {
-    const appliedValues = await loadAppliedValues();
-    if (validateValues(appliedValues)) {
-      dispatch({ type: 'SET_APPLIED_VALUES', payload: appliedValues });
+    const pageApplied = await loadAppliedValues();
+    if (validateValues(pageApplied)) {
+      dispatch({ type: 'SET_APPLIED_VALUES', payload: pageApplied });
     }
 
     const storedData = await loadValues();
-    if (validateValues(storedData)) {
+    if (storedData.oauth && storedData.apiUrl) {
+      // OAuth sessions store no token; ask the service worker for a fresh (auto-refreshed) one for this project.
+      const res = (await sendToBackground('OAUTH_GET_TOKEN', {
+        apiUrl: storedData.apiUrl,
+        projectId: storedData.projectId,
+      })) as { accessToken?: string };
+      if (res?.accessToken) {
+        dispatch({
+          type: 'LOAD_STORED_VALUES',
+          payload: {
+            apiUrl: storedData.apiUrl,
+            authToken: res.accessToken,
+            projectId: storedData.projectId,
+          },
+        });
+      }
+    } else if (validateValues(storedData)) {
       dispatch({ type: 'LOAD_STORED_VALUES', payload: storedData });
     }
   };
@@ -245,7 +149,7 @@ export const useDetectorForm = () => {
       return undefined;
     };
     browser.runtime.onMessage.addListener(listener);
-    () => browser.runtime.onMessage.removeListener(listener);
+    return () => browser.runtime.onMessage.removeListener(listener);
   }, []);
 
   const setCredentialsCheck = (val: CredentialsCheck) => {
@@ -255,7 +159,10 @@ export const useDetectorForm = () => {
   let checkableValues: Values | undefined | null;
 
   // we want to check validity of values, that are displayed and applied
-  const valuesToCompare = appliedValues || libConfig?.config;
+  // Fall back to the stored session (not just the page's SDK config) so a connected session stays recognized while the
+  // Applied toggle is off — the page config carries no OAuth token, which would otherwise blank the connected state.
+  const valuesToCompare =
+    appliedValues || storedValues || (libConfig?.config as Values);
   if (!storedValues || compareValues(valuesToCompare, storedValues)) {
     checkableValues = validateValues(valuesToCompare);
   }
@@ -268,51 +175,75 @@ export const useDetectorForm = () => {
 
       const url = normalizeUrl(checkableValues!.apiUrl);
 
-      fetch(`${url}/v2/api-keys/current?ak=${checkableValues!.apiKey}`)
-        .then((r) => {
-          if (r.ok) {
-            return r.json();
-          } else {
-            throw r.json();
-          }
+      if (isOAuth(checkableValues)) {
+        // OAuth tokens are not tied to a single project; confirm the token and show the connected user instead.
+        fetch(`${url}/v2/user`, {
+          headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
         })
-        .catch(() => {
-          !cancelled && setCredentialsCheck('invalid');
+          .then((r) => {
+            if (r.ok) {
+              return r.json();
+            }
+            throw new Error('Invalid token');
+          })
+          .then((data) => {
+            !cancelled &&
+              setCredentialsCheck({ oauth: true, userFullName: data.name });
+          })
+          .catch(() => {
+            !cancelled && setCredentialsCheck('invalid');
+          });
+      } else {
+        fetch(`${url}/v2/api-keys/current`, {
+          headers: { 'X-API-Key': checkableValues!.apiKey! },
         })
-        .then((data) => {
-          !cancelled &&
-            data &&
-            setCredentialsCheck({
-              projectName: data.projectName,
-              projectId: data.projectId,
-              scopes: data.scopes,
-              userFullName: data.userFullName,
-              branchingEnabled: data.branchingEnabled ?? false,
-            });
-        });
+          .then((r) => {
+            if (r.ok) {
+              return r.json();
+            } else {
+              throw r.json();
+            }
+          })
+          .catch(() => {
+            !cancelled && setCredentialsCheck('invalid');
+          })
+          .then((data) => {
+            !cancelled &&
+              data &&
+              setCredentialsCheck({
+                projectName: data.projectName,
+                projectId: data.projectId,
+                scopes: data.scopes,
+                userFullName: data.userFullName,
+                branchingEnabled: data.branchingEnabled ?? false,
+              });
+          });
+      }
     } else {
       setCredentialsCheck(null);
     }
     return () => {
       cancelled = true;
     };
-  }, [checkableValues?.apiUrl, checkableValues?.apiKey]);
+  }, [
+    checkableValues?.apiUrl,
+    checkableValues?.apiKey,
+    checkableValues?.authToken,
+  ]);
 
   // fetch branches when credentials are valid and branching is enabled
   useEffect(() => {
     let cancelled = false;
     const check = state.credentialsCheck;
     if (
-      typeof check === 'object' &&
-      check?.branchingEnabled &&
+      isProjectInfo(check) &&
+      check.branchingEnabled &&
       validateValues(checkableValues)
     ) {
       const url = normalizeUrl(checkableValues!.apiUrl);
-      fetch(
-        `${url}/v2/projects/${check.projectId}/branches?ak=${
-          checkableValues!.apiKey
-        }&size=100`
-      )
+      fetch(`${url}/v2/projects/${check.projectId}/branches?size=100`, {
+        headers: { 'X-API-Key': checkableValues!.apiKey! },
+      })
         .then((r) => {
           if (!r.ok) {
             throw new Error('Failed to load branches');
@@ -343,6 +274,54 @@ export const useDetectorForm = () => {
       cancelled = true;
     };
   }, [state.credentialsCheck]);
+
+  // Bind the page's declared project to the OAuth token by resolving it against the connected server, or flag it
+  // inaccessible — else the token stays unscoped and in-context editing fails with "project not selected".
+  const declaredId = declaredProjectId(libConfig);
+  useEffect(() => {
+    let cancelled = false;
+    const check = state.credentialsCheck;
+    const isOauthCheck = isOAuthUser(check) && isOAuth(checkableValues);
+    if (!isOauthCheck || declaredId === undefined) {
+      dispatch({
+        type: 'RESOLVE_PROJECT',
+        payload: { project: null, inaccessible: false },
+      });
+      return;
+    }
+    const url = normalizeUrl(checkableValues!.apiUrl);
+    fetch(`${url}/v2/projects/${declaredId}`, {
+      headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
+    })
+      .then((r) => {
+        if (!r.ok) {
+          throw new Error('inaccessible');
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (!cancelled) {
+          dispatch({
+            type: 'RESOLVE_PROJECT',
+            payload: {
+              project: { id: data.id, name: data.name },
+              inaccessible: false,
+            },
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          dispatch({
+            type: 'RESOLVE_PROJECT',
+            payload: { project: null, inaccessible: true },
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.credentialsCheck, declaredId]);
 
   return [state, dispatch] as const;
 };
