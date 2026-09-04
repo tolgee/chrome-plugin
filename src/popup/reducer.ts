@@ -99,6 +99,13 @@ export type Action =
       payload: { project: ProjectOption | null; inaccessible: boolean };
     };
 
+// What the page itself declares; the popup starts from these before any stored or applied credentials.
+const pageValues = (libData: LibConfig | null): Values => ({
+  apiKey: libData?.config?.apiKey,
+  apiUrl: libData?.config?.apiUrl,
+  branch: libData?.config?.branch,
+});
+
 export const createReducer =
   (apply: () => void) =>
   (state: State, action: Action): State => {
@@ -107,11 +114,7 @@ export const createReducer =
         return { ...state, values: { ...state.values, ...action.payload } };
       case 'CHANGE_LIB_CONFIG': {
         const { libData, frameId } = action.payload;
-        const newValues = {
-          apiKey: libData?.config?.apiKey,
-          apiUrl: libData?.config?.apiUrl,
-          branch: libData?.config?.branch,
-        };
+        const newValues = pageValues(libData);
         // Only a second frame that itself carries a config counts as another instance: the not-detected timeout
         // dispatches a null config with no frame, and a repeat from the same frame is an update.
         if (
@@ -192,8 +195,7 @@ export const createReducer =
           ...state,
           appliedValues: undefined,
           storedValues: null,
-          values: null,
-          libConfig: null,
+          values: pageValues(state.libConfig),
           declaredProject: null,
           declaredProjectInaccessible: false,
         };

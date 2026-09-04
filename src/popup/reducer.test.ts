@@ -289,20 +289,40 @@ describe('detector reducer', () => {
   });
 
   describe('CLEAR_ALL', () => {
-    it('wipes credentials and lib config', () => {
-      const dirty: State = {
-        ...initialState,
-        values: { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' },
-        appliedValues: { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' },
-        storedValues: { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' },
-        libConfig: lib({}),
-      };
+    const page = lib({ config: { apiUrl: 'https://my.tolgee.io', apiKey: '' } });
+    const dirty: State = {
+      ...initialState,
+      tolgeePresent: 'present',
+      frameId: 0,
+      values: { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' },
+      appliedValues: { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' },
+      storedValues: { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' },
+      libConfig: page,
+      declaredProject: { id: 1, name: 'P', branchingEnabled: false },
+      declaredProjectInaccessible: true,
+    };
+
+    it('wipes the credentials and the resolved project', () => {
       const next = reduce(dirty, { type: 'CLEAR_ALL' });
-      expect(next.values).toBeNull();
       expect(next.storedValues).toBeNull();
       expect(next.appliedValues).toBeUndefined();
-      expect(next.libConfig).toBeNull();
+      expect(next.declaredProject).toBeNull();
+      expect(next.declaredProjectInaccessible).toBe(false);
       expect(apply).toHaveBeenCalledOnce();
+    });
+
+    // Regression: dropping the lib config let the not-detected timeout flip the popup to "not using Tolgee" after a
+    // sign-out that did not reload the page (editing already off), and the sign-in screen lost the page's server.
+    it('keeps the detected page config and falls back to the values the page declares', () => {
+      const next = reduce(dirty, { type: 'CLEAR_ALL' });
+      expect(next.libConfig).toBe(page);
+      expect(next.frameId).toBe(0);
+      expect(next.tolgeePresent).toBe('present');
+      expect(next.values).toEqual({
+        apiUrl: 'https://my.tolgee.io',
+        apiKey: '',
+        branch: undefined,
+      });
     });
   });
 
