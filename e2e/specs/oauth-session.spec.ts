@@ -1,9 +1,9 @@
 import { apiAs, bearerStatus, revokeOAuthToken } from '../fixtures/api';
 import { expect, test } from '../fixtures/extension';
 import {
+  collectWorkerRequests,
   completeAuthorization,
   expireStoredSessions,
-  fireRefreshAlarm,
   installIdentityStub,
   signInThroughPopup,
   storedOAuthSessions,
@@ -12,13 +12,16 @@ import {
 import {
   collectProjectRequests,
   declareProject,
-  openInContextDialog,
+  IN_CONTEXT_DIALOG_TEXT,
   openTestapp,
   responseStatuses,
   sessionItem,
+  TITLE,
 } from '../fixtures/testapp';
 
 requireOAuthServer();
+
+const DEV_TOOLS = '#__tolgee_dev_tools';
 
 test('offers to sign in again once the session was revoked on the server', async ({
   page,
@@ -45,6 +48,22 @@ test('offers to sign in again once the session was revoked on the server', async
 
   await revokeOAuthToken(state.tolgeeUrl, session.accessToken);
   expect(await bearerStatus(state.tolgeeUrl, session.accessToken)).toBe(401);
+
+  // The worker gets a 401, tries to refresh, the grant is gone: the session is dropped and every request answered
+  // no_session. The page's dialog says so, and the popup offers to sign in again.
+  await page.locator(TITLE).click({ modifiers: ['Alt'] });
+  await expect(page.locator(DEV_TOOLS)).toContainText("You're not signed in", {
+    timeout: 30_000,
+  });
+  await expect(page.locator(DEV_TOOLS)).toContainText(
+    'Sign in again in the Tolgee plugin'
+  );
+  await expect
+    .poll(() => storedOAuthSessions(worker), {
+      message: 'the dead session to be dropped',
+    })
+    .toHaveLength(0);
+  await page.keyboard.press('Escape');
 
   popup = await openPopup(page);
   await expect(popup.getByTestId('session-ended')).toContainText(
@@ -73,9 +92,7 @@ test('offers to sign in again once the session was revoked on the server', async
   ).toBeChecked();
   const [renewed] = await storedOAuthSessions(worker);
   expect(renewed.accessToken).not.toBe(session.accessToken);
-  await expect
-    .poll(() => sessionItem(page, '__tolgee_authToken'))
-    .toBe(renewed.accessToken);
+  await expect.poll(() => sessionItem(page, '__tolgee_oauth')).toBe('1');
 });
 
 // The access token is bound to the project chosen at consent, so a page of the same site that declares another
@@ -133,8 +150,8 @@ test('warns when the page declares a project the session cannot reach', async ({
   await reloaded;
   await expect(otherPopup.getByTestId('sign-in-screen')).toBeVisible();
   expect(await storedOAuthSessions(worker)).toHaveLength(0);
-  expect(await sessionItem(page, '__tolgee_authToken')).toBeNull();
-  expect(await sessionItem(otherPage, '__tolgee_authToken')).toBeNull();
+  expect(await sessionItem(page, '__tolgee_oauth')).toBeNull();
+  expect(await sessionItem(otherPage, '__tolgee_oauth')).toBeNull();
 });
 
 test('ends the session in every tab of the origin on sign out', async ({
@@ -159,10 +176,10 @@ test('ends the session in every tab of the origin on sign out', async ({
   });
   const [session] = await storedOAuthSessions(worker);
 
-  // A second tab of the same site starts without the token (sessionStorage is per tab) but is still signed in.
+  // A second tab of the same site starts without the signed-in flag (sessionStorage is per tab) but is still signed in.
   const second = await context.newPage();
   await openTestapp(second, app.url);
-  expect(await sessionItem(second, '__tolgee_authToken')).toBeNull();
+  expect(await sessionItem(second, '__tolgee_oauth')).toBeNull();
   const secondPopup = await openPopup(second);
   await expect(secondPopup.getByTestId('connected-panel')).toBeVisible();
   await expect(secondPopup.getByTestId('project-link')).toHaveText(
@@ -180,22 +197,13 @@ test('ends the session in every tab of the origin on sign out', async ({
   await secondSwitch.click();
   await secondReloaded;
   await expect(secondSwitch).toBeChecked();
-  expect(await sessionItem(second, '__tolgee_authToken')).toBe(
-    session.accessToken
+  expect(await sessionItem(second, '__tolgee_oauth')).toBe('1');
+  expect(await sessionItem(second, '__tolgee_projectKey')).toBe(
+    session.projectKey
   );
   await secondPopup.close();
 
-  // Both tabs are known to the worker, so both get cleared on sign out.
-  await expect
-    .poll(() =>
-      worker.evaluate(() =>
-        chrome.storage.local
-          .get('injectedTabs')
-          .then((r: any) => Object.values(r.injectedTabs ?? {}))
-      )
-    )
-    .toHaveLength(2);
-
+  // Every open tab of the origin is cleared on sign out, whether or not it was ever applied from.
   await page.bringToFront();
   const firstReloaded = page.waitForEvent('load');
   const secondReloadedAgain = second.waitForEvent('load');
@@ -203,8 +211,8 @@ test('ends the session in every tab of the origin on sign out', async ({
   await Promise.all([firstReloaded, secondReloadedAgain]);
 
   await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
-  expect(await sessionItem(page, '__tolgee_authToken')).toBeNull();
-  expect(await sessionItem(second, '__tolgee_authToken')).toBeNull();
+  expect(await sessionItem(page, '__tolgee_oauth')).toBeNull();
+  expect(await sessionItem(second, '__tolgee_oauth')).toBeNull();
   expect(await storedOAuthSessions(worker)).toHaveLength(0);
   await expect
     .poll(() => bearerStatus(state.tolgeeUrl, session.accessToken))
@@ -246,10 +254,10 @@ test('reports a denied consent and stores nothing', async ({
   await expect(popup.getByTestId('connect-oauth')).toBeEnabled();
   await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
   expect(await storedOAuthSessions(worker)).toHaveLength(0);
-  expect(await sessionItem(page, '__tolgee_authToken')).toBeNull();
+  expect(await sessionItem(page, '__tolgee_oauth')).toBeNull();
 });
 
-test('refreshes an expired token in the background', async ({
+test('refreshes an expired token before sending for the page', async ({
   page,
   context,
   worker,
@@ -271,36 +279,39 @@ test('refreshes an expired token in the background', async ({
   });
   const [session] = await storedOAuthSessions(worker);
   expect(session.refreshToken).toBeTruthy();
-  expect(await sessionItem(page, '__tolgee_authToken')).toBe(
-    session.accessToken
-  );
   await popup.close();
 
   await expireStoredSessions(worker);
-  await fireRefreshAlarm(worker);
 
+  const pageRequests = collectProjectRequests(page);
+  const workerRequests = collectWorkerRequests(context);
+  await page.locator(TITLE).click({ modifiers: ['Alt'] });
+  await expect(
+    page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT)
+  ).toBeVisible({ timeout: 30_000 });
+
+  // The dialog title renders before its queries return; the worker refreshes on the first of them.
   await expect
-    .poll(() => sessionItem(page, '__tolgee_authToken'), {
-      message: 'the page to receive a refreshed token',
+    .poll(async () => (await storedOAuthSessions(worker))[0]?.accessToken, {
+      message: 'the worker to rotate the expired token',
     })
     .not.toBe(session.accessToken);
   const [refreshed] = await storedOAuthSessions(worker);
-  expect(refreshed.accessToken).not.toBe(session.accessToken);
   expect(refreshed.expiresAt).toBeGreaterThan(Date.now());
-  expect(await sessionItem(page, '__tolgee_authToken')).toBe(
-    refreshed.accessToken
-  );
-
-  const requests = collectProjectRequests(page);
-  await openInContextDialog(page);
-  expect(requests.length).toBeGreaterThan(0);
-  for (const request of requests) {
-    expect(request.headers()['authorization'], request.url()).toBe(
+  await expect
+    .poll(() => workerRequests.length, {
+      message: 'the worker to send the dialog requests',
+    })
+    .toBeGreaterThan(0);
+  await Promise.all(workerRequests.map((request) => request.response()));
+  expect(pageRequests).toEqual([]);
+  for (const request of workerRequests) {
+    expect((await request.allHeaders())['authorization'], request.url()).toBe(
       `Bearer ${refreshed.accessToken}`
     );
   }
   // The dialog also probes optional features (branches), which may answer 4xx on their own; none may be an auth failure.
-  for (const status of await responseStatuses(requests)) {
+  for (const status of await responseStatuses(workerRequests)) {
     expect(status).not.toBe(401);
     expect(status).not.toBe(403);
   }

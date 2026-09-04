@@ -18,6 +18,16 @@ export const API_KEY_SCOPES = [
 ];
 
 export type SeedMode = 'internal' | 'public';
+
+export type KeyScreenshot = {
+  id: number;
+  width?: number;
+  height?: number;
+  keyReferences: {
+    keyId: number;
+    position?: { x: number; y: number; width: number; height: number };
+  }[];
+};
 export type User = { username: string; password: string };
 export type Project = { id: number; name: string };
 
@@ -183,7 +193,7 @@ export class TolgeeApi {
   async keyScreenshots(
     projectId: number,
     keyId: number
-  ): Promise<{ id: number; keyReferences: { keyId: number }[] }[]> {
+  ): Promise<KeyScreenshot[]> {
     const data = await this.request(
       'GET',
       `projects/${projectId}/keys/${keyId}/screenshots`

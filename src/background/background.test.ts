@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { REFRESH_ALARM_PERIOD_MINUTES } from '../constants';
 
 const store = new Map<string, unknown>();
 const sent: { tabId: number; message: any }[] = [];
@@ -8,26 +7,13 @@ let messageListener: (
   sender: unknown,
   sendResponse: (r: unknown) => void
 ) => boolean | void;
-let alarmListener: (alarm: { name: string }) => void;
 
-const { alarmsGet, alarmsCreate, existingAlarm } = vi.hoisted(() => {
-  const state: { existing: { name: string } | undefined } = {
-    existing: undefined,
-  };
-  return {
-    alarmsGet: vi.fn(async () => state.existing),
-    alarmsCreate: vi.fn(async (name: string) => {
-      state.existing = { name };
-    }),
-    existingAlarm: state,
-  };
-});
-
-const { tabsGet } = vi.hoisted(() => ({
+const { tabsGet, tabsQuery } = vi.hoisted(() => ({
   tabsGet: vi.fn(async (id: number) => ({
     id,
     url: 'https://page.example/app',
   })),
+  tabsQuery: vi.fn(async () => [] as { id?: number; url?: string }[]),
 }));
 
 vi.mock('webextension-polyfill', () => ({
@@ -38,26 +24,15 @@ vi.mock('webextension-polyfill', () => ({
           messageListener = fn;
         },
       },
-      onStartup: { addListener: () => {} },
       getURL: (path: string) => `chrome-extension://test-extension/${path}`,
     },
     tabs: {
-      onRemoved: { addListener: () => {} },
-      onUpdated: { addListener: () => {} },
       get: tabsGet,
+      query: tabsQuery,
       sendMessage: vi.fn(async (tabId: number, message: unknown) => {
         sent.push({ tabId, message });
       }),
       captureVisibleTab: vi.fn(),
-    },
-    alarms: {
-      get: alarmsGet,
-      create: alarmsCreate,
-      onAlarm: {
-        addListener: (fn: typeof alarmListener) => {
-          alarmListener = fn;
-        },
-      },
     },
     action: {
       setIcon: vi.fn(),
@@ -98,7 +73,7 @@ const fetchMock = vi.fn(async () => ({
 vi.stubGlobal('fetch', fetchMock);
 
 // Import after the mocks: this triggers background.ts's module-load side effects (listener registration).
-const { ensureRefreshAlarm, REFRESH_ALARM } = await import('./background');
+await import('./background');
 
 const respond = (
   message: unknown,
@@ -118,6 +93,7 @@ const respond = (
 
 const future = () => Date.now() + 60 * 60 * 1000;
 const PAGE_TAB = {
+  url: 'https://page.example/app',
   tab: { id: 1, url: 'https://page.example/app', windowId: 1 },
 };
 // The popup opened as a tab rather than as the action popup.
@@ -129,6 +105,19 @@ const POPUP_TAB = {
     windowId: 1,
   },
 };
+
+const seedSession = (
+  overrides: Partial<Record<string, unknown>> = {},
+  key = 'oauth:https://app.tolgee.io:5'
+) =>
+  store.set(key, {
+    accessToken: 'tok',
+    refreshToken: 'rtok',
+    expiresAt: future(),
+    apiUrl: 'https://app.tolgee.io',
+    projectKey: '5',
+    ...overrides,
+  });
 
 describe('background message handling', () => {
   beforeEach(() => {
@@ -143,140 +132,10 @@ describe('background message handling', () => {
       id,
       url: 'https://page.example/app',
     }));
+    tabsQuery.mockReset().mockResolvedValue([]);
   });
 
-  it('OAUTH_TAB_CONNECTED registers the tab only from the marker, never from the page-supplied apiUrl alone', async () => {
-    await respond(
-      {
-        type: 'OAUTH_TAB_CONNECTED',
-        data: { apiUrl: 'https://app.tolgee.io' },
-      },
-      PAGE_TAB
-    );
-
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'stale',
-      refreshToken: 'r',
-      expiresAt: Date.now() - 1,
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
-    await alarmListener({ name: 'tolgee-oauth-refresh' });
-    expect(sent).toEqual([]);
-  });
-
-  it('OAUTH_TAB_CONNECTED registers the tab once a real marker exists for that origin, and pushes the current token immediately', async () => {
-    store.set('https://page.example', {
-      apiUrl: 'https://app.tolgee.io',
-      oauth: true,
-      projectKey: '5',
-    });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'still-fresh',
-      refreshToken: 'r',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
-
-    await respond(
-      {
-        type: 'OAUTH_TAB_CONNECTED',
-        data: { apiUrl: 'https://app.tolgee.io' },
-      },
-      PAGE_TAB
-    );
-
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      tabId: 1,
-      message: {
-        type: 'UPDATE_AUTH_TOKEN',
-        data: { authToken: 'still-fresh', projectKey: '5' },
-      },
-    });
-
-    sent.length = 0;
-    await alarmListener({ name: 'tolgee-oauth-refresh' });
-    expect(sent).toEqual([]);
-  });
-
-  it('OAUTH_TAB_DISCONNECTED unregisters the tab, so the alarm stops treating it as owning the session', async () => {
-    store.set('https://page.example', {
-      apiUrl: 'https://app.tolgee.io',
-      oauth: true,
-      projectKey: '5',
-    });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'still-fresh',
-      refreshToken: 'r',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
-    await respond(
-      {
-        type: 'OAUTH_TAB_CONNECTED',
-        data: { apiUrl: 'https://app.tolgee.io' },
-      },
-      PAGE_TAB
-    );
-    sent.length = 0;
-
-    await respond({ type: 'OAUTH_TAB_DISCONNECTED', data: {} }, PAGE_TAB);
-
-    // Make the session look stale, so the alarm WOULD refresh and push if it still treated the tab as registered.
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'old',
-      refreshToken: 'r',
-      expiresAt: Date.now() - 1,
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
-    await alarmListener({ name: 'tolgee-oauth-refresh' });
-    expect(sent).toEqual([]);
-  });
-
-  it('OAUTH_TAB_CONNECTED immediately reconciles a stale session, without waiting for the alarm (browser restart / navigate-away-and-back)', async () => {
-    store.set('https://page.example', {
-      apiUrl: 'https://app.tolgee.io',
-      oauth: true,
-      projectKey: '5',
-    });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'old',
-      refreshToken: 'r',
-      expiresAt: Date.now() - 1,
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
-    vi.spyOn(await import('../oauth/oauthClient'), 'refresh').mockResolvedValue(
-      {
-        accessToken: 'fresh',
-        refreshToken: 'r2',
-        expiresAt: future(),
-      }
-    );
-
-    await respond(
-      {
-        type: 'OAUTH_TAB_CONNECTED',
-        data: { apiUrl: 'https://app.tolgee.io' },
-      },
-      PAGE_TAB
-    );
-
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      tabId: 1,
-      message: {
-        type: 'UPDATE_AUTH_TOKEN',
-        data: { authToken: 'fresh', projectKey: '5' },
-      },
-    });
-  });
-
-  it('OAUTH_LOGIN responds with the access token and keeps the channel open (returns true)', async () => {
+  it('OAUTH_LOGIN reports the connection without the token and keeps the channel open (returns true)', async () => {
     login.mockResolvedValue({
       accessToken: 'tok',
       refreshToken: 'r',
@@ -288,10 +147,11 @@ describe('background message handling', () => {
       data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
 
-    expect(res).toEqual({ accessToken: 'tok' });
+    expect(res).toEqual({ connected: true });
+    expect(JSON.stringify(res)).not.toContain('tok');
   });
 
-  it('OAUTH_LOGIN actually stores the session, writes the marker, and injects credentials into the connecting tab', async () => {
+  it('OAUTH_LOGIN stores the session, writes the marker, and marks the connecting tab as signed in without a token', async () => {
     login.mockResolvedValue({
       accessToken: 'tok',
       refreshToken: 'r',
@@ -315,46 +175,17 @@ describe('background message handling', () => {
         tabId: 1,
         message: {
           type: 'SET_CREDENTIALS',
-          data: expect.objectContaining({ authToken: 'tok', projectId: 5 }),
+          data: {
+            apiUrl: 'https://app.tolgee.io',
+            oauth: true,
+            projectId: 5,
+            projectKey: '5',
+            pageOrigin: 'https://page.example',
+          },
         },
       },
     ]);
-  });
-
-  it('OAUTH_LOGIN pushes a refresh triggered here to every OTHER tab already registered for that session', async () => {
-    store.set('injectedTabs', {
-      2: {
-        apiUrl: 'https://app.tolgee.io',
-        pageOrigin: 'https://other-tab.example',
-        projectKey: '5',
-      },
-    });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'old',
-      refreshToken: 'r',
-      expiresAt: Date.now() - 1,
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
-    vi.spyOn(await import('../oauth/oauthClient'), 'refresh').mockResolvedValue(
-      {
-        accessToken: 'fresh',
-        refreshToken: 'r2',
-        expiresAt: future(),
-      }
-    );
-
-    await respond({
-      type: 'OAUTH_LOGIN',
-      data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
-    });
-
-    const pushToTab2 = sent.find(
-      (s) => s.tabId === 2 && s.message.type === 'UPDATE_AUTH_TOKEN'
-    );
-    expect(pushToTab2).toMatchObject({
-      message: { data: { authToken: 'fresh', projectKey: '5' } },
-    });
+    expect(JSON.stringify(sent)).not.toContain('tok');
   });
 
   it('OAUTH_LOGIN reports an error rather than hanging when login rejects', async () => {
@@ -394,13 +225,7 @@ describe('background message handling', () => {
   });
 
   it('OAUTH_LOGIN gets a fresh login when the existing session is confirmed unreachable for this project (403), and revokes it', async () => {
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'stale-token',
-      refreshToken: 'stale-refresh',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession({ accessToken: 'stale-token', refreshToken: 'stale-refresh' });
     fetchMock.mockResolvedValue({
       ok: false,
       status: 403,
@@ -417,7 +242,7 @@ describe('background message handling', () => {
       data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
 
-    expect(res).toEqual({ accessToken: 'fresh-tok' });
+    expect(res).toEqual({ connected: true });
     expect(login).toHaveBeenCalled();
     expect(revoke).toHaveBeenCalledWith(
       'https://app.tolgee.io',
@@ -428,14 +253,26 @@ describe('background message handling', () => {
     });
   });
 
-  it('OAUTH_LOGIN keeps reusing the existing session when the reachability probe fails with a 5xx (inconclusive, not a confirmed answer)', async () => {
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'still-good',
-      refreshToken: 'r',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
+  it('OAUTH_LOGIN probes the project with the session Bearer token through the shared authorized fetch', async () => {
+    seedSession({ accessToken: 'still-good' });
+
+    await respond({
+      type: 'OAUTH_LOGIN',
+      data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://app.tolgee.io/v2/projects/5',
+      expect.objectContaining({
+        method: 'GET',
+        headers: { Authorization: 'Bearer still-good' },
+      })
+    );
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it('OAUTH_LOGIN keeps reusing the existing session when the reachability probe fails with a 5xx (inconclusive, not a confirmed answer)', async () => {
+    seedSession({ accessToken: 'still-good' });
     fetchMock.mockResolvedValue({
       ok: false,
       status: 503,
@@ -447,12 +284,15 @@ describe('background message handling', () => {
       data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
 
-    expect(res).toEqual({ accessToken: 'still-good' });
+    expect(res).toEqual({ connected: true });
     expect(login).not.toHaveBeenCalled();
     expect(revoke).not.toHaveBeenCalled();
+    expect(store.get('oauth:https://app.tolgee.io:5')).toMatchObject({
+      accessToken: 'still-good',
+    });
   });
 
-  it('OAUTH_LOGIN does not write the marker or inject credentials when the tab navigated to a different origin during sign-in, and reports an error', async () => {
+  it('OAUTH_LOGIN does not write the marker or mark the tab when it navigated to a different origin during sign-in, and reports an error', async () => {
     login.mockResolvedValue({
       accessToken: 'tok',
       refreshToken: 'r',
@@ -481,7 +321,7 @@ describe('background message handling', () => {
     });
     expect(store.has('https://page.example')).toBe(false);
     expect(store.has('https://elsewhere.example')).toBe(false);
-    expect(sent.some((s) => s.message.type === 'SET_CREDENTIALS')).toBe(false);
+    expect(sent).toEqual([]);
   });
 
   it('OAUTH_LOGIN cleans up the previous session when this origin reconnects under a different declared project', async () => {
@@ -490,13 +330,10 @@ describe('background message handling', () => {
       oauth: true,
       projectKey: '7',
     });
-    store.set('oauth:https://app.tolgee.io:7', {
-      accessToken: 'old-tok',
-      refreshToken: 'old-r',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '7',
-    });
+    seedSession(
+      { accessToken: 'old-tok', refreshToken: 'old-r', projectKey: '7' },
+      'oauth:https://app.tolgee.io:7'
+    );
     login.mockResolvedValue({
       accessToken: 'new-tok',
       refreshToken: 'new-r',
@@ -548,13 +385,7 @@ describe('background message handling', () => {
   });
 
   it("OAUTH_LOGIN gets a fresh login when the existing session's grant itself is dead (401), and revokes it", async () => {
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'stale-token',
-      refreshToken: 'stale-refresh',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession({ accessToken: 'stale-token', refreshToken: 'stale-refresh' });
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
@@ -571,7 +402,7 @@ describe('background message handling', () => {
       data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
 
-    expect(res).toEqual({ accessToken: 'fresh-tok' });
+    expect(res).toEqual({ connected: true });
     expect(login).toHaveBeenCalled();
     expect(revoke).toHaveBeenCalledWith(
       'https://app.tolgee.io',
@@ -580,13 +411,7 @@ describe('background message handling', () => {
   });
 
   it('OAUTH_LOGIN keeps reusing the existing session when the reachability probe rejects with a network error (inconclusive, not a confirmed answer)', async () => {
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'still-good',
-      refreshToken: 'r',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession({ accessToken: 'still-good' });
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
 
     const res = await respond({
@@ -594,18 +419,16 @@ describe('background message handling', () => {
       data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
 
-    expect(res).toEqual({ accessToken: 'still-good' });
+    expect(res).toEqual({ connected: true });
     expect(login).not.toHaveBeenCalled();
     expect(revoke).not.toHaveBeenCalled();
   });
 
   it('OAUTH_LOGIN revokes the old session only AFTER a fresh login replaces it, when the refresh itself failed transiently (ambiguous, not a confirmed rejection)', async () => {
-    store.set('oauth:https://app.tolgee.io:5', {
+    seedSession({
       accessToken: 'old-tok',
       refreshToken: 'old-r',
       expiresAt: Date.now() - 1,
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
     });
     vi.spyOn(await import('../oauth/oauthClient'), 'refresh').mockRejectedValue(
       new TypeError('Failed to fetch')
@@ -621,7 +444,7 @@ describe('background message handling', () => {
       data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
 
-    expect(res).toEqual({ accessToken: 'new-tok' });
+    expect(res).toEqual({ connected: true });
     expect(store.get('oauth:https://app.tolgee.io:5')).toMatchObject({
       accessToken: 'new-tok',
     });
@@ -629,12 +452,10 @@ describe('background message handling', () => {
   });
 
   it('OAUTH_LOGIN does NOT revoke the old session when the refresh failed transiently and the fresh login also fails, leaving the old session recoverable', async () => {
-    store.set('oauth:https://app.tolgee.io:5', {
+    seedSession({
       accessToken: 'old-tok',
       refreshToken: 'old-r',
       expiresAt: Date.now() - 1,
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
     });
     vi.spyOn(await import('../oauth/oauthClient'), 'refresh').mockRejectedValue(
       new TypeError('Failed to fetch')
@@ -654,14 +475,8 @@ describe('background message handling', () => {
     });
   });
 
-  it('OAUTH_LOGIN still returns the fresh token when revoking the superseded (confirmed-dead) session fails server-side', async () => {
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'stale-token',
-      refreshToken: 'stale-refresh',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+  it('OAUTH_LOGIN still reports the connection when revoking the superseded (confirmed-dead) session fails server-side', async () => {
+    seedSession({ accessToken: 'stale-token', refreshToken: 'stale-refresh' });
     fetchMock.mockResolvedValue({
       ok: false,
       status: 403,
@@ -679,7 +494,7 @@ describe('background message handling', () => {
       data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
 
-    expect(res).toEqual({ accessToken: 'fresh-tok' });
+    expect(res).toEqual({ connected: true });
     expect(login).toHaveBeenCalled();
   });
 
@@ -689,13 +504,7 @@ describe('background message handling', () => {
       oauth: true,
       projectKey: '5',
     });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'tok',
-      refreshToken: 'rtok',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession();
     revoke.mockRejectedValue(new Error('revoke endpoint down'));
 
     const res = await respond({
@@ -711,76 +520,13 @@ describe('background message handling', () => {
     expect(store.has('https://site-a.example')).toBe(false);
   });
 
-  it('OAUTH_GET_TOKEN answers null (not a hang or throw) when the origin has no marker', async () => {
-    const res = await respond({
-      type: 'OAUTH_GET_TOKEN',
-      data: {
-        apiUrl: 'https://app.tolgee.io',
-        pageOrigin: 'https://page.example',
-      },
-    });
-
-    expect(res).toEqual({ accessToken: null });
-  });
-
-  it('OAUTH_GET_TOKEN resolves the session from the origin marker, not from a caller-supplied key, and pushes a refresh it triggers to every OTHER tab registered for that session', async () => {
-    store.set('https://page.example', {
-      apiUrl: 'https://app.tolgee.io',
-      oauth: true,
-      projectKey: '5',
-    });
-    store.set('injectedTabs', {
-      2: {
-        apiUrl: 'https://app.tolgee.io',
-        pageOrigin: 'https://other-tab.example',
-        projectKey: '5',
-      },
-    });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'old',
-      refreshToken: 'r',
-      expiresAt: Date.now() - 1,
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
-    vi.spyOn(await import('../oauth/oauthClient'), 'refresh').mockResolvedValue(
-      {
-        accessToken: 'fresh',
-        refreshToken: 'r2',
-        expiresAt: future(),
-      }
-    );
-
-    const res = await respond({
-      type: 'OAUTH_GET_TOKEN',
-      data: {
-        apiUrl: 'https://app.tolgee.io',
-        pageOrigin: 'https://page.example',
-      },
-    });
-
-    expect(res).toEqual({ accessToken: 'fresh' });
-    const pushToTab2 = sent.find(
-      (s) => s.tabId === 2 && s.message.type === 'UPDATE_AUTH_TOKEN'
-    );
-    expect(pushToTab2).toMatchObject({
-      message: { data: { authToken: 'fresh', projectKey: '5' } },
-    });
-  });
-
   it('OAUTH_LOGOUT resolves the session from the origin marker, revokes the grant and clears the marker when the local session actually clears', async () => {
     store.set('https://site-a.example', {
       apiUrl: 'https://app.tolgee.io',
       oauth: true,
       projectKey: '5',
     });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'tok',
-      refreshToken: 'rtok',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession();
 
     await respond({
       type: 'OAUTH_LOGOUT',
@@ -795,36 +541,27 @@ describe('background message handling', () => {
     expect(store.has('https://site-a.example')).toBe(false);
   });
 
-  it('OAUTH_LOGOUT drops the origin marker and tab registration before a tab is told to clear, so its reload cannot get the token re-applied', async () => {
+  it('OAUTH_LOGOUT clears every tab of the origin, matched by origin (scheme, host and port), after the marker is gone', async () => {
     store.set('https://site-a.example', {
       apiUrl: 'https://app.tolgee.io',
       oauth: true,
       projectKey: '5',
     });
-    store.set('injectedTabs', {
-      7: {
-        apiUrl: 'https://app.tolgee.io',
-        pageOrigin: 'https://site-a.example',
-        projectKey: '5',
-      },
-    });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'tok',
-      refreshToken: 'rtok',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession();
+    tabsQuery.mockResolvedValue([
+      { id: 7, url: 'https://site-a.example/page' },
+      { id: 8, url: 'https://site-a.example/other?x=1' },
+      { id: 9, url: 'https://site-a.example:8443/page' },
+      { id: 10, url: 'http://site-a.example/page' },
+      { id: 11, url: 'https://site-b.example/page' },
+      { id: 12, url: 'chrome-extension://test-extension/index.html' },
+      { id: 13 },
+    ]);
     const browser = (await import('webextension-polyfill')).default;
-    let atClear: { marker: boolean; registered: boolean } | undefined;
-    (browser.tabs.sendMessage as Mock).mockImplementationOnce(
+    const markerAtClear: boolean[] = [];
+    (browser.tabs.sendMessage as Mock).mockImplementation(
       async (tabId: number, message: unknown) => {
-        atClear = {
-          marker: store.has('https://site-a.example'),
-          registered: Boolean(
-            (store.get('injectedTabs') as Record<string, unknown>)?.[7]
-          ),
-        };
+        markerAtClear.push(store.has('https://site-a.example'));
         sent.push({ tabId, message });
       }
     );
@@ -837,17 +574,34 @@ describe('background message handling', () => {
       },
     });
 
-    expect(sent).toEqual([
-      {
-        tabId: 7,
-        message: {
-          type: 'SET_CREDENTIALS',
-          data: { pageOrigin: 'https://site-a.example' },
-        },
-      },
-    ]);
-    expect(atClear).toEqual({ marker: false, registered: false });
+    expect(sent.map((s) => s.tabId).sort()).toEqual([7, 8]);
+    expect(sent[0].message).toEqual({
+      type: 'SET_CREDENTIALS',
+      data: { pageOrigin: 'https://site-a.example' },
+    });
+    expect(markerAtClear).toEqual([false, false]);
     expect(store.has('oauth:https://app.tolgee.io:5')).toBe(false);
+  });
+
+  it('OAUTH_LOGOUT clears the tabs of a dev origin with a port', async () => {
+    store.set('http://localhost:5173', {
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectKey: '5',
+    });
+    seedSession();
+    tabsQuery.mockResolvedValue([
+      { id: 1, url: 'http://localhost:5173/' },
+      { id: 2, url: 'http://localhost:5174/' },
+      { id: 3, url: 'http://localhost/' },
+    ]);
+
+    await respond({
+      type: 'OAUTH_LOGOUT',
+      data: { pageOrigin: 'http://localhost:5173' },
+    });
+
+    expect(sent.map((s) => s.tabId)).toEqual([1]);
   });
 
   it('OAUTH_LOGOUT does not revoke when disconnecting site is not the only reference to a shared session', async () => {
@@ -861,13 +615,7 @@ describe('background message handling', () => {
       oauth: true,
       projectKey: '5',
     });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'tok',
-      refreshToken: 'rtok',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession();
 
     await respond({
       type: 'OAUTH_LOGOUT',
@@ -889,13 +637,7 @@ describe('background message handling', () => {
       oauth: true,
       projectKey: '5',
     });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'tok',
-      refreshToken: 'rtok',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession();
 
     await respond({
       type: 'OAUTH_LOGOUT',
@@ -907,47 +649,13 @@ describe('background message handling', () => {
     expect(store.has('https://site-a.example')).toBe(true);
   });
 
-  it("OAUTH_GET_TOKEN from a tab resolves the origin from the sender tab, so a claimed pageOrigin cannot read another origin's token", async () => {
-    store.set('https://other.example', {
-      apiUrl: 'https://app.tolgee.io',
-      oauth: true,
-      projectKey: '5',
-    });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'tok',
-      refreshToken: 'rtok',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
-
-    const res = await respond(
-      {
-        type: 'OAUTH_GET_TOKEN',
-        data: {
-          apiUrl: 'https://app.tolgee.io',
-          pageOrigin: 'https://other.example',
-        },
-      },
-      PAGE_TAB
-    );
-
-    expect(res).toEqual({ accessToken: null });
-  });
-
   it("OAUTH_LOGOUT from a tab acts on the sender tab origin, so a claimed pageOrigin cannot end another origin's session", async () => {
     store.set('https://other.example', {
       apiUrl: 'https://app.tolgee.io',
       oauth: true,
       projectKey: '5',
     });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'tok',
-      refreshToken: 'rtok',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession();
 
     await respond(
       {
@@ -971,13 +679,7 @@ describe('background message handling', () => {
       oauth: true,
       projectKey: '5',
     });
-    store.set('oauth:https://app.tolgee.io:5', {
-      accessToken: 'tok',
-      refreshToken: 'rtok',
-      expiresAt: future(),
-      apiUrl: 'https://app.tolgee.io',
-      projectKey: '5',
-    });
+    seedSession();
 
     await respond(
       {
@@ -995,57 +697,151 @@ describe('background message handling', () => {
     expect(store.has('https://site-a.example')).toBe(false);
   });
 
-  it("does not push a session's token to a tab registered for a different project", async () => {
-    store.set('injectedTabs', {
-      2: {
+  describe('OAUTH_SESSION_STATE', () => {
+    const ask = (
+      data: Record<string, unknown> = {
         apiUrl: 'https://app.tolgee.io',
-        pageOrigin: 'https://unrelated.example',
-        projectKey: '9',
+        projectKey: '5',
+        pageOrigin: 'https://page.example',
       },
+      sender = {}
+    ) => respond({ type: 'OAUTH_SESSION_STATE', data }, sender);
+
+    it('answers inactive (not a hang, a throw, or a token) when the origin has no marker', async () => {
+      expect(await ask()).toEqual({ active: false });
     });
-    store.set('oauth:https://app.tolgee.io:9', {
-      accessToken: 'project-9-token',
-      refreshToken: 'r9',
-      expiresAt: future(),
+
+    it('answers active for a marker whose session is fresh, without pushing anything to any tab', async () => {
+      store.set('https://page.example', {
+        apiUrl: 'https://app.tolgee.io',
+        oauth: true,
+        projectKey: '5',
+      });
+      seedSession();
+
+      const res = await ask();
+
+      expect(res).toEqual({ active: true });
+      expect(JSON.stringify(res)).not.toContain('tok');
+      expect(sent).toEqual([]);
+    });
+
+    it('refreshes a stale session on the way and answers active', async () => {
+      store.set('https://page.example', {
+        apiUrl: 'https://app.tolgee.io',
+        oauth: true,
+        projectKey: '5',
+      });
+      seedSession({ accessToken: 'old', expiresAt: Date.now() - 1 });
+      vi.spyOn(
+        await import('../oauth/oauthClient'),
+        'refresh'
+      ).mockResolvedValue({
+        accessToken: 'fresh',
+        refreshToken: 'r2',
+        expiresAt: future(),
+      });
+
+      expect(await ask()).toEqual({ active: true });
+      expect(store.get('oauth:https://app.tolgee.io:5')).toMatchObject({
+        accessToken: 'fresh',
+      });
+      expect(sent).toEqual([]);
+    });
+
+    it('answers inactive when the session is gone or cannot be refreshed', async () => {
+      store.set('https://page.example', {
+        apiUrl: 'https://app.tolgee.io',
+        oauth: true,
+        projectKey: '5',
+      });
+      expect(await ask()).toEqual({ active: false });
+
+      seedSession({ accessToken: 'old', expiresAt: Date.now() - 1 });
+      vi.spyOn(
+        await import('../oauth/oauthClient'),
+        'refresh'
+      ).mockRejectedValue(new TypeError('Failed to fetch'));
+      expect(await ask()).toEqual({ active: false });
+    });
+
+    it('answers inactive when the popup asks about another server or project than the marker holds', async () => {
+      store.set('https://page.example', {
+        apiUrl: 'https://app.tolgee.io',
+        oauth: true,
+        projectKey: '5',
+      });
+      seedSession();
+
+      expect(
+        await ask({
+          apiUrl: 'https://other.tolgee.io',
+          projectKey: '5',
+          pageOrigin: 'https://page.example',
+        })
+      ).toEqual({ active: false });
+      expect(
+        await ask({
+          apiUrl: 'https://app.tolgee.io',
+          projectKey: '9',
+          pageOrigin: 'https://page.example',
+        })
+      ).toEqual({ active: false });
+    });
+
+    it("from a tab resolves the origin from the sender tab, so a claimed pageOrigin cannot probe another origin's session", async () => {
+      store.set('https://other.example', {
+        apiUrl: 'https://app.tolgee.io',
+        oauth: true,
+        projectKey: '5',
+      });
+      seedSession();
+
+      expect(
+        await ask(
+          {
+            apiUrl: 'https://app.tolgee.io',
+            projectKey: '5',
+            pageOrigin: 'https://other.example',
+          },
+          PAGE_TAB
+        )
+      ).toEqual({ active: false });
+    });
+  });
+
+  it('routes TOLGEE_API_REQUEST to the proxy and keeps the channel open', async () => {
+    store.set('https://page.example', {
       apiUrl: 'https://app.tolgee.io',
-      projectKey: '9',
+      oauth: true,
+      projectKey: '5',
     });
-    login.mockResolvedValue({
-      accessToken: 'project-5-token',
-      refreshToken: 'r5',
-      expiresAt: future(),
+    seedSession();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => '{"name":"Jo"}',
+    } as any);
+
+    const res = await respond(
+      {
+        type: 'TOLGEE_API_REQUEST',
+        data: {
+          id: 'r1',
+          path: '/v2/projects/5/keys',
+          method: 'GET',
+          headers: {},
+          apiUrl: 'https://app.tolgee.io',
+          projectKey: '5',
+        },
+      },
+      PAGE_TAB
+    );
+
+    expect(res).toMatchObject({
+      response: { status: 200, body: '{"name":"Jo"}' },
     });
-
-    await respond({
-      type: 'OAUTH_LOGIN',
-      data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
-    });
-
-    expect(sent.some((s) => s.tabId === 2)).toBe(false);
-  });
-});
-
-describe('refresh alarm scheduling', () => {
-  beforeEach(() => {
-    alarmsGet.mockClear();
-    alarmsCreate.mockClear();
-  });
-
-  it('creates the alarm with the documented name and period when none exists', async () => {
-    existingAlarm.existing = undefined;
-
-    await ensureRefreshAlarm();
-
-    expect(alarmsCreate).toHaveBeenCalledWith(REFRESH_ALARM, {
-      periodInMinutes: REFRESH_ALARM_PERIOD_MINUTES,
-    });
-  });
-
-  it('does not re-create the alarm when one already exists (MV3 re-runs this on every worker wake)', async () => {
-    existingAlarm.existing = { name: REFRESH_ALARM };
-
-    await ensureRefreshAlarm();
-
-    expect(alarmsCreate).not.toHaveBeenCalled();
   });
 });

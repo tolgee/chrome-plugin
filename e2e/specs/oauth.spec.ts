@@ -1,5 +1,6 @@
 import { expect, test } from '../fixtures/extension';
 import {
+  collectWorkerRequests,
   completeAuthorization,
   installIdentityStub,
   storedOAuthSessions,
@@ -10,11 +11,12 @@ import {
   openInContextDialog,
   openTestapp,
   sessionItem,
+  TITLE,
 } from '../fixtures/testapp';
 
 requireOAuthServer();
 
-test('signs in with OAuth, edits in context and signs out', async ({
+test('signs in with OAuth, edits in context through the extension and signs out', async ({
   page,
   context,
   worker,
@@ -57,15 +59,32 @@ test('signs in with OAuth, edits in context and signs out', async ({
   expect(await sessionItem(page, '__tolgee_projectId')).toBe(
     String(app.projectId)
   );
+  expect(await sessionItem(page, '__tolgee_oauth')).toBe('1');
 
-  const requests = collectProjectRequests(page);
+  // The page itself never talks to the project API; the worker does, with the session token.
+  const pageRequests = collectProjectRequests(page);
+  const workerRequests = collectWorkerRequests(context);
   await openInContextDialog(page);
-  expect(requests.length).toBeGreaterThan(0);
-  for (const request of requests) {
-    const headers = request.headers();
+  expect(pageRequests).toEqual([]);
+  expect(workerRequests.length).toBeGreaterThan(0);
+  for (const request of workerRequests) {
+    const headers = await request.allHeaders();
     expect(headers['authorization'], request.url()).toMatch(/^Bearer /);
     expect(headers['x-api-key'], request.url()).toBeUndefined();
   }
+
+  // A hard reload renders through the worker right away, not after the page's 35 s "extension unavailable" fallback.
+  const afterReload = collectWorkerRequests(context, (request) =>
+    request.url().includes(`/v2/projects/${app.projectId}/translations/`)
+  );
+  await page.reload();
+  await expect(page.locator(TITLE)).toBeVisible();
+  await expect
+    .poll(async () => (await afterReload[0]?.response())?.status(), {
+      timeout: 10_000,
+      message: 'the worker to load the in-context translations after a reload',
+    })
+    .toBe(200);
 
   const revokeCalls: string[] = [];
   context.on('request', (request) => {
@@ -84,7 +103,7 @@ test('signs in with OAuth, edits in context and signs out', async ({
     timeout: 30_000,
   });
   expect(await storedOAuthSessions(worker)).toHaveLength(0);
-  expect(await sessionItem(page, '__tolgee_authToken')).toBeNull();
+  expect(await sessionItem(page, '__tolgee_oauth')).toBeNull();
   // Revocation is the worker's fire-and-forget last step; the token being dead server-side is what proves it ran.
   await expect
     .poll(

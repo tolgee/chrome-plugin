@@ -1,7 +1,6 @@
 import browser from 'webextension-polyfill';
 import {
   OAUTH_CLIENT_ID,
-  OAUTH_REFRESH_SKEW_MS,
   OAUTH_REQUEST_TIMEOUT_MS,
   OAUTH_SCOPES,
 } from '../constants';
@@ -127,7 +126,8 @@ export const revoke = async (apiUrl: string, token: string): Promise<void> => {
   }
 };
 
-const DEFAULT_TOKEN_LIFETIME_SECONDS = OAUTH_REFRESH_SKEW_MS / 1000 + 60;
+// Comfortably past OAUTH_REFRESH_SKEW_MS, so a token endpoint that omits expires_in still yields a usable token.
+const DEFAULT_TOKEN_LIFETIME_SECONDS = 7 * 60;
 
 const postToken = async (
   base: string,

@@ -152,6 +152,48 @@ test('reports an old SDK without the in-context UI as legacy', async ({
   );
 });
 
+// An SDK from before the proxied-request protocol would hold no session after a sign-in: the popup says so instead
+// of connecting, and leaves the api key path open.
+test('refuses OAuth sign-in on an SDK without proxy support', async ({
+  page,
+  state,
+  openPopup,
+}) => {
+  const app = state.apps[0];
+  const url = `${app.url}/__e2e_old-sdk.html`;
+  await servePage(page, url, PLAIN_PAGE_HTML);
+  await page.goto(url);
+  await waitForContentScript(page);
+
+  // What a current in-context SDK without the proxy protocol sends: uiPresent, but no protocolVersion.
+  await page.evaluate(
+    ({ apiUrl, projectId }) =>
+      window.postMessage(
+        {
+          type: 'TOLGEE_READY',
+          data: {
+            uiPresent: true,
+            mode: 'production',
+            config: { apiUrl, apiKey: '', projectId },
+          },
+        },
+        '*'
+      ),
+    { apiUrl: state.tolgeeUrl, projectId: app.projectId }
+  );
+
+  const popup = await openPopup(page);
+  await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
+  await expect(popup.getByTestId('sdk-too-old')).toContainText(
+    'Update the Tolgee SDK to sign in'
+  );
+  await expect(popup.getByTestId('sdk-too-old')).toContainText(
+    'needs @tolgee/web'
+  );
+  await expect(popup.getByTestId('connect-oauth')).toHaveCount(0);
+  await expect(popup.getByTestId('use-api-key')).toBeVisible();
+});
+
 test('reports two Tolgee instances on a page embedding another one', async ({
   page,
   state,

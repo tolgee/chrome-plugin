@@ -1,20 +1,33 @@
 import { normalizeUrl } from '../oauth/url';
 import { BranchOption } from './reducer';
+import { proxyFetch, ProxyFetchResponse, ProxyTarget } from './proxyFetch';
 import { isOAuth, Values } from './tools';
 
 export const credentialHeaders = (values: Values): Record<string, string> =>
+  isOAuth(values) ? {} : { 'X-API-Key': values.apiKey ?? '' };
+
+// An OAuth session never leaves the service worker, so its requests go through it; an api key is sent directly.
+export const credentialFetch = (
+  values: Values,
+  path: string,
+  target: ProxyTarget
+): Promise<ProxyFetchResponse> =>
   isOAuth(values)
-    ? { Authorization: `Bearer ${values.authToken}` }
-    : { 'X-API-Key': values.apiKey ?? '' };
+    ? proxyFetch(target, path)
+    : fetch(`${normalizeUrl(values.apiUrl ?? '')}${path}`, {
+        headers: credentialHeaders(values),
+      });
 
 export const fetchBranches = async (
   projectId: number,
-  values: Values
+  values: Values,
+  target: ProxyTarget
 ): Promise<BranchOption[] | null> => {
-  const url = normalizeUrl(values.apiUrl ?? '');
-  const r = await fetch(`${url}/v2/projects/${projectId}/branches?size=100`, {
-    headers: credentialHeaders(values),
-  });
+  const r = await credentialFetch(
+    values,
+    `/v2/projects/${projectId}/branches?size=100`,
+    target
+  );
   if (!r.ok) {
     throw new Error('Failed to load branches');
   }

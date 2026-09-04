@@ -63,7 +63,7 @@ describe('detector reducer', () => {
     it('preserves a restored OAuth session instead of overwriting it with the page config', () => {
       const restored: State = {
         ...initialState,
-        values: { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' },
+        values: { apiUrl: 'https://app.tolgee.io', oauth: true },
       };
       const next = reduce(restored, {
         type: 'CHANGE_LIB_CONFIG',
@@ -74,7 +74,7 @@ describe('detector reducer', () => {
           frameId: 0,
         },
       });
-      expect(next.values?.authToken).toBe('jwt');
+      expect(next.values?.oauth).toBe(true);
       expect(next.values?.apiKey).toBeUndefined();
     });
 
@@ -161,17 +161,17 @@ describe('detector reducer', () => {
         type: 'OAUTH_APPLY',
         payload: {
           apiUrl: 'https://app.tolgee.io',
-          authToken: 'jwt',
           projectId: 7,
           projectKey: '7',
         },
       });
       expect(next.values).toEqual({
         apiUrl: 'https://app.tolgee.io',
-        authToken: 'jwt',
+        oauth: true,
         projectId: 7,
         projectKey: '7',
       });
+      expect(JSON.stringify(next)).not.toContain('token');
       expect(next.appliedValues).toEqual(next.values);
       expect(next.storedValues).toEqual(next.values);
       expect(apply).toHaveBeenCalledOnce();
@@ -214,7 +214,7 @@ describe('detector reducer', () => {
         ...initialState,
         values: {
           apiUrl: 'https://app.tolgee.io',
-          authToken: 'jwt',
+          oauth: true,
           projectId: 7,
           branch: 'feature',
         },
@@ -231,7 +231,7 @@ describe('detector reducer', () => {
         ...initialState,
         values: {
           apiUrl: 'https://app.tolgee.io',
-          authToken: 'jwt',
+          oauth: true,
           projectId: 7,
           branch: 'feature',
         },
@@ -247,13 +247,13 @@ describe('detector reducer', () => {
         ...initialState,
         values: {
           apiUrl: 'https://app.tolgee.io',
-          authToken: 'jwt',
+          oauth: true,
           projectId: 7,
           branch: 'feature',
         },
         appliedValues: {
           apiUrl: 'https://app.tolgee.io',
-          authToken: 'jwt',
+          oauth: true,
           projectId: 7,
           branch: 'feature',
         },
@@ -267,23 +267,23 @@ describe('detector reducer', () => {
       const next = reduce(cleared, { type: 'APPLY_VALUES' });
       expect(next.appliedValues?.branch).toBeFalsy();
       expect(next.storedValues?.branch).toBeFalsy();
-      expect(next.appliedValues?.authToken).toBe('jwt');
+      expect(next.appliedValues?.oauth).toBe(true);
       expect(apply).toHaveBeenCalledOnce();
     });
 
-    it('preserves the OAuth token and project (Enter in the Server field must not drop them)', () => {
+    it('preserves the signed-in flag and project (Enter in the Server field must not drop them)', () => {
       const oauth: State = {
         ...initialState,
         values: {
           apiUrl: 'https://app.tolgee.io',
-          authToken: 'access-token',
+          oauth: true,
           projectId: 7,
         },
       };
       const next = reduce(oauth, { type: 'APPLY_VALUES' });
-      expect(next.appliedValues?.authToken).toBe('access-token');
+      expect(next.appliedValues?.oauth).toBe(true);
       expect(next.appliedValues?.projectId).toBe(7);
-      expect(next.storedValues?.authToken).toBe('access-token');
+      expect(next.storedValues?.oauth).toBe(true);
       expect(next.storedValues?.projectId).toBe(7);
     });
   });
@@ -369,7 +369,7 @@ describe('detector reducer', () => {
   describe('RESOLVE_PROJECT', () => {
     const connected: State = {
       ...initialState,
-      values: { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' },
+      values: { apiUrl: 'https://app.tolgee.io', oauth: true, projectKey: '7' },
     };
 
     it('binds the resolved declared project into the stored session without applying it while switched off', () => {
@@ -396,7 +396,7 @@ describe('detector reducer', () => {
     it('re-applies the bound project when the session is currently applied', () => {
       const applied: State = {
         ...connected,
-        appliedValues: { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' },
+        appliedValues: { apiUrl: 'https://app.tolgee.io', oauth: true },
       };
       const next = reduce(applied, {
         type: 'RESOLVE_PROJECT',
@@ -418,6 +418,31 @@ describe('detector reducer', () => {
       expect(next.declaredProjectInaccessible).toBe(true);
       expect(next.declaredProject).toBeNull();
       expect(next.values?.projectId).toBeUndefined();
+      expect(apply).not.toHaveBeenCalled();
+    });
+
+    // An all-projects grant can resolve a project the session is not keyed to; the worker only proxies the connected
+    // project, so applying it would leave the popup Connected while every request failed.
+    it('treats a resolved project outside the connected session as inaccessible rather than applying it', () => {
+      const applied: State = {
+        ...connected,
+        appliedValues: {
+          apiUrl: 'https://app.tolgee.io',
+          oauth: true,
+          projectKey: '7',
+        },
+      };
+      const next = reduce(applied, {
+        type: 'RESOLVE_PROJECT',
+        payload: {
+          project: { id: 9, name: 'Other', branchingEnabled: false },
+          inaccessible: false,
+        },
+      });
+      expect(next.declaredProject).toBeNull();
+      expect(next.declaredProjectInaccessible).toBe(true);
+      expect(next.values?.projectId).toBeUndefined();
+      expect(next.appliedValues).toEqual(applied.appliedValues);
       expect(apply).not.toHaveBeenCalled();
     });
   });

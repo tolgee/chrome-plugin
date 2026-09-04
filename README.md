@@ -61,5 +61,16 @@ Or visit our main GitHub page: [https://github.com/tolgee/tolgee-platform](https
 
  1. Install Tolgee Tools plugin
  2. Go to the production version of your website, which is using Tolgee SDK
- 3. Click on Tolgee Tools extension and apply your API key
+ 3. Click on Tolgee Tools extension and sign in with your Tolgee account, or apply an API key
  4. You are done! In-context translating should work
+
+### Signing in with a Tolgee account
+
+Signing in needs the site to declare its `projectId` in the Tolgee SDK configuration and `@tolgee/web` 7.2.0 or
+newer. The extension signs you in through Tolgee's OAuth authorization server and keeps the access token in its own
+service worker only. The page never receives it: the SDK hands every Tolgee API request to the extension, which
+attaches the token, performs the request and returns the response. Screenshots are captured and uploaded by the
+extension too. A page can only reach the project it was signed in for, on the server it was signed in to; anything
+else is refused.
+
+On an older SDK the extension offers only the API key; update `@tolgee/web` to sign in.

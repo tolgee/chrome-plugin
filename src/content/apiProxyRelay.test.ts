@@ -191,6 +191,25 @@ describe('api proxy relay', () => {
     });
   });
 
+  it('answers the SDK readiness ping with the protocol version, from the page window and origin only', () => {
+    const { relay, posted, fromPage } = setup();
+    fromPage('TOLGEE_PROXY_PING', undefined);
+    relay.onPageMessage({
+      source: {},
+      origin: ORIGIN,
+      data: { type: 'TOLGEE_PROXY_PING' },
+    });
+    relay.onPageMessage({
+      source: SELF,
+      origin: 'https://evil.example',
+      data: { type: 'TOLGEE_PROXY_PING' },
+    });
+
+    expect(posted).toEqual([
+      { type: 'TOLGEE_PROXY_PONG', data: { protocolVersion: 2 } },
+    ]);
+  });
+
   it('ignores messages from another window, another origin, other types, or without a string id', async () => {
     const { relay, deps, fromPage } = setup();
     relay.onPageMessage({

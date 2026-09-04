@@ -1,13 +1,17 @@
-import type { Request } from '@playwright/test';
+import type { BrowserContext, Request } from '@playwright/test';
 import { apiAs } from '../fixtures/api';
 import { expect, type Page, test, type Worker } from '../fixtures/extension';
-import { signInThroughPopup } from '../fixtures/oauth';
+import { collectWorkerRequests, signInThroughPopup } from '../fixtures/oauth';
 import {
   IN_CONTEXT_DIALOG_TEXT,
   openInContextDialog,
   openTestapp,
 } from '../fixtures/testapp';
-import { API_KEY_SCOPES, type TolgeeApi } from '../setup/seed';
+import {
+  API_KEY_SCOPES,
+  type KeyScreenshot,
+  type TolgeeApi,
+} from '../setup/seed';
 import type { RunState } from '../setup/state';
 
 // The key behind the testapp's title (see importKeys in setup/seed.ts); the dialog opened by alt+clicking it.
@@ -16,6 +20,7 @@ const DEV_TOOLS = '#__tolgee_dev_tools';
 const SCOPES_WITHOUT_UPLOAD = API_KEY_SCOPES.filter(
   (scope) => scope !== 'screenshots.upload' && scope !== 'screenshots.delete'
 );
+const VIEWPORT = { width: 1280, height: 720 };
 
 type Capture = { windowId: unknown; dataUrl: string };
 
@@ -45,6 +50,43 @@ const spyOnCapture = (worker: Worker) =>
     };
   });
 
+type UploadEntry = {
+  name: string;
+  fileName?: string;
+  type?: string;
+  size?: number;
+};
+
+/** Wraps `fetch` in the worker, recording the multipart entries of every upload it sends. */
+const spyOnUploads = (worker: Worker) =>
+  worker.evaluate(() => {
+    const original = globalThis.fetch;
+    const uploads: UploadEntry[][] = [];
+    (globalThis as any).__e2eUploads = uploads;
+    globalThis.fetch = (input: any, init?: any) => {
+      if (init?.body instanceof FormData) {
+        const entries: UploadEntry[] = [];
+        init.body.forEach((value: any, name: string) => {
+          entries.push(
+            value instanceof Blob
+              ? {
+                  name,
+                  fileName: (value as File).name,
+                  type: value.type,
+                  size: value.size,
+                }
+              : { name, type: 'text' }
+          );
+        });
+        uploads.push(entries);
+      }
+      return original(input, init);
+    };
+  });
+
+const uploadsSent = (worker: Worker): Promise<UploadEntry[][]> =>
+  worker.evaluate(() => (globalThis as any).__e2eUploads ?? []);
+
 const captures = (worker: Worker): Promise<Capture[]> =>
   worker.evaluate(() =>
     ((globalThis as any).__e2eCaptures ?? []).map((c: Capture) => ({
@@ -53,29 +95,39 @@ const captures = (worker: Worker): Promise<Capture[]> =>
     }))
   );
 
-/** Records what the content script hands back to the SDK for TOLGEE_TAKE_SCREENSHOT. */
-const listenForScreenshotTaken = (page: Page) =>
+/** Records what the content scripts hand the SDK about a screenshot: the image itself (api key) or only the capture notice. */
+const listenForScreenshotMessages = (page: Page) =>
   page.evaluate(() => {
     const taken: string[] = [];
+    const captured: string[] = [];
     (window as any).__e2eScreenshotTaken = taken;
+    (window as any).__e2eScreenshotCaptured = captured;
     window.addEventListener('message', (event) => {
       if (event.data?.type === 'TOLGEE_SCREENSHOT_TAKEN') {
         taken.push(String(event.data.data).slice(0, 40));
       }
+      if (event.data?.type === 'TOLGEE_SCREENSHOT_CAPTURED') {
+        captured.push(JSON.stringify(event.data.data));
+      }
     });
   });
 
-const screenshotsTaken = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as any).__e2eScreenshotTaken ?? []);
+const screenshotMessages = (
+  page: Page
+): Promise<{ taken: string[]; captured: string[] }> =>
+  page.evaluate(() => ({
+    taken: (window as any).__e2eScreenshotTaken ?? [],
+    captured: (window as any).__e2eScreenshotCaptured ?? [],
+  }));
+
+const isUpload = (request: Request) =>
+  request.url().endsWith('/v2/image-upload') && request.method() === 'POST';
 
 /** The page's uploads to `/v2/image-upload` (CORS preflights carry no credentials and are ignored). */
 const collectUploads = (page: Page): Request[] => {
   const uploads: Request[] = [];
   page.on('request', (request) => {
-    if (
-      request.url().endsWith('/v2/image-upload') &&
-      request.method() === 'POST'
-    ) {
+    if (isUpload(request)) {
       uploads.push(request);
     }
   });
@@ -111,16 +163,21 @@ const connectWithApiKey = async (popup: Page, page: Page, apiKey: string) => {
 
 type Credential = 'api-key' | 'oauth';
 
-/** Takes one screenshot from the open dialog and checks every hop: worker capture, SDK message, upload, gallery. */
+/**
+ * Takes one screenshot from the open dialog and checks every hop: worker capture, what the SDK is told, who uploads
+ * (the page with an api key, the worker with an OAuth session), gallery.
+ */
 const takeScreenshotAndCheckHops = async (
   page: Page,
+  context: BrowserContext,
   worker: Worker,
   credential: Credential,
   apiKey?: string
 ) => {
   await spyOnCapture(worker);
-  await listenForScreenshotTaken(page);
-  const uploads = collectUploads(page);
+  await listenForScreenshotMessages(page);
+  const pageUploads = collectUploads(page);
+  const workerUploads = collectWorkerRequests(context, isUpload);
 
   await takeScreenshotButton(page).click();
   await expect(galleryThumbnails(page)).toHaveCount(1);
@@ -132,10 +189,27 @@ const takeScreenshotAndCheckHops = async (
   expect(captured).toHaveLength(1);
   expect(typeof captured[0].windowId).toBe('number');
   expect(captured[0].dataUrl).toMatch(/^data:image\/(jpeg|png);base64,/);
-  expect(await screenshotsTaken(page)).toEqual([captured[0].dataUrl]);
 
-  expect(uploads).toHaveLength(1);
-  const headers = await uploads[0].allHeaders();
+  const messages = await screenshotMessages(page);
+  let upload: Request;
+  if (credential === 'api-key') {
+    expect(messages.taken).toEqual([captured[0].dataUrl]);
+    expect(messages.captured).toEqual([]);
+    expect(pageUploads).toHaveLength(1);
+    expect(workerUploads).toHaveLength(0);
+    upload = pageUploads[0];
+  } else {
+    // The image never crosses to the page: it only hears that the capture is done.
+    expect(messages.taken).toEqual([]);
+    expect(messages.captured).toHaveLength(1);
+    expect(JSON.parse(messages.captured[0])).toEqual({
+      id: expect.any(String),
+    });
+    expect(pageUploads).toHaveLength(0);
+    expect(workerUploads).toHaveLength(1);
+    upload = workerUploads[0];
+  }
+  const headers = await upload.allHeaders();
   expect(headers['content-type']).toMatch(/^multipart\/form-data; boundary=/);
   if (credential === 'api-key') {
     expect(headers['x-api-key']).toBe(apiKey);
@@ -144,7 +218,7 @@ const takeScreenshotAndCheckHops = async (
     expect(headers['authorization']).toMatch(/^Bearer /);
     expect(headers['x-api-key']).toBeUndefined();
   }
-  expect((await uploads[0].response())?.status()).toBe(201);
+  expect((await upload.response())?.status()).toBe(201);
 };
 
 const dialogTitle = (page: Page) =>
@@ -166,6 +240,14 @@ const saveAndReadScreenshots = async (
     screenshots: await api.keyScreenshots(projectId, keyId!),
   };
 };
+
+// What the platform derived from the upload: the image size and where the key sits in it, both computed on the
+// uploading side (the page with an api key, the worker with an OAuth session).
+const geometryOf = (screenshot: KeyScreenshot) => ({
+  width: screenshot.width,
+  height: screenshot.height,
+  positions: screenshot.keyReferences.map((ref) => ref.position),
+});
 
 let api: TolgeeApi;
 const createdApiKeyIds: number[] = [];
@@ -195,6 +277,7 @@ test.afterEach(async ({ state }) => {
 
 test('takes a screenshot with an API key and attaches it to the key', async ({
   page,
+  context,
   worker,
   state,
   openPopup,
@@ -205,7 +288,13 @@ test('takes a screenshot with an API key and attaches it to the key', async ({
   await connectWithApiKey(popup, page, state.apiKey);
   await openInContextDialog(page);
 
-  await takeScreenshotAndCheckHops(page, worker, 'api-key', state.apiKey);
+  await takeScreenshotAndCheckHops(
+    page,
+    context,
+    worker,
+    'api-key',
+    state.apiKey
+  );
 
   const { keyId, screenshots } = await saveAndReadScreenshots(
     page,
@@ -216,7 +305,7 @@ test('takes a screenshot with an API key and attaches it to the key', async ({
   expect(screenshots[0].keyReferences.map((r) => r.keyId)).toEqual([keyId]);
 });
 
-test('takes a screenshot with an OAuth session and attaches it to the key', async ({
+test('takes a screenshot with an OAuth session, uploaded by the worker, and attaches it to the key', async ({
   page,
   context,
   worker,
@@ -239,7 +328,7 @@ test('takes a screenshot with an OAuth session and attaches it to the key', asyn
   });
   await openInContextDialog(page);
 
-  await takeScreenshotAndCheckHops(page, worker, 'oauth');
+  await takeScreenshotAndCheckHops(page, context, worker, 'oauth');
 
   const { keyId, screenshots } = await saveAndReadScreenshots(
     page,
@@ -248,6 +337,109 @@ test('takes a screenshot with an OAuth session and attaches it to the key', asyn
   );
   expect(screenshots).toHaveLength(1);
   expect(screenshots[0].keyReferences.map((r) => r.keyId)).toEqual([keyId]);
+});
+
+// The worker measures the image with createImageBitmap where the page used an <img>; the key positions are scaled
+// against that size, so a mismatch would land the highlight in the wrong place rather than fail a visible check.
+test('reports the same image size and key positions whether the page or the worker uploads', async ({
+  page,
+  context,
+  worker,
+  extensionId,
+  state,
+  openPopup,
+}) => {
+  test.skip(!state.oauth.available, state.oauth.reason);
+  const app = state.apps[0];
+  await page.setViewportSize(VIEWPORT);
+  await openTestapp(page, app.url);
+  const popup = await openPopup(page);
+  await connectWithApiKey(popup, page, state.apiKey);
+  await openInContextDialog(page);
+  await takeScreenshotButton(page).click();
+  await expect(galleryThumbnails(page)).toHaveCount(1);
+  const viaPage = await saveAndReadScreenshots(page, api, app.projectId);
+  expect(viaPage.screenshots).toHaveLength(1);
+  await removeKeyScreenshots(state);
+
+  const reloaded = page.waitForEvent('load');
+  await popup.getByTestId('sign-out').click();
+  await reloaded;
+  await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
+  // Removing a key leaves the popup on the API-key screen; the OAuth sign-in lives behind its back link.
+  await popup.getByTestId('all-connection-options').click();
+  await signInThroughPopup({
+    popup,
+    context,
+    worker,
+    extensionId,
+    tolgeeUrl: state.tolgeeUrl,
+    user: state.user,
+    target: page,
+  });
+  await openInContextDialog(page);
+  await takeScreenshotButton(page).click();
+  await expect(galleryThumbnails(page)).toHaveCount(1);
+  const viaWorker = await saveAndReadScreenshots(page, api, app.projectId);
+  expect(viaWorker.screenshots).toHaveLength(1);
+
+  const expected = geometryOf(viaPage.screenshots[0]);
+  expect(expected.width).toBeGreaterThan(0);
+  expect(expected.positions).toHaveLength(1);
+  expect(geometryOf(viaWorker.screenshots[0])).toEqual(expected);
+});
+
+test('uploads a dropped image through the worker with its file name and type intact', async ({
+  page,
+  context,
+  worker,
+  extensionId,
+  state,
+  openPopup,
+}) => {
+  test.skip(!state.oauth.available, state.oauth.reason);
+  const app = state.apps[0];
+  await openTestapp(page, app.url);
+  const popup = await openPopup(page);
+  await signInThroughPopup({
+    popup,
+    context,
+    worker,
+    extensionId,
+    tolgeeUrl: state.tolgeeUrl,
+    user: state.user,
+    target: page,
+  });
+  await openInContextDialog(page);
+  await spyOnUploads(worker);
+  const pageUploads = collectUploads(page);
+  const workerUploads = collectWorkerRequests(context, isUpload);
+
+  // A 2x2 PNG.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEElEQVR4nGP4z8DwHwohFABFzAf5Zsv/OQAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  await page
+    .locator(DEV_TOOLS)
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'dropped.png', mimeType: 'image/png', buffer: png });
+  await expect(galleryThumbnails(page)).toHaveCount(1);
+
+  expect(pageUploads).toHaveLength(0);
+  expect(workerUploads).toHaveLength(1);
+  expect((await workerUploads[0].response())?.status()).toBe(201);
+  // Playwright reports no body for a service worker's requests; the FormData the worker rebuilt is read at the source.
+  expect(await uploadsSent(worker)).toEqual([
+    [
+      {
+        name: 'image',
+        fileName: 'dropped.png',
+        type: 'image/png',
+        size: png.length,
+      },
+    ],
+  ]);
 });
 
 test('offers no screenshot capture on a key without the upload scope', async ({
@@ -280,6 +472,7 @@ test('offers no screenshot capture on a key without the upload scope', async ({
 
 test('reports the missing upload scope instead of silently dropping the screenshot', async ({
   page,
+  context,
   worker,
   state,
   openPopup,
@@ -294,7 +487,7 @@ test('reports the missing upload scope instead of silently dropping the screensh
 
   // The dialog computed its permissions on open; the scope goes away underneath it, as a key edit on the server would.
   await api.updateApiKeyScopes(key.id, SCOPES_WITHOUT_UPLOAD);
-  await takeScreenshotAndCheckHops(page, worker, 'api-key', key.key);
+  await takeScreenshotAndCheckHops(page, context, worker, 'api-key', key.key);
 
   await saveButton(page).click();
   await expect(dialogAlert(page)).toContainText('Operation not permitted');

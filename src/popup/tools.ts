@@ -1,15 +1,21 @@
 import { LibConfig } from '../types';
 import { normalizeUrl } from '../oauth/url';
+import { PROTOCOL_VERSION } from '../constants';
 
 // See oauth/sessionRules.ts for the projectId-vs-projectKey distinction these two fields carry.
 export type Values = {
   apiUrl?: string;
   apiKey?: string;
   branch?: string;
-  authToken?: string;
+  // Signed in through the extension; the session itself lives in the service worker, never here.
+  oauth?: boolean;
   projectId?: number;
   projectKey?: string;
 };
+
+// The SDK must speak the proxied-request protocol (PROTOCOL_VERSION 2) for an OAuth session to be of any use to it.
+export const sdkSupportsOAuth = (libConfig?: LibConfig | null): boolean =>
+  (libConfig?.protocolVersion ?? 1) >= PROTOCOL_VERSION;
 
 export const declaredProjectId = (
   libConfig?: LibConfig | null
@@ -23,14 +29,14 @@ export const declaredProjectId = (
 };
 
 export const validateValues = (values?: Values | null) => {
-  if ((values?.apiKey || values?.authToken) && values?.apiUrl) {
+  if ((values?.apiKey || values?.oauth) && values?.apiUrl) {
     return values;
   }
   return null;
 };
 
 export const isOAuth = (values?: Values | null) =>
-  Boolean(values?.authToken && !values?.apiKey);
+  Boolean(values?.oauth && !values?.apiKey);
 
 export const canApplyOnEnter = (
   hasSession: boolean,
@@ -53,7 +59,7 @@ export const compareValues = (
   return (
     str(values1?.apiKey) === str(values2?.apiKey) &&
     str(values1?.apiUrl) === str(values2?.apiUrl) &&
-    str(values1?.authToken) === str(values2?.authToken) &&
+    Boolean(values1?.oauth) === Boolean(values2?.oauth) &&
     num(values1?.projectId) === num(values2?.projectId) &&
     (values1?.branch || '') === (values2?.branch || '')
   );

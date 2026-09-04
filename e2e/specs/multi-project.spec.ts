@@ -1,11 +1,16 @@
 import { expect, test } from '../fixtures/extension';
 import {
+  collectWorkerRequests,
   completeAuthorization,
   installIdentityStub,
   storedOAuthSessions,
   requireOAuthServer,
 } from '../fixtures/oauth';
-import { openTestapp, sessionItem } from '../fixtures/testapp';
+import {
+  openInContextDialog,
+  openTestapp,
+  sessionItem,
+} from '../fixtures/testapp';
 
 requireOAuthServer();
 
@@ -62,8 +67,22 @@ test('keeps a separate session for each project on the same server', async ({
     expect(await sessionItem(page, '__tolgee_projectKey')).toBe(
       String(app.projectId)
     );
-    expect(await sessionItem(page, '__tolgee_authToken')).toBe(
-      session!.accessToken
-    );
+    expect(await sessionItem(page, '__tolgee_oauth')).toBe('1');
+
+    // The worker sends this tab's dialog requests to this tab's project, with that project's own session token.
+    const requests = collectWorkerRequests(context);
+    await page.bringToFront();
+    await openInContextDialog(page);
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) {
+      const url = request.url();
+      if (url.includes('/v2/projects/')) {
+        expect(url).toContain(`/v2/projects/${app.projectId}/`);
+      }
+      expect((await request.allHeaders())['authorization'], url).toBe(
+        `Bearer ${session!.accessToken}`
+      );
+    }
+    await page.keyboard.press('Escape');
   }
 });

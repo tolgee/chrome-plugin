@@ -25,11 +25,18 @@ import {
   isOAuthUser,
   ProjectOption,
 } from './reducer';
-import { fetchBranches } from './branch';
+import { credentialFetch, fetchBranches } from './branch';
+import { ProxyTarget } from './proxyFetch';
 
 const DETECT_TIMEOUT_MS = 15_000;
 const DETECT_INITIAL_DELAY_MS = 250;
 const DETECT_MAX_DELAY_MS = 1_500;
+
+const proxyTargetFor = async (values: Values): Promise<ProxyTarget> => ({
+  pageOrigin: safeOrigin((await getActiveTab())?.url),
+  apiUrl: values.apiUrl,
+  projectKey: values.projectKey,
+});
 
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
@@ -123,24 +130,22 @@ export const useDetectorForm = () => {
     const storedData = await loadValues();
     if (storedData.oauth && storedData.apiUrl) {
       const activeTab = await getActiveTab();
-      const res = (await sendToBackground('OAUTH_GET_TOKEN', {
+      const res = (await sendToBackground('OAUTH_SESSION_STATE', {
         apiUrl: storedData.apiUrl,
+        projectKey: storedData.projectKey,
         pageOrigin: safeOrigin(activeTab?.url),
-      })) as { accessToken?: string };
-      if (res?.accessToken) {
+      })) as { active?: boolean };
+      if (res?.active) {
         dispatch({
           type: 'LOAD_STORED_VALUES',
           payload: {
             apiUrl: storedData.apiUrl,
-            authToken: res.accessToken,
+            oauth: true,
             projectId: storedData.projectId,
             projectKey: storedData.projectKey,
             branch: storedData.branch,
           },
         });
-        // The background may have just refreshed the token (OAUTH_GET_TOKEN's push lands in the tab before this
-        // resolves), which the page's own sessionStorage snapshot below wouldn't otherwise pick up until reopened.
-        await syncPageAppliedValues();
       }
     } else if (validateValues(storedData)) {
       dispatch({ type: 'LOAD_STORED_VALUES', payload: storedData });
@@ -191,7 +196,7 @@ export const useDetectorForm = () => {
   let checkableValues: Values | undefined | null;
 
   // we want to check validity of values, that are displayed and applied
-  // Falls back to storedValues, not just the page's SDK config, which carries no OAuth token on its own.
+  // Falls back to storedValues, not just the page's SDK config, which carries no OAuth session on its own.
   const valuesToCompare =
     appliedValues || storedValues || (libConfig?.config as Values);
   if (!storedValues || compareValues(valuesToCompare, storedValues)) {
@@ -207,16 +212,17 @@ export const useDetectorForm = () => {
       const url = normalizeUrl(checkableValues!.apiUrl);
 
       if (isOAuth(checkableValues)) {
-        // The token is opaque, so the connected user is the only thing this check can confirm; project
+        // The session is opaque to the popup, so the connected user is the only thing this check can confirm; project
         // reachability is probed separately below (RESOLVE_PROJECT).
-        fetch(`${url}/v2/user`, {
-          headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
-        })
+        proxyTargetFor(checkableValues!)
+          .then((target) =>
+            credentialFetch(checkableValues!, '/v2/user', target)
+          )
           .then((r) => {
             if (r.ok) {
               return r.json();
             }
-            throw new Error('Invalid token');
+            throw new Error('Invalid session');
           })
           .then((data) => {
             !cancelled &&
@@ -258,7 +264,7 @@ export const useDetectorForm = () => {
   }, [
     checkableValues?.apiUrl,
     checkableValues?.apiKey,
-    checkableValues?.authToken,
+    checkableValues?.oauth,
   ]);
 
   // fetch branches when credentials are valid and branching is enabled
@@ -272,7 +278,8 @@ export const useDetectorForm = () => {
       dispatch({ type: 'SET_BRANCHES', payload: null });
       return undefined;
     }
-    fetchBranches(projectId, checkableValues!)
+    proxyTargetFor(checkableValues!)
+      .then((target) => fetchBranches(projectId, checkableValues!, target))
       // A server that refuses to list branches (feature not licensed) has nothing to switch between.
       .catch(() => [])
       .then((branches) => {
@@ -297,15 +304,17 @@ export const useDetectorForm = () => {
       });
       return;
     }
-    const url = normalizeUrl(checkableValues!.apiUrl);
     const resolveDeclaredProject = async (): Promise<{
       project: ProjectOption | null;
       inaccessible: boolean;
     }> => {
       try {
-        const r = await fetch(`${url}/v2/projects/${declaredId}`, {
-          headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
-        });
+        const target = await proxyTargetFor(checkableValues!);
+        const r = await credentialFetch(
+          checkableValues!,
+          `/v2/projects/${declaredId}`,
+          target
+        );
         if (r.ok) {
           const data = await r.json();
           return {

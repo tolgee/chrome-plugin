@@ -1,15 +1,15 @@
 import {
   API_KEY_SESSION_STORAGE,
   API_URL_SESSION_STORAGE,
-  AUTH_TOKEN_SESSION_STORAGE,
   BRANCH_SESSION_STORAGE,
+  OAUTH_SESSION_STORAGE,
   PROJECT_ID_SESSION_STORAGE,
   PROJECT_KEY_SESSION_STORAGE,
   PROTOCOL_VERSION,
 } from '../constants';
 import { LibConfig } from '../types';
 import { acceptsCredentialDelivery } from './acceptsCredentialDelivery';
-import { acceptTokenPush, writeCredentialsIfChanged } from './credentialSink';
+import { writeCredentialsIfChanged } from './credentialSink';
 import { injectUiLib } from './injectUiLib';
 import { Messages } from './Messages';
 import { updateState } from './updateState';
@@ -24,7 +24,7 @@ const getAppliedCredentials = () => {
     apiKey: sessionStorage.getItem(API_KEY_SESSION_STORAGE),
     apiUrl: sessionStorage.getItem(API_URL_SESSION_STORAGE),
     branch: sessionStorage.getItem(BRANCH_SESSION_STORAGE),
-    authToken: sessionStorage.getItem(AUTH_TOKEN_SESSION_STORAGE),
+    oauth: sessionStorage.getItem(OAUTH_SESSION_STORAGE) === '1',
     projectId: sessionStorage.getItem(PROJECT_ID_SESSION_STORAGE),
     projectKey: sessionStorage.getItem(PROJECT_KEY_SESSION_STORAGE),
   };
@@ -41,16 +41,6 @@ messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
     (c.mode || c.config?.mode) === 'development'
   ) {
     injectUiLib(c.uiVersion);
-  }
-  if (appliedCredentials.authToken && appliedCredentials.apiUrl) {
-    messages.sendToPlugin('OAUTH_TAB_CONNECTED', {
-      apiUrl: appliedCredentials.apiUrl,
-    });
-  } else {
-    // Tells the worker this tab is no longer holding a token (e.g. the user just un-applied it), so the tab
-    // registry — the worker's own view of which tabs to keep refreshing and pushing to — drops it symmetrically
-    // with how OAUTH_TAB_CONNECTED adds it above.
-    messages.sendToPlugin('OAUTH_TAB_DISCONNECTED');
   }
   updateState(configuration, messages);
   if (firstHandshake) {
@@ -89,25 +79,18 @@ messages.listenRuntime('DETECT_TOLGEE', async () => {
 
 messages.listenRuntime('GET_CREDENTIALS', async () => getAppliedCredentials());
 
-const acceptsDelivery = (pageOrigin?: string) =>
-  acceptsCredentialDelivery({
-    currentOrigin: window.location.origin,
-    isTopFrame: window.top === window.self,
-    pageOrigin,
-  });
-
 messages.listenRuntime('SET_CREDENTIALS', async (data) => {
-  if (!acceptsDelivery(data.pageOrigin)) {
+  if (
+    !acceptsCredentialDelivery({
+      currentOrigin: window.location.origin,
+      isTopFrame: window.top === window.self,
+      pageOrigin: data.pageOrigin,
+    })
+  ) {
     return;
   }
   if (writeCredentialsIfChanged(sessionStorage, data)) {
     location.reload();
   }
   updateState(configuration, messages);
-});
-
-messages.listenRuntime('UPDATE_AUTH_TOKEN', async (data) => {
-  if (acceptsDelivery(data.pageOrigin)) {
-    acceptTokenPush(sessionStorage, data);
-  }
 });

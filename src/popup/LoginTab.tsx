@@ -7,12 +7,23 @@ import {
   Link,
   Typography,
 } from '@mui/material';
+import { MIN_SDK_VERSION_FOR_OAUTH } from '../constants';
 
 const LEARN_MORE_PROJECT_ID =
   'https://docs.tolgee.io/js-sdk/api/core_package/options#projectid';
 
+export const SdkTooOldAlert = () => (
+  <Alert severity="info" data-testid="sdk-too-old">
+    <AlertTitle>Update the Tolgee SDK to sign in</AlertTitle>
+    Signing in with a Tolgee account needs @tolgee/web{' '}
+    {MIN_SDK_VERSION_FOR_OAUTH} or newer. Update the SDK, or connect with an API
+    key.
+  </Alert>
+);
+
 type Props = {
   projectDetected: boolean;
+  sdkTooOld: boolean;
   serverOpen: boolean;
   serverField: React.ReactNode;
   serverHost: string;
@@ -27,6 +38,7 @@ type Props = {
 
 export const LoginTab = ({
   projectDetected,
+  sdkTooOld,
   serverOpen,
   serverField,
   serverHost,
@@ -48,6 +60,15 @@ export const LoginTab = ({
       Use an API key instead
     </Button>
   );
+
+  if (sdkTooOld) {
+    return (
+      <>
+        <SdkTooOldAlert />
+        {useApiKeyButton}
+      </>
+    );
+  }
 
   if (!projectDetected) {
     return (

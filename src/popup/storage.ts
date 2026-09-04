@@ -8,7 +8,7 @@ export const storeValues = async (values: Values | null) => {
   try {
     const origin = await getCurrentTabOrigin();
 
-    if (values?.authToken && values?.apiUrl) {
+    if (values?.oauth && values?.apiUrl) {
       await updateMarkerHints(origin, {
         projectId: values.projectId,
         branch: values.branch,

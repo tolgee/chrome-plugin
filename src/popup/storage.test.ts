@@ -37,7 +37,7 @@ describe('popup storage routing', () => {
 
     await storeValues({
       apiUrl: 'https://app.tolgee.io',
-      authToken: 'jwt',
+      oauth: true,
       projectId: 7,
     });
 
@@ -48,7 +48,7 @@ describe('popup storage routing', () => {
       projectId: 7,
       projectKey: '5',
     });
-    expect(record.authToken).toBeUndefined();
+    expect(JSON.stringify(record)).not.toContain('token');
     expect(record.apiKey).toBeUndefined();
   });
 
@@ -62,7 +62,7 @@ describe('popup storage routing', () => {
 
     await storeValues({
       apiUrl: 'https://app.tolgee.io',
-      authToken: 'jwt',
+      oauth: true,
       projectId: 5,
       branch: 'feature/checkout',
     });
@@ -70,7 +70,7 @@ describe('popup storage routing', () => {
 
     await storeValues({
       apiUrl: 'https://app.tolgee.io',
-      authToken: 'jwt',
+      oauth: true,
       projectId: 5,
       branch: undefined,
     });
@@ -80,7 +80,7 @@ describe('popup storage routing', () => {
   it('for an OAuth session on an origin with no existing marker, does nothing (never fabricates one)', async () => {
     await storeValues({
       apiUrl: 'https://app.tolgee.io',
-      authToken: 'jwt',
+      oauth: true,
       projectId: 7,
     });
 
@@ -106,9 +106,9 @@ describe('popup storage routing', () => {
     expect(store.has(ORIGIN)).toBe(false);
   });
 
-  it('an incomplete value (token without apiUrl) clears the record rather than half-persisting', async () => {
+  it('an incomplete value (signed in without apiUrl) clears the record rather than half-persisting', async () => {
     store.set(ORIGIN, { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' });
-    await storeValues({ authToken: 'jwt' });
+    await storeValues({ oauth: true });
     expect(store.has(ORIGIN)).toBe(false);
   });
 

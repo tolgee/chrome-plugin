@@ -16,6 +16,7 @@ import { BranchOption } from './reducer';
 import { abbreviateApiKey, branchInEffect, pageBranchLabel } from './branch';
 import { BRANCH_EDITOR_LIST_SPACE, BranchEditor } from './BranchEditor';
 import { EditIcon } from './icons';
+import { SdkTooOldAlert } from './LoginTab';
 import { PopupFrame } from './PopupFrame';
 
 export type Session =
@@ -37,6 +38,7 @@ type Props = {
   projectUrl: string | null;
   projectInaccessible: boolean;
   declaredProjectId: number | undefined;
+  sdkTooOld: boolean;
   branch: BranchState | null;
   editingOn: boolean;
   onToggleEditing: () => void;
@@ -148,6 +150,7 @@ export const ConnectedPanel = ({
   projectUrl,
   projectInaccessible,
   declaredProjectId,
+  sdkTooOld,
   branch,
   editingOn,
   onToggleEditing,
@@ -233,6 +236,8 @@ export const ConnectedPanel = ({
   return (
     <PopupFrame title={title} testId="connected-panel">
       <AccountCard session={session} serverHost={serverHost} />
+
+      {sdkTooOld && <SdkTooOldAlert />}
 
       <Box
         display="grid"
@@ -326,6 +331,7 @@ export const ConnectedPanel = ({
         <Switch
           size="small"
           checked={editingOn}
+          disabled={sdkTooOld}
           onChange={onToggleEditing}
           color="primary"
           data-testid="editing-switch"

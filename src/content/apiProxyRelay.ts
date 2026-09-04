@@ -1,6 +1,7 @@
 import {
   API_URL_SESSION_STORAGE,
   PROJECT_KEY_SESSION_STORAGE,
+  PROTOCOL_VERSION,
 } from '../constants';
 
 export const MAX_PROXY_PAYLOAD_BYTES = 20 * 1024 * 1024;
@@ -10,6 +11,10 @@ const RELAYED: Record<string, string> = {
   TOLGEE_SCREENSHOT_UPLOAD: 'TOLGEE_SCREENSHOT_UPLOADED',
 };
 const CAPTURED = 'TOLGEE_SCREENSHOT_CAPTURED';
+// The SDK pings until this relay answers before it posts a request: window.postMessage has no queue, and this
+// module is imported asynchronously after document_start.
+const PING = 'TOLGEE_PROXY_PING';
+const PONG = 'TOLGEE_PROXY_PONG';
 
 export type RelayDeps = {
   origin: string;
@@ -32,6 +37,13 @@ export const createApiProxyRelay = (deps: RelayDeps, self: unknown) => {
       return;
     }
     const type = event.data?.type;
+    if (type === PING) {
+      deps.postToPage({
+        type: PONG,
+        data: { protocolVersion: PROTOCOL_VERSION },
+      });
+      return;
+    }
     const replyType = type && RELAYED[type];
     const payload = event.data?.data as { id?: unknown } | undefined;
     if (!replyType || typeof payload?.id !== 'string') {

@@ -15,6 +15,7 @@ import {
   isHttpUrl,
   isOAuth,
   projectUrl,
+  sdkSupportsOAuth,
   validateValues,
 } from './tools';
 import { sendToBackground } from './sendToBackground';
@@ -76,10 +77,10 @@ export const TolgeeDetector = () => {
   const serverInvalid = !isHttpUrl(values?.apiUrl || DEFAULT_SERVER);
 
   useEffect(() => {
-    if (values?.apiKey && !values?.authToken) {
+    if (values?.apiKey && !values?.oauth) {
       setTab('apiKey');
     }
-  }, [values?.apiKey, values?.authToken]);
+  }, [values?.apiKey, values?.oauth]);
 
   const handleApplyChange = () => {
     if (appliedValues) {
@@ -110,15 +111,14 @@ export const TolgeeDetector = () => {
         projectId,
         tabId: activeTab?.id,
       })) as {
-        accessToken?: string;
+        connected?: boolean;
         error?: string;
       };
-      if (res?.accessToken && projectId !== undefined) {
+      if (res?.connected && projectId !== undefined) {
         dispatch({
           type: 'OAUTH_APPLY',
           payload: {
             apiUrl,
-            authToken: res.accessToken,
             projectId,
             projectKey: projectKeyFor(projectId),
           },
@@ -202,6 +202,7 @@ export const TolgeeDetector = () => {
   } else if (tolgeePresent === 'present' || appliedValues) {
     const declaredId = declaredProjectId(libConfig);
     const projectDetected = declaredId !== undefined;
+    const sdkTooOld = !sdkSupportsOAuth(libConfig);
 
     const { host: serverHost, link: serverLink } = httpDisplayUrl(
       values?.apiUrl || DEFAULT_SERVER,
@@ -241,6 +242,7 @@ export const TolgeeDetector = () => {
           projectUrl={projectUrl(activeValues?.apiUrl, projectId)}
           projectInaccessible={declaredProjectInaccessible}
           declaredProjectId={declaredId}
+          sdkTooOld={isOauthSession && sdkTooOld}
           branch={branch}
           editingOn={Boolean(appliedValues)}
           onToggleEditing={handleApplyChange}
@@ -258,6 +260,7 @@ export const TolgeeDetector = () => {
         {tab === 'login' && (
           <LoginTab
             projectDetected={projectDetected}
+            sdkTooOld={sdkTooOld}
             serverOpen={serverOpen}
             serverField={serverField}
             serverHost={serverHost}

@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Worker } from '@playwright/test';
+import type { BrowserContext, Page, Request, Worker } from '@playwright/test';
 import { expect } from '@playwright/test';
 import type { User } from '../setup/seed';
 import { readState } from '../setup/state';
@@ -186,9 +186,27 @@ export const expireStoredSessions = (worker: Worker) =>
     await chrome.storage.local.set(expired);
   });
 
-// Replaces the periodic alarm with one that fires right away (see REFRESH_ALARM in background.ts); an unpacked
-// extension is allowed sub-minute alarms.
-export const fireRefreshAlarm = (worker: Worker) =>
-  worker.evaluate(() =>
-    chrome.alarms.create('tolgee-oauth-refresh', { when: Date.now() + 100 })
-  );
+/**
+ * The requests the extension's service worker makes to the Tolgee API on the page's behalf. Playwright reports
+ * service worker requests only with PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS (set in playwright.config.ts).
+ */
+export const collectWorkerRequests = (
+  context: BrowserContext,
+  match: (request: Request) => boolean = (request) =>
+    request.url().includes('/v2/') && request.method() !== 'OPTIONS'
+): Request[] => {
+  const requests: Request[] = [];
+  context.on('request', (request) => {
+    if (request.serviceWorker() && match(request)) {
+      requests.push(request);
+    }
+  });
+  return requests;
+};
+
+/** Every request on the page's own network (frames included), regardless of URL. */
+export const collectPageRequests = (page: Page): Request[] => {
+  const requests: Request[] = [];
+  page.on('request', (request) => requests.push(request));
+  return requests;
+};

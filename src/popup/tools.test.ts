@@ -7,6 +7,7 @@ import {
   isHttpUrl,
   isOAuth,
   projectUrl,
+  sdkSupportsOAuth,
   validateValues,
 } from './tools';
 import { LibConfig } from '../types';
@@ -37,8 +38,8 @@ describe('validateValues', () => {
     expect(validateValues(v)).toBe(v);
   });
 
-  it('accepts an oauth token with a url', () => {
-    const v = { authToken: 'jwt', apiUrl: 'https://app.tolgee.io' };
+  it('accepts a signed-in session with a url', () => {
+    const v = { oauth: true, apiUrl: 'https://app.tolgee.io' };
     expect(validateValues(v)).toBe(v);
   });
 
@@ -57,12 +58,12 @@ describe('validateValues', () => {
 });
 
 describe('isOAuth', () => {
-  it('is true only for a bare auth token', () => {
-    expect(isOAuth({ authToken: 'jwt' })).toBe(true);
+  it('is true only for a bare signed-in flag', () => {
+    expect(isOAuth({ oauth: true })).toBe(true);
   });
 
   it('is false when an api key is also present', () => {
-    expect(isOAuth({ authToken: 'jwt', apiKey: 'tgpak_x' })).toBe(false);
+    expect(isOAuth({ oauth: true, apiKey: 'tgpak_x' })).toBe(false);
   });
 
   it('is false for an api key alone or nothing', () => {
@@ -91,7 +92,7 @@ describe('compareValues', () => {
 
   it('detects a differing field', () => {
     expect(compareValues(base, { ...base, projectId: 3 })).toBe(false);
-    expect(compareValues(base, { ...base, authToken: 'jwt' })).toBe(false);
+    expect(compareValues(base, { ...base, oauth: true })).toBe(false);
   });
 
   it('treats a string projectId and a numeric projectId as equal', () => {
@@ -101,10 +102,34 @@ describe('compareValues', () => {
   });
 
   it('treats a null apiKey and an undefined apiKey as equal', () => {
-    const oauth = { apiUrl: base.apiUrl, authToken: 'jwt', projectId: 1 };
+    const oauth = { apiUrl: base.apiUrl, oauth: true, projectId: 1 };
     expect(compareValues({ ...oauth, apiKey: null as any }, { ...oauth })).toBe(
       true
     );
+  });
+
+  it('treats a missing signed-in flag and false as equal', () => {
+    expect(compareValues({ ...base, oauth: false }, { ...base })).toBe(true);
+  });
+});
+
+describe('sdkSupportsOAuth', () => {
+  it('is true from protocol 2 on', () => {
+    expect(sdkSupportsOAuth(withProjectId(1))).toBe(false);
+    expect(sdkSupportsOAuth({ ...withProjectId(1), protocolVersion: 1 })).toBe(
+      false
+    );
+    expect(sdkSupportsOAuth({ ...withProjectId(1), protocolVersion: 2 })).toBe(
+      true
+    );
+    expect(sdkSupportsOAuth({ ...withProjectId(1), protocolVersion: 3 })).toBe(
+      true
+    );
+  });
+
+  it('is false without a config at all', () => {
+    expect(sdkSupportsOAuth(null)).toBe(false);
+    expect(sdkSupportsOAuth(undefined)).toBe(false);
   });
 });
 
@@ -173,7 +198,7 @@ describe('httpDisplayUrl', () => {
 });
 
 describe('canApplyOnEnter', () => {
-  const oauthValues = { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' };
+  const oauthValues = { apiUrl: 'https://app.tolgee.io', oauth: true };
 
   it('connected panel (hasSession): applies whenever the current values validate, regardless of tab', () => {
     expect(canApplyOnEnter(true, 'login', oauthValues, false)).toBe(true);

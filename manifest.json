@@ -15,7 +15,7 @@
     "service_worker": "src/background/background.ts",
     "type": "module"
   },
-  "permissions": ["storage", "identity", "alarms"],
+  "permissions": ["storage", "identity"],
   "host_permissions": ["<all_urls>"],
   "icons": {
     "128": "icons/present.png"

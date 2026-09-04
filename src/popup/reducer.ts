@@ -1,4 +1,5 @@
 import { LibConfig } from '../types';
+import { projectKeyFor } from '../oauth/sessionRules';
 import { validateValues, Values } from './tools';
 
 export type ProjectInfo = {
@@ -86,12 +87,7 @@ export type Action =
   | { type: 'LOAD_VALUES' }
   | {
       type: 'OAUTH_APPLY';
-      payload: {
-        apiUrl: string;
-        authToken: string;
-        projectId: number;
-        projectKey: string;
-      };
+      payload: { apiUrl: string; projectId: number; projectKey: string };
     }
   | { type: 'SET_BRANCHES'; payload: BranchOption[] | null }
   | {
@@ -179,7 +175,7 @@ export const createReducer =
           apiKey: state.values?.apiKey,
           apiUrl: state.values?.apiUrl,
           branch: effectiveBranch,
-          authToken: state.values?.authToken,
+          oauth: state.values?.oauth,
           projectId: state.values?.projectId,
           projectKey: state.values?.projectKey,
         };
@@ -204,7 +200,7 @@ export const createReducer =
         apply();
         const oauthValues = {
           apiUrl: action.payload.apiUrl,
-          authToken: action.payload.authToken,
+          oauth: true,
           projectId: action.payload.projectId,
           projectKey: action.payload.projectKey,
         };
@@ -219,11 +215,18 @@ export const createReducer =
       }
       case 'RESOLVE_PROJECT': {
         const { project, inaccessible } = action.payload;
-        if (!project) {
+        // A resolved project the session is not keyed to (an all-projects grant reaching the page's declared project)
+        // must not be applied: the worker only proxies the connected project, so every request would be refused
+        // while the popup showed Connected.
+        const outsideSession =
+          project !== null &&
+          state.values?.projectKey !== undefined &&
+          projectKeyFor(project.id) !== state.values.projectKey;
+        if (!project || outsideSession) {
           return {
             ...state,
             declaredProject: null,
-            declaredProjectInaccessible: inaccessible,
+            declaredProjectInaccessible: inaccessible || outsideSession,
           };
         }
         apply();

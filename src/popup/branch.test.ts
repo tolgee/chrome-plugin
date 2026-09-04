@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const { sendToBackground } = vi.hoisted(() => ({ sendToBackground: vi.fn() }));
+vi.mock('./sendToBackground', () => ({ sendToBackground }));
+
 import {
   abbreviateApiKey,
   branchEditorKeyAction,
@@ -13,11 +17,17 @@ const branches = [
   { name: 'feature', isDefault: false },
 ];
 
+const TARGET = {
+  pageOrigin: 'https://page.example',
+  apiUrl: 'https://api',
+  projectKey: '7',
+};
+
 describe('credentialHeaders', () => {
-  it('uses the bearer token for an OAuth session', () => {
-    expect(
-      credentialHeaders({ apiUrl: 'https://api', authToken: 'jwt' })
-    ).toEqual({ Authorization: 'Bearer jwt' });
+  it('carries no credential for a signed-in session (the worker adds the token)', () => {
+    expect(credentialHeaders({ apiUrl: 'https://api', oauth: true })).toEqual(
+      {}
+    );
   });
 
   it('uses the api key header for a key session', () => {
@@ -30,24 +40,36 @@ describe('credentialHeaders', () => {
 describe('fetchBranches', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    sendToBackground.mockReset();
   });
 
-  it('lists the project branches with the session bearer token on the OAuth path', async () => {
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ _embedded: { branches } }),
-    }));
+  it('lists the project branches through the worker on the signed-in path, never through the popup fetch', async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-
-    const result = await fetchBranches(7, {
-      apiUrl: 'https://api/',
-      authToken: 'jwt',
+    sendToBackground.mockResolvedValue({
+      response: {
+        status: 200,
+        body: JSON.stringify({ _embedded: { branches } }),
+      },
     });
 
+    const result = await fetchBranches(
+      7,
+      { apiUrl: 'https://api/', oauth: true, projectKey: '7' },
+      TARGET
+    );
+
     expect(result).toEqual(branches);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://api/v2/projects/7/branches?size=100',
-      { headers: { Authorization: 'Bearer jwt' } }
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sendToBackground).toHaveBeenCalledWith(
+      'TOLGEE_API_REQUEST',
+      expect.objectContaining({
+        path: '/v2/projects/7/branches?size=100',
+        method: 'GET',
+        apiUrl: 'https://api',
+        projectKey: '7',
+        pageOrigin: 'https://page.example',
+      })
     );
   });
 
@@ -58,25 +80,34 @@ describe('fetchBranches', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchBranches(7, {
-      apiUrl: 'https://api',
-      apiKey: 'tgpak_x',
-    });
+    const result = await fetchBranches(
+      7,
+      { apiUrl: 'https://api', apiKey: 'tgpak_x' },
+      TARGET
+    );
 
     expect(result).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api/v2/projects/7/branches?size=100',
       { headers: { 'X-API-Key': 'tgpak_x' } }
     );
+    expect(sendToBackground).not.toHaveBeenCalled();
   });
 
-  it('rejects on a non-ok response', async () => {
+  it('rejects on a non-ok response from either path', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ ok: false, status: 403 }))
     );
     await expect(
-      fetchBranches(7, { apiUrl: 'https://api', authToken: 'jwt' })
+      fetchBranches(7, { apiUrl: 'https://api', apiKey: 'tgpak_x' }, TARGET)
+    ).rejects.toThrow();
+
+    sendToBackground.mockResolvedValue({
+      response: { status: 403, body: '{}' },
+    });
+    await expect(
+      fetchBranches(7, { apiUrl: 'https://api', oauth: true }, TARGET)
     ).rejects.toThrow();
   });
 });

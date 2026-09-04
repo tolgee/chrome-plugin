@@ -1,8 +1,5 @@
 import browser from 'webextension-polyfill';
-import {
-  OAUTH_REQUEST_TIMEOUT_MS,
-  REFRESH_ALARM_PERIOD_MINUTES,
-} from '../constants';
+import { OAUTH_REQUEST_TIMEOUT_MS } from '../constants';
 import { ScreenshotMaker } from './ScreenshotMaker';
 import {
   authorizedFetch,
@@ -15,11 +12,9 @@ import { login, revoke } from '../oauth/oauthClient';
 import {
   clearSessionByKey,
   ensureFreshToken,
-  isTokenFresh,
   loadSession,
   resolveSessionForTab,
   saveSession,
-  sessionKey,
   StoredSession,
 } from '../oauth/tokenStore';
 import { safeOrigin, sameOrigin } from '../oauth/url';
@@ -34,18 +29,8 @@ import {
   loadOAuthMarker,
   storeOAuthMarker,
 } from '../oauth/marker';
-import {
-  clearAllTabs,
-  dropTabIfNavigatedAway,
-  loadTabEntries,
-  registerTab,
-  unregisterTab,
-  unregisterTabsForOrigin,
-} from './tabRegistry';
 
 type State = 'present' | 'active' | 'inactive';
-
-export const REFRESH_ALARM = 'tolgee-oauth-refresh';
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { type, data } = message as RuntimeMessage;
@@ -81,17 +66,17 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({});
       break;
     case 'OAUTH_LOGIN':
-      respondAsync(sendResponse, connect(data), 'login', (accessToken) => ({
-        accessToken,
+      respondAsync(sendResponse, connect(data), 'login', () => ({
+        connected: true,
       }));
       return true;
-    case 'OAUTH_GET_TOKEN':
+    case 'OAUTH_SESSION_STATE':
       respondAsync(
         sendResponse,
-        getTokenAndPush(data.apiUrl, requesterOrigin(sender, data.pageOrigin)),
-        'token lookup',
-        (accessToken) => ({ accessToken }),
-        () => ({ accessToken: null })
+        sessionState(data, requesterOrigin(sender, data.pageOrigin)),
+        'session lookup',
+        (active) => ({ active }),
+        () => ({ active: false })
       );
       return true;
     case 'OAUTH_LOGOUT':
@@ -101,22 +86,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         'logout',
         () => ({})
       );
-      return true;
-    case 'OAUTH_TAB_CONNECTED':
-      // Respond only after the registration resolves: returning true keeps the MV3 worker alive for the async work, so a
-      // torn-down worker can't drop the registration and leave the tab without token refreshes.
-      registerConnectedTab(
-        sender.tab?.id,
-        safeOrigin(sender.tab?.url),
-        data.apiUrl
-      )
-        .catch((e) => console.error('[tolgee] tab register failed', e))
-        .finally(() => sendResponse({}));
-      return true;
-    case 'OAUTH_TAB_DISCONNECTED':
-      unregisterTabIfKnown(sender.tab?.id)
-        .catch((e) => console.error('[tolgee] tab unregister failed', e))
-        .finally(() => sendResponse({}));
       return true;
     default:
       sendResponse({});
@@ -149,48 +118,11 @@ const respondAsync = <T>(
 export const errorMessage = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
 
-// Registers from the marker (see oauth/marker.ts), never from the page's own message.
-const registerConnectedTab = async (
-  tabId: number | undefined,
-  pageOrigin: string | undefined,
-  apiUrl: string
-) => {
-  if (tabId == null || !pageOrigin) {
-    return;
-  }
-  const marker = await loadOAuthMarker(pageOrigin);
-  if (!marker?.projectKey || !sameOrigin(marker.apiUrl, apiUrl)) {
-    return;
-  }
-  await registerTab(tabId, {
-    apiUrl: marker.apiUrl,
-    pageOrigin,
-    projectKey: marker.projectKey,
-  });
-  // Always push the current token on (re)registration, even if storage already looks fresh: the tab's own
-  // sessionStorage may hold an older one (browser restart with multiple tabs, or a tab that navigated away and
-  // back while another tab kept the session refreshed), and there is no way to know that without asking it to
-  // overwrite unconditionally. ensureFreshToken is cheap when the session is already fresh — no network call.
-  const session = await resolveSessionForTab({
-    apiUrl: marker.apiUrl,
-    projectKey: marker.projectKey,
-  });
-  if (session) {
-    const accessToken = await ensureFreshToken(session);
-    if (accessToken) {
-      await pushTokenToSession(session, accessToken);
-    }
-  }
-};
-
-const unregisterTabIfKnown = (tabId: number | undefined): Promise<void> =>
-  tabId == null ? Promise.resolve() : unregisterTab(tabId);
-
 const connect = async (data: {
   apiUrl: string;
   projectId?: number;
   tabId?: number;
-}): Promise<string> => {
+}): Promise<void> => {
   // The popup only ever sends this with a declared project (LoginTab disables Connect otherwise); a session keyed
   // by "no project" doesn't exist in this design, so this is a hard precondition, not a fallback case.
   if (data.projectId === undefined) {
@@ -199,13 +131,10 @@ const connect = async (data: {
   const projectId = data.projectId;
 
   const requestingOrigin = await tabOrigin(data.tabId);
-  const { session, accessToken } = await acquireSession(data.apiUrl, projectId);
-  // Push to any tab already registered for this session before touching the connecting tab, so a refresh triggered
-  // here (rather than by the alarm) does not leave a second open tab holding a token that was just superseded.
-  await pushTokenToSession(session, accessToken);
+  await acquireSession(data.apiUrl, projectId);
 
   if (data.tabId == null || !requestingOrigin) {
-    return accessToken;
+    return;
   }
   if ((await tabOrigin(data.tabId)) !== requestingOrigin) {
     throw new Error(
@@ -216,12 +145,11 @@ const connect = async (data: {
   await reassignOriginMarker(requestingOrigin, data.apiUrl, projectId);
   await injectCredentials(data.tabId, {
     apiUrl: data.apiUrl,
-    authToken: accessToken,
+    oauth: true,
     projectId,
     projectKey: projectKeyFor(projectId),
     pageOrigin: requestingOrigin,
   });
-  return accessToken;
 };
 
 const tabOrigin = async (tabId?: number): Promise<string | undefined> =>
@@ -232,10 +160,9 @@ const tabOrigin = async (tabId?: number): Promise<string | undefined> =>
 const loginAndSave = async (
   apiUrl: string,
   projectId: number
-): Promise<{ session: StoredSession; accessToken: string }> => {
+): Promise<StoredSession> => {
   const tokens = await login(apiUrl, projectId);
-  const session = await saveSession(apiUrl, tokens, projectId);
-  return { session, accessToken: tokens.accessToken };
+  return saveSession(apiUrl, tokens, projectId);
 };
 
 // ensureFreshToken alone only proves a token is unexpired, not that it can still reach this project or that the
@@ -243,7 +170,7 @@ const loginAndSave = async (
 const acquireSession = async (
   apiUrl: string,
   projectId: number
-): Promise<{ session: StoredSession; accessToken: string }> => {
+): Promise<StoredSession> => {
   const existing = await loadSession(apiUrl, projectId);
   if (!existing) {
     return loginAndSave(apiUrl, projectId);
@@ -255,7 +182,7 @@ const acquireSession = async (
     return replacement;
   }
   if (!(await serverRejectsSession(apiUrl, projectId, reusableToken))) {
-    return { session: existing, accessToken: reusableToken };
+    return existing;
   }
   await clearSessionByKey(apiUrl, existing.projectKey);
   await revokeSession(existing);
@@ -315,32 +242,34 @@ const disconnect = async (data: { pageOrigin?: string }) => {
     return;
   }
   const marker = await loadOAuthMarker(data.pageOrigin);
-  const tabIds = (await loadTabEntries())
-    .filter(([, tab]) => tab.pageOrigin === data.pageOrigin)
-    .map(([tabId]) => Number(tabId));
-  // The origin's marker and tab registrations go first: a tab reloads as soon as it is told to clear, and the popup
-  // re-applies whatever OAUTH_GET_TOKEN still finds for the origin when the reloaded page handshakes.
-  await unregisterTabsForOrigin(data.pageOrigin);
+  // The origin's marker goes first: a tab reloads as soon as it is told to clear, and the popup re-applies whatever
+  // OAUTH_SESSION_STATE still finds for the origin when the reloaded page handshakes.
   await clearMarker(data.pageOrigin);
-  // The popup only clears its own (active) tab's sessionStorage; a session shared with another origin survives
-  // Disconnect, so any OTHER tab of this origin would otherwise keep a live, still-working token indefinitely.
-  await clearTabCredentials(tabIds, data.pageOrigin);
+  // The popup only clears its own (active) tab's sessionStorage; every other tab of this origin would otherwise
+  // keep sending through a session that may live on for another origin.
+  await clearTabCredentials(data.pageOrigin);
   if (marker?.projectKey) {
     await endSessionIfUnreferenced(marker.apiUrl, marker.projectKey);
   }
 };
 
-const clearTabCredentials = (tabIds: number[], pageOrigin: string) =>
-  Promise.all(
-    tabIds.map((tabId) =>
-      browser.tabs
-        .sendMessage(tabId, {
-          type: 'SET_CREDENTIALS',
-          data: { pageOrigin },
-        })
-        .catch(() => undefined)
-    )
+// Filtered here, not through a `url` match pattern: Firefox match patterns reject ports, and a dev origin with a
+// port is the normal case.
+const clearTabCredentials = async (pageOrigin: string) => {
+  const tabs = await browser.tabs.query({});
+  await Promise.all(
+    tabs
+      .filter((tab) => tab.id != null && safeOrigin(tab.url) === pageOrigin)
+      .map((tab) =>
+        browser.tabs
+          .sendMessage(tab.id!, {
+            type: 'SET_CREDENTIALS',
+            data: { pageOrigin },
+          })
+          .catch(() => undefined)
+      )
   );
+};
 
 // A session can be shared by more than one origin on the same backend, so it is only cleared — and only then
 // revoked server-side — once no origin's marker still references it.
@@ -361,36 +290,37 @@ const revokeSession = (session: StoredSession) =>
     (e) => console.warn('[tolgee] revoke failed', e)
   );
 
-const getTokenAndPush = async (
-  apiUrl: string,
+// Whether the origin's marker still resolves to a session the worker can send with; refreshes a stale one on the way.
+const sessionState = async (
+  data: { apiUrl?: string; projectKey?: string },
   pageOrigin?: string
-): Promise<string | null> => {
+): Promise<boolean> => {
   if (!pageOrigin) {
-    return null;
+    return false;
   }
   const marker = await loadOAuthMarker(pageOrigin);
-  if (!marker?.projectKey || !sameOrigin(marker.apiUrl, apiUrl)) {
-    return null;
+  if (
+    !marker?.projectKey ||
+    !sameOrigin(marker.apiUrl, data.apiUrl) ||
+    (data.projectKey !== undefined && marker.projectKey !== data.projectKey)
+  ) {
+    return false;
   }
   const session = await resolveSessionForTab({
     apiUrl: marker.apiUrl,
     projectKey: marker.projectKey,
   });
   if (!session) {
-    return null;
+    return false;
   }
-  const accessToken = await ensureFreshToken(session);
-  if (accessToken) {
-    await pushTokenToSession(session, accessToken);
-  }
-  return accessToken;
+  return Boolean(await ensureFreshToken(session));
 };
 
 const injectCredentials = async (
   tabId: number,
   data: {
     apiUrl: string;
-    authToken: string;
+    oauth: true;
     projectId?: number;
     projectKey: string;
     pageOrigin: string;
@@ -400,74 +330,3 @@ const injectCredentials = async (
     .sendMessage(tabId, { type: 'SET_CREDENTIALS', data })
     .catch(() => undefined);
 };
-
-const pushTokenToSession = async (
-  session: StoredSession,
-  accessToken: string
-) => {
-  const key = sessionKey(session);
-  const injected = await loadTabEntries();
-  await Promise.all(
-    injected.map(async ([tabId, tab]) => {
-      const owning = await resolveSessionForTab(tab);
-      if (!owning || sessionKey(owning) !== key) {
-        return;
-      }
-      await browser.tabs
-        .sendMessage(Number(tabId), {
-          type: 'UPDATE_AUTH_TOKEN',
-          data: {
-            apiUrl: session.apiUrl,
-            projectKey: session.projectKey,
-            authToken: accessToken,
-            pageOrigin: tab.pageOrigin,
-          },
-        })
-        .catch(() => undefined);
-    })
-  );
-};
-
-browser.tabs.onRemoved.addListener((tabId) => {
-  unregisterTab(tabId);
-});
-browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url) {
-    dropTabIfNavigatedAway(tabId, changeInfo.url);
-  }
-});
-browser.runtime.onStartup.addListener(() => {
-  clearAllTabs();
-});
-
-// MV3 re-runs this on every worker wake; re-creating an existing alarm would reset its schedule.
-export const ensureRefreshAlarm = async () => {
-  if (!(await browser.alarms.get(REFRESH_ALARM))) {
-    await browser.alarms.create(REFRESH_ALARM, {
-      periodInMinutes: REFRESH_ALARM_PERIOD_MINUTES,
-    });
-  }
-};
-ensureRefreshAlarm();
-browser.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name !== REFRESH_ALARM) {
-    return;
-  }
-  // An abandoned session with no owning tab is not kept alive.
-  const owning = new Map<string, StoredSession>();
-  for (const [, tab] of await loadTabEntries()) {
-    const session = await resolveSessionForTab(tab);
-    if (session) {
-      owning.set(sessionKey(session), session);
-    }
-  }
-  for (const session of owning.values()) {
-    if (isTokenFresh(session)) {
-      continue;
-    }
-    const accessToken = await ensureFreshToken(session);
-    if (accessToken) {
-      await pushTokenToSession(session, accessToken);
-    }
-  }
-});
