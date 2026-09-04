@@ -21,6 +21,7 @@ export const OAUTH_SCOPES = [
   'translations.edit',
   'translations.state-edit',
   'keys.view',
+  'keys.create',
   'keys.edit',
   'screenshots.view',
   'screenshots.upload',

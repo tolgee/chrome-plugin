@@ -10,6 +10,7 @@ export const API_KEY_SCOPES = [
   'translations.view',
   'translations.edit',
   'keys.view',
+  'keys.create',
   'keys.edit',
   'screenshots.view',
   'screenshots.upload',
