@@ -3,6 +3,9 @@ import browser from 'webextension-polyfill';
 // Opened as a plain tab (end-to-end tests), the popup is itself the active tab, so the tab it should act on is
 // passed in the URL instead.
 const tabIdFromUrl = () => {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
   const id = new URLSearchParams(window.location.search).get('tabId');
   return id ? Number(id) : undefined;
 };
