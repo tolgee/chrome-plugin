@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import { OriginRecord, updateMarkerProjectHint } from '../oauth/marker';
+import { OriginRecord, updateMarkerHints } from '../oauth/marker';
 import { originOf } from '../oauth/url';
 import { getActiveTab } from './activeTab';
 import { Values } from './tools';
@@ -9,7 +9,10 @@ export const storeValues = async (values: Values | null) => {
     const origin = await getCurrentTabOrigin();
 
     if (values?.authToken && values?.apiUrl) {
-      await updateMarkerProjectHint(origin, values.projectId);
+      await updateMarkerHints(origin, {
+        projectId: values.projectId,
+        branch: values.branch,
+      });
     } else if (values?.apiKey && values?.apiUrl) {
       await browser.storage.local.set({
         [origin]: {

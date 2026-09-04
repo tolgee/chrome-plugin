@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { LibConfig } from '../types';
 import {
   Action,
+  branchableProjectId,
   createReducer,
   initialState,
   ProjectInfo,
@@ -148,6 +149,68 @@ describe('detector reducer', () => {
       expect(next.appliedValues?.branch).toBe('feature');
     });
 
+    it('keeps the branch for an OAuth session whose declared project has branching', () => {
+      const oauth: State = {
+        ...initialState,
+        values: {
+          apiUrl: 'https://app.tolgee.io',
+          authToken: 'jwt',
+          projectId: 7,
+          branch: 'feature',
+        },
+        credentialsCheck: { oauth: true, userFullName: 'Jo' },
+        declaredProject: { id: 7, name: 'Demo', branchingEnabled: true },
+      };
+      const next = reduce(oauth, { type: 'APPLY_VALUES' });
+      expect(next.appliedValues?.branch).toBe('feature');
+      expect(next.storedValues?.branch).toBe('feature');
+    });
+
+    it('drops the branch for an OAuth session whose declared project has no branching', () => {
+      const oauth: State = {
+        ...initialState,
+        values: {
+          apiUrl: 'https://app.tolgee.io',
+          authToken: 'jwt',
+          projectId: 7,
+          branch: 'feature',
+        },
+        credentialsCheck: { oauth: true, userFullName: 'Jo' },
+        declaredProject: { id: 7, name: 'Demo', branchingEnabled: false },
+      };
+      const next = reduce(oauth, { type: 'APPLY_VALUES' });
+      expect(next.appliedValues?.branch).toBeUndefined();
+    });
+
+    it('resetting the override (empty branch) applies without a branch', () => {
+      const withOverride: State = {
+        ...initialState,
+        values: {
+          apiUrl: 'https://app.tolgee.io',
+          authToken: 'jwt',
+          projectId: 7,
+          branch: 'feature',
+        },
+        appliedValues: {
+          apiUrl: 'https://app.tolgee.io',
+          authToken: 'jwt',
+          projectId: 7,
+          branch: 'feature',
+        },
+        credentialsCheck: { oauth: true, userFullName: 'Jo' },
+        declaredProject: { id: 7, name: 'Demo', branchingEnabled: true },
+      };
+      const cleared = reduce(withOverride, {
+        type: 'CHANGE_VALUES',
+        payload: { branch: '' },
+      });
+      const next = reduce(cleared, { type: 'APPLY_VALUES' });
+      expect(next.appliedValues?.branch).toBeFalsy();
+      expect(next.storedValues?.branch).toBeFalsy();
+      expect(next.appliedValues?.authToken).toBe('jwt');
+      expect(apply).toHaveBeenCalledOnce();
+    });
+
     it('preserves the OAuth token and project (Enter in the Server field must not drop them)', () => {
       const oauth: State = {
         ...initialState,
@@ -230,9 +293,16 @@ describe('detector reducer', () => {
     it('binds the resolved declared project into the stored session without applying it while switched off', () => {
       const next = reduce(connected, {
         type: 'RESOLVE_PROJECT',
-        payload: { project: { id: 7, name: 'Demo' }, inaccessible: false },
+        payload: {
+          project: { id: 7, name: 'Demo', branchingEnabled: false },
+          inaccessible: false,
+        },
       });
-      expect(next.declaredProject).toEqual({ id: 7, name: 'Demo' });
+      expect(next.declaredProject).toEqual({
+        id: 7,
+        name: 'Demo',
+        branchingEnabled: false,
+      });
       expect(next.declaredProjectInaccessible).toBe(false);
       expect(next.values?.projectId).toBe(7);
       expect(next.storedValues?.projectId).toBe(7);
@@ -248,7 +318,10 @@ describe('detector reducer', () => {
       };
       const next = reduce(applied, {
         type: 'RESOLVE_PROJECT',
-        payload: { project: { id: 7, name: 'Demo' }, inaccessible: false },
+        payload: {
+          project: { id: 7, name: 'Demo', branchingEnabled: false },
+          inaccessible: false,
+        },
       });
       expect(next.appliedValues?.projectId).toBe(7);
       expect(next.storedValues?.projectId).toBe(7);
@@ -264,6 +337,46 @@ describe('detector reducer', () => {
       expect(next.declaredProject).toBeNull();
       expect(next.values?.projectId).toBeUndefined();
       expect(apply).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('branchableProjectId', () => {
+    const projectInfo = (branchingEnabled: boolean): ProjectInfo => ({
+      projectName: 'Demo',
+      projectId: 2,
+      scopes: [],
+      userFullName: 'Jo',
+      branchingEnabled,
+    });
+
+    it('uses the api key project when it has branching', () => {
+      expect(branchableProjectId(projectInfo(true), null)).toBe(2);
+      expect(branchableProjectId(projectInfo(false), null)).toBeNull();
+    });
+
+    it('uses the declared project on the OAuth path when it has branching', () => {
+      const user = { oauth: true as const, userFullName: 'Jo' };
+      expect(
+        branchableProjectId(user, {
+          id: 7,
+          name: 'Demo',
+          branchingEnabled: true,
+        })
+      ).toBe(7);
+      expect(
+        branchableProjectId(user, {
+          id: 7,
+          name: 'Demo',
+          branchingEnabled: false,
+        })
+      ).toBeNull();
+      expect(branchableProjectId(user, null)).toBeNull();
+    });
+
+    it('offers nothing while the credentials are unchecked or invalid', () => {
+      expect(branchableProjectId(null, null)).toBeNull();
+      expect(branchableProjectId('loading', null)).toBeNull();
+      expect(branchableProjectId('invalid', null)).toBeNull();
     });
   });
 

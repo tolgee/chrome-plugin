@@ -29,9 +29,9 @@ export const storeOAuthMarker = async (
   });
 };
 
-export const updateMarkerProjectHint = async (
+export const updateMarkerHints = async (
   origin: string,
-  projectId: number | undefined
+  hints: { projectId: number | undefined; branch: string | undefined }
 ) => {
   const existing = (await browser.storage.local.get(origin))[
     origin
@@ -40,7 +40,7 @@ export const updateMarkerProjectHint = async (
     return;
   }
   await browser.storage.local.set({
-    [origin]: { ...existing, projectId },
+    [origin]: { ...existing, ...hints },
   });
 };
 

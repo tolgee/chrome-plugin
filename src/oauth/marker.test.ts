@@ -26,7 +26,7 @@ import {
   isSessionReferencedByAnyOrigin,
   loadOAuthMarker,
   storeOAuthMarker,
-  updateMarkerProjectHint,
+  updateMarkerHints,
 } from './marker';
 
 describe('OAuth marker', () => {
@@ -54,14 +54,17 @@ describe('OAuth marker', () => {
     expect(await loadOAuthMarker('https://k.example')).toBeNull();
   });
 
-  it('updateMarkerProjectHint updates only projectId, leaving projectKey (the session identity) untouched', async () => {
+  it('updateMarkerHints updates only projectId and branch, leaving projectKey (the session identity) untouched', async () => {
     await storeOAuthMarker('https://site.example', {
       apiUrl: 'https://api',
       projectId: 5,
       projectKey: '5',
     });
 
-    await updateMarkerProjectHint('https://site.example', 7);
+    await updateMarkerHints('https://site.example', {
+      projectId: 7,
+      branch: 'feature',
+    });
 
     expect(await loadOAuthMarker('https://site.example')).toEqual({
       apiUrl: 'https://api',
@@ -70,8 +73,11 @@ describe('OAuth marker', () => {
     });
   });
 
-  it('updateMarkerProjectHint is a no-op when the origin has no OAuth marker', async () => {
-    await updateMarkerProjectHint('https://never-connected.example', 7);
+  it('updateMarkerHints is a no-op when the origin has no OAuth marker', async () => {
+    await updateMarkerHints('https://never-connected.example', {
+      projectId: 7,
+      branch: undefined,
+    });
 
     expect(await loadOAuthMarker('https://never-connected.example')).toBeNull();
   });

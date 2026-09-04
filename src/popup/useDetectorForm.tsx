@@ -18,12 +18,14 @@ import {
 import { useApplier } from './useApplier';
 import { RuntimeMessage } from '../content/Messages';
 import {
+  branchableProjectId,
   CredentialsCheck,
   createReducer,
   initialState,
   isOAuthUser,
-  isProjectInfo,
+  ProjectOption,
 } from './reducer';
+import { fetchBranches } from './branch';
 
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
@@ -121,6 +123,7 @@ export const useDetectorForm = () => {
             authToken: res.accessToken,
             projectId: storedData.projectId,
             projectKey: storedData.projectKey,
+            branch: storedData.branch,
           },
         });
         // The background may have just refreshed the token (OAUTH_GET_TOKEN's push lands in the tab before this
@@ -238,46 +241,25 @@ export const useDetectorForm = () => {
   // fetch branches when credentials are valid and branching is enabled
   useEffect(() => {
     let cancelled = false;
-    const check = state.credentialsCheck;
-    if (
-      isProjectInfo(check) &&
-      check.branchingEnabled &&
-      validateValues(checkableValues)
-    ) {
-      const url = normalizeUrl(checkableValues!.apiUrl);
-      fetch(`${url}/v2/projects/${check.projectId}/branches?size=100`, {
-        headers: { 'X-API-Key': checkableValues!.apiKey! },
-      })
-        .then((r) => {
-          if (!r.ok) {
-            throw new Error('Failed to load branches');
-          }
-          return r.json();
-        })
-        .then((data) => {
-          if (!cancelled) {
-            dispatch({
-              type: 'SET_BRANCHES',
-              payload:
-                data?._embedded?.branches?.map((b: any) => ({
-                  name: b.name,
-                  isDefault: b.isDefault,
-                })) ?? null,
-            });
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            dispatch({ type: 'SET_BRANCHES', payload: null });
-          }
-        });
-    } else {
+    const projectId = branchableProjectId(
+      state.credentialsCheck,
+      state.declaredProject
+    );
+    if (projectId === null || !validateValues(checkableValues)) {
       dispatch({ type: 'SET_BRANCHES', payload: null });
+      return undefined;
     }
+    fetchBranches(projectId, checkableValues!)
+      .catch(() => null)
+      .then((branches) => {
+        if (!cancelled) {
+          dispatch({ type: 'SET_BRANCHES', payload: branches });
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [state.credentialsCheck]);
+  }, [state.credentialsCheck, state.declaredProject]);
 
   const declaredId = declaredProjectId(libConfig);
   useEffect(() => {
@@ -293,7 +275,7 @@ export const useDetectorForm = () => {
     }
     const url = normalizeUrl(checkableValues!.apiUrl);
     const resolveDeclaredProject = async (): Promise<{
-      project: { id: number; name: string } | null;
+      project: ProjectOption | null;
       inaccessible: boolean;
     }> => {
       try {
@@ -303,7 +285,11 @@ export const useDetectorForm = () => {
         if (r.ok) {
           const data = await r.json();
           return {
-            project: { id: data.id, name: data.name },
+            project: {
+              id: data.id,
+              name: data.name,
+              branchingEnabled: Boolean(data.useBranching),
+            },
             inaccessible: false,
           };
         }

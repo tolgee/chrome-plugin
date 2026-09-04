@@ -1,13 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Autocomplete,
   Box,
-  Button,
   CircularProgress,
   FormControl,
-  Switch,
-  Tab,
-  Tabs,
   TextField,
   Typography,
 } from '@mui/material';
@@ -25,11 +20,11 @@ import { getActiveTab } from './activeTab';
 import { safeOrigin } from '../oauth/url';
 import { projectKeyFor } from '../oauth/sessionRules';
 import { isApiKeyValid, useApiKeyCheck } from './useApiKeyCheck';
-import { isOAuthUser, isProjectInfo } from './reducer';
-import { ConnectedPanel } from './ConnectedPanel';
+import { branchableProjectId, isOAuthUser, isProjectInfo } from './reducer';
+import { ConnectedPanel, Session } from './ConnectedPanel';
 import { LoginTab } from './LoginTab';
 import { ApiKeyTab } from './ApiKeyTab';
-import { POPUP_WIDTH } from '../constants';
+import { PopupFrame } from './PopupFrame';
 
 const DEFAULT_SERVER = 'https://app.tolgee.io';
 
@@ -39,7 +34,6 @@ export const TolgeeDetector = () => {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [tab, setTab] = useState<'login' | 'apiKey'>('login');
   const [serverOpen, setServerOpen] = useState(false);
-  const [branchOpen, setBranchOpen] = useState(false);
 
   const {
     error,
@@ -101,12 +95,10 @@ export const TolgeeDetector = () => {
     }
   };
 
-  const handleConnect = async () => {
-    const apiUrl = values?.apiUrl || DEFAULT_SERVER;
+  const startLogin = async (apiUrl: string, projectId: number | undefined) => {
     setConnecting(true);
     setConnectError(null);
     try {
-      const projectId = declaredProjectId(libConfig);
       // Capture the target tab now: launchWebAuthFlow closes the popup, so the background does the injection and needs
       // the tab id up front.
       const activeTab = await getActiveTab();
@@ -136,6 +128,9 @@ export const TolgeeDetector = () => {
     }
   };
 
+  const handleConnect = () =>
+    startLogin(values?.apiUrl || DEFAULT_SERVER, declaredProjectId(libConfig));
+
   const activeValues = appliedValues || storedValues || values;
   const isOauthSession = isOAuth(activeValues);
 
@@ -150,6 +145,18 @@ export const TolgeeDetector = () => {
     } finally {
       dispatch({ type: 'CLEAR_ALL' });
     }
+  };
+
+  const handleSignInAgain = async () => {
+    const apiUrl = activeValues?.apiUrl || DEFAULT_SERVER;
+    const projectId = declaredProjectId(libConfig);
+    await handleDisconnect();
+    await startLogin(apiUrl, projectId);
+  };
+
+  const handleChangeBranch = (branch: string) => {
+    dispatch({ type: 'CHANGE_VALUES', payload: { branch } });
+    dispatch({ type: 'APPLY_VALUES' });
   };
 
   const serverField = (
@@ -171,108 +178,25 @@ export const TolgeeDetector = () => {
     </FormControl>
   );
 
-  const branchField = isProjectInfo(credentialsCheck) &&
-    credentialsCheck.branchingEnabled && (
-      <Autocomplete
-        style={{ marginBottom: branchOpen ? 150 : 0 }}
-        open={branchOpen}
-        onOpen={() => setBranchOpen(true)}
-        onClose={() => setBranchOpen(false)}
-        freeSolo
-        size="small"
-        disablePortal
-        slotProps={{
-          popper: {
-            placement: 'bottom',
-            modifiers: [{ name: 'flip', enabled: false }],
-          },
-        }}
-        ListboxProps={{ style: { maxHeight: 150 } }}
-        options={branches ?? []}
-        getOptionLabel={(option) =>
-          typeof option === 'string' ? option : option.name
-        }
-        value={
-          branches?.find((b) => b.name === values?.branch) ??
-          values?.branch ??
-          null
-        }
-        onChange={(_e: any, newValue: any) => {
-          dispatch({
-            type: 'CHANGE_VALUES',
-            payload: {
-              branch:
-                typeof newValue === 'string' ? newValue : newValue?.name ?? '',
-            },
-          });
-        }}
-        onInputChange={(_e: any, newInput: string, reason: string) => {
-          if (reason === 'input') {
-            dispatch({
-              type: 'CHANGE_VALUES',
-              payload: { branch: newInput },
-            });
-          }
-        }}
-        renderOption={(props, option) => (
-          <li {...props}>
-            {option.name}
-            {option.isDefault && (
-              <span style={{ color: '#999', marginLeft: 6 }}>default</span>
-            )}
-          </li>
-        )}
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label="Branch"
-            variant="outlined"
-            placeholder={libConfig?.config?.branch || 'Default branch'}
-            helperText="Leave empty to use the branch from SDK config"
-            onKeyDown={handleKeyDown}
-          />
-        )}
-      />
-    );
-
-  const footer = (
-    <Box display="flex" justifyContent="space-between" alignItems="center">
-      <Box display="flex" alignItems="center" style={{ gap: 5 }}>
-        <Switch
-          size="small"
-          checked={Boolean(appliedValues)}
-          onChange={handleApplyChange}
-          color="primary"
-        />
-        <Typography>Applied</Typography>
-      </Box>
-      <Button
-        size="small"
-        onClick={handleDisconnect}
-        variant="contained"
-        color="secondary"
-      >
-        Disconnect
-      </Button>
-    </Box>
-  );
-
   if (error) {
     return (
-      <Box width={POPUP_WIDTH} p={1} color="red">
-        <Typography variant="body2" fontWeight="bold">
+      <PopupFrame title="Tolgee plugin">
+        <Typography variant="body2" fontWeight="bold" color="error">
           Error: {error}
         </Typography>
-      </Box>
+      </PopupFrame>
     );
   } else if (tolgeePresent === 'loading') {
     return (
-      <Box width={POPUP_WIDTH} p={1} display="flex" justifyContent="center">
-        <CircularProgress />
-      </Box>
+      <PopupFrame title="Tolgee plugin">
+        <Box display="flex" justifyContent="center">
+          <CircularProgress />
+        </Box>
+      </PopupFrame>
     );
   } else if (tolgeePresent === 'present' || appliedValues) {
-    const projectDetected = declaredProjectId(libConfig) !== undefined;
+    const declaredId = declaredProjectId(libConfig);
+    const projectDetected = declaredId !== undefined;
 
     const { host: serverHost, link: serverLink } = httpDisplayUrl(
       values?.apiUrl || DEFAULT_SERVER,
@@ -280,39 +204,44 @@ export const TolgeeDetector = () => {
     );
 
     if (hasSession) {
+      const session: Session = isOauthSession
+        ? { kind: 'oauth', userFullName: oauthUser?.userFullName ?? null }
+        : { kind: 'apiKey', apiKey: activeValues?.apiKey ?? '' };
+      const projectName = isOauthSession
+        ? declaredProject?.name ?? null
+        : isProjectInfo(credentialsCheck)
+          ? credentialsCheck.projectName
+          : null;
+      const branch =
+        branchableProjectId(credentialsCheck, declaredProject) === null
+          ? null
+          : {
+              override: activeValues?.branch || undefined,
+              pageBranch: libConfig?.config?.branch || undefined,
+              options: branches,
+            };
       return (
         <ConnectedPanel
-          apiUrl={values?.apiUrl ?? ''}
-          isOauthSession={isOauthSession}
-          oauthUserFullName={oauthUser?.userFullName ?? null}
-          oauthInvalid={isOauthSession && credentialsCheck === 'invalid'}
-          declaredProject={declaredProject}
-          declaredProjectInaccessible={declaredProjectInaccessible}
+          session={session}
           serverHost={serverHost}
-          credentialsCheck={credentialsCheck}
-          branchField={branchField}
-          footer={footer}
+          sessionEnded={credentialsCheck === 'invalid'}
+          apiKeyRejected={credentialsCheck === 'invalid'}
+          projectName={projectName}
+          projectInaccessible={declaredProjectInaccessible}
+          declaredProjectId={declaredId}
+          branch={branch}
+          editingOn={Boolean(appliedValues)}
+          onToggleEditing={handleApplyChange}
+          onChangeBranch={handleChangeBranch}
+          onSignOut={handleDisconnect}
+          onSignInAgain={handleSignInAgain}
         />
       );
     }
     return (
-      <Box
-        p={2}
-        width={POPUP_WIDTH}
-        style={{ display: 'flex', flexDirection: 'column', gap: 15 }}
+      <PopupFrame
+        title={tab === 'apiKey' ? 'API key connection' : 'Tolgee plugin'}
       >
-        <Typography variant="h6">Tolgee plugin</Typography>
-
-        <Tabs
-          value={tab}
-          onChange={(_e, v) => setTab(v)}
-          textColor="primary"
-          indicatorColor="primary"
-        >
-          <Tab value="login" label="Login" />
-          <Tab value="apiKey" label="API key" />
-        </Tabs>
-
         {tab === 'login' && (
           <LoginTab
             projectDetected={projectDetected}
@@ -324,12 +253,14 @@ export const TolgeeDetector = () => {
             connectError={connectError}
             onConnect={handleConnect}
             onOpenServerField={() => setServerOpen(true)}
+            onUseApiKey={() => setTab('apiKey')}
           />
         )}
 
         {tab === 'apiKey' && (
           <ApiKeyTab
             serverField={serverField}
+            serverHost={serverHost}
             apiKey={values?.apiKey || ''}
             onChangeApiKey={(apiKey) =>
               dispatch({ type: 'CHANGE_VALUES', payload: { apiKey } })
@@ -338,26 +269,27 @@ export const TolgeeDetector = () => {
             apiKeyCheck={apiKeyCheck}
             canApply={canApplyApiKey}
             onApply={() => dispatch({ type: 'APPLY_VALUES' })}
+            onBack={() => setTab('login')}
             isInDevelopmentMode={isInDevelopmentMode}
           />
         )}
-      </Box>
+      </PopupFrame>
     );
   } else if (tolgeePresent === 'legacy') {
     return (
-      <Box width={POPUP_WIDTH} p={1}>
-        <Typography variant="body1">
+      <PopupFrame title="Tolgee plugin">
+        <Typography variant="body2">
           This website is using old version of Tolgee.
         </Typography>
-      </Box>
+      </PopupFrame>
     );
   } else {
     return (
-      <Box width={POPUP_WIDTH} p={1}>
-        <Typography variant="body1">
-          This website doesn't seem to be using Tolgee.
+      <PopupFrame title="Tolgee plugin">
+        <Typography variant="body2">
+          This website doesn&apos;t seem to be using Tolgee.
         </Typography>
-      </Box>
+      </PopupFrame>
     );
   }
 };

@@ -37,6 +37,21 @@ export type BranchOption = {
 export type ProjectOption = {
   id: number;
   name: string;
+  branchingEnabled: boolean;
+};
+
+// The project whose branches the popup can offer, or null when the connected project has no branching.
+export const branchableProjectId = (
+  check: CredentialsCheck,
+  declaredProject: ProjectOption | null
+): number | null => {
+  if (isProjectInfo(check)) {
+    return check.branchingEnabled ? check.projectId : null;
+  }
+  if (isOAuthUser(check) && declaredProject?.branchingEnabled) {
+    return declaredProject.id;
+  }
+  return null;
 };
 
 export const initialState = {
@@ -140,8 +155,8 @@ export const createReducer =
       case 'APPLY_VALUES': {
         apply();
         const branchEnabled =
-          isProjectInfo(state.credentialsCheck) &&
-          state.credentialsCheck.branchingEnabled;
+          branchableProjectId(state.credentialsCheck, state.declaredProject) !==
+          null;
         const effectiveBranch = branchEnabled
           ? state.values?.branch
           : undefined;

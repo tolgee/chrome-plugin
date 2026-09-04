@@ -52,6 +52,31 @@ describe('popup storage routing', () => {
     expect(record.apiKey).toBeUndefined();
   });
 
+  it('for an OAuth session, remembers the branch override on the marker so reopening the popup restores it', async () => {
+    store.set(ORIGIN, {
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectId: 5,
+      projectKey: '5',
+    });
+
+    await storeValues({
+      apiUrl: 'https://app.tolgee.io',
+      authToken: 'jwt',
+      projectId: 5,
+      branch: 'feature/checkout',
+    });
+    expect((await loadValues()).branch).toBe('feature/checkout');
+
+    await storeValues({
+      apiUrl: 'https://app.tolgee.io',
+      authToken: 'jwt',
+      projectId: 5,
+      branch: undefined,
+    });
+    expect((await loadValues()).branch).toBeUndefined();
+  });
+
   it('for an OAuth session on an origin with no existing marker, does nothing (never fabricates one)', async () => {
     await storeValues({
       apiUrl: 'https://app.tolgee.io',
