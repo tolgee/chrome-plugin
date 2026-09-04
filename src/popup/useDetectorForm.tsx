@@ -27,6 +27,10 @@ import {
 } from './reducer';
 import { fetchBranches } from './branch';
 
+const DETECT_TIMEOUT_MS = 15_000;
+const DETECT_INITIAL_DELAY_MS = 250;
+const DETECT_MAX_DELAY_MS = 1_500;
+
 export const useDetectorForm = () => {
   const { applyRequired, apply } = useApplier();
 
@@ -60,14 +64,22 @@ export const useDetectorForm = () => {
 
   useEffect(() => {
     let cancelled = false;
-    // Applying/un-applying reloads the page, so the content script is briefly gone.
-    const detect = (attemptsLeft: number) => {
+    // Applying/un-applying reloads the page, so the content script is briefly gone. A dev-server page (vite) can
+    // take well over 4 s to get it back, so keep asking for a while before giving up.
+    const detect = (waitedMs: number, delayMs: number) => {
       sendMessage('DETECT_TOLGEE').catch(() => {
         if (cancelled) {
           return;
         }
-        if (attemptsLeft > 0) {
-          setTimeout(() => detect(attemptsLeft - 1), 250);
+        if (waitedMs < DETECT_TIMEOUT_MS) {
+          setTimeout(
+            () =>
+              detect(
+                waitedMs + delayMs,
+                Math.min(delayMs * 1.5, DETECT_MAX_DELAY_MS)
+              ),
+            delayMs
+          );
           return;
         }
         dispatch({
@@ -76,7 +88,7 @@ export const useDetectorForm = () => {
         });
       });
     };
-    detect(16);
+    detect(0, DETECT_INITIAL_DELAY_MS);
     return () => {
       cancelled = true;
     };

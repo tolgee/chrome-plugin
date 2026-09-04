@@ -13,6 +13,7 @@ import {
   declaredProjectId,
   httpDisplayUrl,
   isOAuth,
+  projectUrl,
   validateValues,
 } from './tools';
 import { sendToBackground } from './sendToBackground';
@@ -212,6 +213,11 @@ export const TolgeeDetector = () => {
         : isProjectInfo(credentialsCheck)
           ? credentialsCheck.projectName
           : null;
+      const projectId = isOauthSession
+        ? declaredProject?.id
+        : isProjectInfo(credentialsCheck)
+          ? credentialsCheck.projectId
+          : undefined;
       const branch =
         branchableProjectId(credentialsCheck, declaredProject) === null
           ? null
@@ -227,6 +233,7 @@ export const TolgeeDetector = () => {
           sessionEnded={credentialsCheck === 'invalid'}
           apiKeyRejected={credentialsCheck === 'invalid'}
           projectName={projectName}
+          projectUrl={projectUrl(activeValues?.apiUrl, projectId)}
           projectInaccessible={declaredProjectInaccessible}
           declaredProjectId={declaredId}
           branch={branch}

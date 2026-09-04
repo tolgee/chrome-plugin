@@ -1,4 +1,5 @@
 import { LibConfig } from '../types';
+import { normalizeUrl } from '../oauth/url';
 
 // See oauth/sessionRules.ts for the projectId-vs-projectKey distinction these two fields carry.
 export type Values = {
@@ -56,6 +57,25 @@ export const compareValues = (
     num(values1?.projectId) === num(values2?.projectId) &&
     (values1?.branch || '') === (values2?.branch || '')
   );
+};
+
+// Same http(s) restriction as httpDisplayUrl below: the server URL is user-editable and ends up in an `<a href>`.
+export const projectUrl = (
+  apiUrl: string | undefined,
+  projectId: number | undefined
+): string | null => {
+  if (!apiUrl || projectId === undefined) {
+    return null;
+  }
+  try {
+    const { protocol } = new URL(apiUrl);
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return `${normalizeUrl(apiUrl)}/projects/${projectId}`;
 };
 
 // A display host and a link target for a user-editable server URL. Restricted to http(s): the raw value could be

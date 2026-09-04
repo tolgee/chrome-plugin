@@ -1,5 +1,12 @@
 import React from 'react';
-import { Alert, Box, Button, Link, Typography } from '@mui/material';
+import {
+  Alert,
+  AlertTitle,
+  Box,
+  Button,
+  Link,
+  Typography,
+} from '@mui/material';
 
 const LEARN_MORE_PROJECT_ID =
   'https://docs.tolgee.io/js-sdk/api/core_package/options#projectid';
@@ -38,23 +45,20 @@ export const LoginTab = ({
   if (!projectDetected) {
     return (
       <>
-        <Box>
-          <Typography variant="body2" fontWeight={500}>
-            Project not detected
-          </Typography>
-          <Typography variant="body2">
-            Ask the website administrator to add projectId to the Tolgee
-            configuration.{' '}
-            <Link
-              href={LEARN_MORE_PROJECT_ID}
-              target="_blank"
-              rel="noreferrer"
-              underline="hover"
-            >
-              Learn more
-            </Link>
-          </Typography>
-        </Box>
+        <Alert severity="info">
+          <AlertTitle>Sign-in not available on this site</AlertTitle>
+          To sign in without an API key, the site has to tell the extension
+          which Tolgee project it uses. Ask the site&apos;s developer to set
+          projectId in the Tolgee configuration.{' '}
+          <Link
+            href={LEARN_MORE_PROJECT_ID}
+            target="_blank"
+            rel="noreferrer"
+            underline="hover"
+          >
+            Learn more
+          </Link>
+        </Alert>
         <Button variant="contained" color="primary" disabled>
           Connect to Tolgee
         </Button>

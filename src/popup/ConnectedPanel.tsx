@@ -3,7 +3,6 @@ import {
   Alert,
   AlertTitle,
   alpha,
-  Avatar,
   Box,
   Button,
   IconButton,
@@ -16,7 +15,7 @@ import {
 import { BranchOption } from './reducer';
 import { abbreviateApiKey, branchInEffect, pageBranchLabel } from './branch';
 import { BranchEditor } from './BranchEditor';
-import { EditIcon, KeyIcon } from './icons';
+import { EditIcon } from './icons';
 import { PopupFrame } from './PopupFrame';
 
 export type Session =
@@ -35,6 +34,7 @@ type Props = {
   sessionEnded: boolean;
   apiKeyRejected: boolean;
   projectName: string | null;
+  projectUrl: string | null;
   projectInaccessible: boolean;
   declaredProjectId: number | undefined;
   branch: BranchState | null;
@@ -66,20 +66,10 @@ const AccountCard = ({
       sx={{
         display: 'flex',
         alignItems: 'center',
-        gap: 1.5,
         px: 1.5,
         py: 1.25,
       }}
     >
-      {session.kind === 'oauth' ? (
-        <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-          {name.charAt(0).toUpperCase()}
-        </Avatar>
-      ) : (
-        <Avatar sx={{ width: 32, height: 32 }}>
-          <KeyIcon fontSize="small" />
-        </Avatar>
-      )}
       <Box minWidth={0}>
         <Typography variant="body2" fontWeight={500} noWrap>
           {name}
@@ -109,14 +99,20 @@ const Footer = ({
   action,
   onAction,
 }: {
-  note: string;
+  note?: string;
   action: string;
   onAction: () => void;
 }) => (
-  <Box display="flex" justifyContent="space-between" alignItems="center">
-    <Typography variant="caption" color="text.secondary">
-      {note}
-    </Typography>
+  <Box
+    display="flex"
+    justifyContent={note ? 'space-between' : 'flex-end'}
+    alignItems="center"
+  >
+    {note && (
+      <Typography variant="caption" color="text.secondary">
+        {note}
+      </Typography>
+    )}
     <Button size="small" color="error" onClick={onAction}>
       {action}
     </Button>
@@ -129,6 +125,7 @@ export const ConnectedPanel = ({
   sessionEnded,
   apiKeyRejected,
   projectName,
+  projectUrl,
   projectInaccessible,
   declaredProjectId,
   branch,
@@ -142,13 +139,8 @@ export const ConnectedPanel = ({
 
   const isOauth = session.kind === 'oauth';
   const title = isOauth ? 'Tolgee plugin' : 'API key connection';
-  const footerNote = isOauth
-    ? 'Session refreshes automatically'
-    : 'Key stored for this page';
   const footerAction = isOauth ? 'Sign out' : 'Remove key';
-  const footer = (
-    <Footer note={footerNote} action={footerAction} onAction={onSignOut} />
-  );
+  const footer = <Footer action={footerAction} onAction={onSignOut} />;
 
   if (isOauth && sessionEnded) {
     return (
@@ -180,7 +172,7 @@ export const ConnectedPanel = ({
         <Footer
           note={
             declaredProjectId === undefined
-              ? footerNote
+              ? undefined
               : `Project #${declaredProjectId} on ${serverHost}`
           }
           action={footerAction}
@@ -208,10 +200,10 @@ export const ConnectedPanel = ({
 
   const overrideSet = Boolean(branch?.override);
   const editingHint = !editingOn
-    ? 'You stay signed in. Turn it on to translate here.'
+    ? 'You stay signed in. Turn it on to edit here.'
     : overrideSet
       ? `Edits go to ${branch!.override}.`
-      : 'Alt+click any text on the page to translate it.';
+      : 'Alt+click any text on the page to edit it.';
 
   return (
     <PopupFrame title={title}>
@@ -227,7 +219,15 @@ export const ConnectedPanel = ({
         {projectName && (
           <>
             <Label>Project</Label>
-            <Value>{projectName}</Value>
+            <Value>
+              {projectUrl ? (
+                <Link href={projectUrl} target="_blank" rel="noreferrer">
+                  {projectName}
+                </Link>
+              ) : (
+                projectName
+              )}
+            </Value>
           </>
         )}
         {branch && !editingBranch && (

@@ -122,6 +122,7 @@ export const createReducer =
           ...state,
           libConfig: libData,
           frameId,
+          error: libData ? null : state.error,
           values: validateValues(state.values) || newValues,
           tolgeePresent: !libData
             ? 'not_present'

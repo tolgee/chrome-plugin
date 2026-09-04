@@ -5,6 +5,7 @@ import {
   declaredProjectId,
   httpDisplayUrl,
   isOAuth,
+  projectUrl,
   validateValues,
 } from './tools';
 import { LibConfig } from '../types';
@@ -103,6 +104,28 @@ describe('compareValues', () => {
     expect(compareValues({ ...oauth, apiKey: null as any }, { ...oauth })).toBe(
       true
     );
+  });
+});
+
+describe('projectUrl', () => {
+  it('links to the project on the server, with or without a trailing slash', () => {
+    expect(projectUrl('https://app.tolgee.io', 7)).toBe(
+      'https://app.tolgee.io/projects/7'
+    );
+    expect(projectUrl('https://app.tolgee.io/', 7)).toBe(
+      'https://app.tolgee.io/projects/7'
+    );
+  });
+
+  it('is null without a server or a project id', () => {
+    expect(projectUrl(undefined, 7)).toBeNull();
+    expect(projectUrl('', 7)).toBeNull();
+    expect(projectUrl('https://app.tolgee.io', undefined)).toBeNull();
+  });
+
+  it('refuses a non-http(s) or malformed server url', () => {
+    expect(projectUrl('javascript:alert(1)', 7)).toBeNull();
+    expect(projectUrl('not a url', 7)).toBeNull();
   });
 });
 

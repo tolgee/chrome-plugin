@@ -78,6 +78,34 @@ describe('detector reducer', () => {
       expect(next.values?.apiKey).toBeUndefined();
     });
 
+    it('clears a detection error once a config arrives', () => {
+      const errored = reduce(initialState, {
+        type: 'SET_ERROR',
+        payload: 'No access to this page, try to refresh',
+      });
+      expect(errored.error).toBe('No access to this page, try to refresh');
+      expect(errored.tolgeePresent).toBe('not_present');
+
+      const recovered = reduce(errored, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: lib({}), frameId: 0 },
+      });
+      expect(recovered.error).toBeNull();
+      expect(recovered.tolgeePresent).toBe('present');
+    });
+
+    it('keeps a detection error when the no-config timeout fires', () => {
+      const errored = reduce(initialState, {
+        type: 'SET_ERROR',
+        payload: 'No access to this page, try to refresh',
+      });
+      const next = reduce(errored, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: null, frameId: null },
+      });
+      expect(next.error).toBe('No access to this page, try to refresh');
+    });
+
     it('errors when a second instance is detected in another frame', () => {
       const first = reduce(initialState, {
         type: 'CHANGE_LIB_CONFIG',
