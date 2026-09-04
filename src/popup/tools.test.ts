@@ -4,6 +4,7 @@ import {
   compareValues,
   declaredProjectId,
   httpDisplayUrl,
+  isHttpUrl,
   isOAuth,
   projectUrl,
   validateValues,
@@ -104,6 +105,21 @@ describe('compareValues', () => {
     expect(compareValues({ ...oauth, apiKey: null as any }, { ...oauth })).toBe(
       true
     );
+  });
+});
+
+describe('isHttpUrl', () => {
+  it('accepts http and https servers', () => {
+    expect(isHttpUrl('https://app.tolgee.io')).toBe(true);
+    expect(isHttpUrl('http://localhost:8080/')).toBe(true);
+  });
+
+  it('rejects an empty, malformed or non-http value', () => {
+    expect(isHttpUrl('')).toBe(false);
+    expect(isHttpUrl(undefined)).toBe(false);
+    expect(isHttpUrl('not a url')).toBe(false);
+    expect(isHttpUrl('app.tolgee.io')).toBe(false);
+    expect(isHttpUrl('javascript:alert(1)')).toBe(false);
   });
 });
 

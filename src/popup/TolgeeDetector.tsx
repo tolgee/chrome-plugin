@@ -12,6 +12,7 @@ import {
   canApplyOnEnter,
   declaredProjectId,
   httpDisplayUrl,
+  isHttpUrl,
   isOAuth,
   projectUrl,
   validateValues,
@@ -72,6 +73,7 @@ export const TolgeeDetector = () => {
 
   const canApplyApiKey =
     Boolean(validateValues(values)) && !valuesNotChanged && apiKeyValid;
+  const serverInvalid = !isHttpUrl(values?.apiUrl || DEFAULT_SERVER);
 
   useEffect(() => {
     if (values?.apiKey && !values?.authToken) {
@@ -167,6 +169,7 @@ export const TolgeeDetector = () => {
         variant="outlined"
         value={values?.apiUrl ?? ''}
         placeholder={DEFAULT_SERVER}
+        error={serverInvalid}
         inputProps={{ 'data-testid': 'server-input' }}
         onChange={(e) =>
           dispatch({
@@ -258,6 +261,7 @@ export const TolgeeDetector = () => {
             serverField={serverField}
             serverHost={serverHost}
             serverLink={serverLink}
+            serverInvalid={serverInvalid}
             connecting={connecting}
             connectError={connectError}
             onConnect={handleConnect}

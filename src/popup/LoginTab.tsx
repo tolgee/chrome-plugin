@@ -17,6 +17,7 @@ type Props = {
   serverField: React.ReactNode;
   serverHost: string;
   serverLink: string;
+  serverInvalid: boolean;
   connecting: boolean;
   connectError: string | null;
   onConnect: () => void;
@@ -30,6 +31,7 @@ export const LoginTab = ({
   serverField,
   serverHost,
   serverLink,
+  serverInvalid,
   connecting,
   connectError,
   onConnect,
@@ -102,7 +104,7 @@ export const LoginTab = ({
       <Button
         variant="contained"
         color="primary"
-        disabled={connecting}
+        disabled={connecting || serverInvalid}
         onClick={onConnect}
         data-testid="connect-oauth"
       >

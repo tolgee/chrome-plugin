@@ -59,6 +59,19 @@ export const compareValues = (
   );
 };
 
+// The server field is free text; only an http(s) URL can be signed in to (or fetched from) at all.
+export const isHttpUrl = (raw: string | undefined): boolean => {
+  if (!raw) {
+    return false;
+  }
+  try {
+    const { protocol } = new URL(raw);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 // Same http(s) restriction as httpDisplayUrl below: the server URL is user-editable and ends up in an `<a href>`.
 export const projectUrl = (
   apiUrl: string | undefined,
