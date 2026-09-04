@@ -283,13 +283,7 @@ export const ConnectedPanel = ({
                 <Box gridColumn="1 / -1" height={BRANCH_EDITOR_LIST_SPACE} />
               </>
             ) : (
-              <Box
-                display="flex"
-                alignItems="center"
-                justifyContent="space-between"
-                gap={1}
-                minWidth={0}
-              >
+              <Box display="flex" alignItems="center" gap={0.5} minWidth={0}>
                 <Value>
                   <span data-testid="branch-value">
                     {branchInEffect(
@@ -305,7 +299,6 @@ export const ConnectedPanel = ({
                   aria-label="Change branch"
                   disabled={!editingOn}
                   onClick={() => setEditingBranch(true)}
-                  sx={{ mr: -0.75 }}
                   data-testid="change-branch"
                 >
                   <EditIcon fontSize="small" />
