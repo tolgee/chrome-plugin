@@ -273,7 +273,8 @@ export const useDetectorForm = () => {
       return undefined;
     }
     fetchBranches(projectId, checkableValues!)
-      .catch(() => null)
+      // A server that refuses to list branches (feature not licensed) has nothing to switch between.
+      .catch(() => [])
       .then((branches) => {
         if (!cancelled) {
           dispatch({ type: 'SET_BRANCHES', payload: branches });

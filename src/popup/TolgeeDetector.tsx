@@ -223,7 +223,8 @@ export const TolgeeDetector = () => {
           ? credentialsCheck.projectId
           : undefined;
       const branch =
-        branchableProjectId(credentialsCheck, declaredProject) === null
+        branchableProjectId(credentialsCheck, declaredProject) === null ||
+        branches?.length === 0
           ? null
           : {
               override: activeValues?.branch || undefined,
