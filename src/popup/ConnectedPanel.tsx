@@ -287,11 +287,13 @@ export const ConnectedPanel = ({
                 minWidth={0}
               >
                 <Value>
-                  {branchInEffect(
-                    branch.override,
-                    branch.pageBranch,
-                    branch.options
-                  )}
+                  <span data-testid="branch-value">
+                    {branchInEffect(
+                      branch.override,
+                      branch.pageBranch,
+                      branch.options
+                    )}
+                  </span>
                 </Value>
                 <IconButton
                   size="small"
@@ -300,6 +302,7 @@ export const ConnectedPanel = ({
                   disabled={!editingOn}
                   onClick={() => setEditingBranch(true)}
                   sx={{ mr: -0.75 }}
+                  data-testid="change-branch"
                 >
                   <EditIcon fontSize="small" />
                 </IconButton>
