@@ -61,6 +61,7 @@ export const BranchEditor = ({
       openOnFocus
       fullWidth
       freeSolo
+      disableClearable
       size="small"
       slotProps={{
         popper: {
@@ -85,7 +86,7 @@ export const BranchEditor = ({
       getOptionLabel={(option) =>
         typeof option === 'string' ? option : option.name
       }
-      value={options.find((b) => b.name === value) ?? (value || null)}
+      value={options.find((b) => b.name === value) ?? value}
       inputValue={input}
       onInputChange={(_e, newInput) => setInput(newInput)}
       onChange={(_e, newValue, reason) => {
