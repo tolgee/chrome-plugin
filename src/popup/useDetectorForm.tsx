@@ -163,7 +163,7 @@ export const useDetectorForm = () => {
       if (type === 'TOLGEE_CONFIG_LOADED') {
         dispatch({
           type: 'CHANGE_LIB_CONFIG',
-          payload: { libData: data, frameId: frameId || null },
+          payload: { libData: data, frameId: frameId ?? null },
         });
       }
 

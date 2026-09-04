@@ -112,11 +112,22 @@ export const createReducer =
           apiUrl: libData?.config?.apiUrl,
           branch: libData?.config?.branch,
         };
-        if (state.libConfig !== null && state.frameId !== frameId) {
+        // Only a second frame that itself carries a config counts as another instance: the not-detected timeout
+        // dispatches a null config with no frame, and a repeat from the same frame is an update.
+        if (
+          libData &&
+          state.libConfig !== null &&
+          state.frameId !== null &&
+          frameId !== null &&
+          state.frameId !== frameId
+        ) {
           return {
             ...state,
             error: 'Detected multiple Tolgee instances',
           };
+        }
+        if (!libData && state.libConfig !== null) {
+          return state;
         }
         return {
           ...state,

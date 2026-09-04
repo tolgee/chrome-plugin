@@ -78,6 +78,38 @@ describe('detector reducer', () => {
       expect(next.values?.apiKey).toBeUndefined();
     });
 
+    it('keeps the top frame (id 0) as the single instance across repeats and the not-detected timeout', () => {
+      const first = reduce(initialState, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: lib({}), frameId: 0 },
+      });
+      const afterTimeout = reduce(first, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: null, frameId: null },
+      });
+      expect(afterTimeout.error).toBeNull();
+      expect(afterTimeout.tolgeePresent).toBe('present');
+
+      const repeated = reduce(afterTimeout, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: lib({}), frameId: 0 },
+      });
+      expect(repeated.error).toBeNull();
+      expect(repeated.tolgeePresent).toBe('present');
+    });
+
+    it('reports multiple instances only when a second frame also carries a config', () => {
+      const top = reduce(initialState, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: lib({}), frameId: 0 },
+      });
+      const second = reduce(top, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: lib({}), frameId: 7 },
+      });
+      expect(second.error).toBe('Detected multiple Tolgee instances');
+    });
+
     it('clears a detection error once a config arrives', () => {
       const errored = reduce(initialState, {
         type: 'SET_ERROR',
