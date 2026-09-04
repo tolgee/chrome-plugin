@@ -153,14 +153,31 @@ export class TolgeeApi {
     return this.request('DELETE', `api-keys/${id}`);
   }
 
-  async findKeyId(projectId: number, keyName: string): Promise<number | null> {
+  async findKey(
+    projectId: number,
+    keyName: string
+  ): Promise<{
+    keyId: number;
+    translations: Record<string, { text: string }>;
+  } | null> {
     const data = await this.request(
       'GET',
       `projects/${projectId}/translations?filterKeyName=${encodeURIComponent(
         keyName
       )}`
     );
-    return data._embedded?.keys?.[0]?.keyId ?? null;
+    return data._embedded?.keys?.[0] ?? null;
+  }
+
+  async findKeyId(projectId: number, keyName: string): Promise<number | null> {
+    return (await this.findKey(projectId, keyName))?.keyId ?? null;
+  }
+
+  deleteKeys(projectId: number, ids: number[]) {
+    return this.request(
+      'DELETE',
+      `projects/${projectId}/keys/${ids.join(',')}`
+    );
   }
 
   async keyScreenshots(
