@@ -1,13 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Autocomplete,
   Box,
   Button,
   CircularProgress,
   FormControl,
-  FormHelperText,
-  Link,
   Switch,
   Tab,
   Tabs,
@@ -16,19 +13,25 @@ import {
 } from '@mui/material';
 
 import { useDetectorForm } from './useDetectorForm';
-import { declaredProjectId, isOAuth, validateValues } from './tools';
+import {
+  canApplyOnEnter,
+  declaredProjectId,
+  httpDisplayUrl,
+  isOAuth,
+  validateValues,
+} from './tools';
 import { sendToBackground } from './sendToBackground';
 import { getActiveTab } from './activeTab';
 import { safeOrigin } from '../oauth/url';
+import { projectKeyFor } from '../oauth/sessionRules';
 import { isApiKeyValid, useApiKeyCheck } from './useApiKeyCheck';
 import { isOAuthUser, isProjectInfo } from './reducer';
+import { ConnectedPanel } from './ConnectedPanel';
+import { LoginTab } from './LoginTab';
+import { ApiKeyTab } from './ApiKeyTab';
+import { POPUP_WIDTH } from '../constants';
 
-const POPUP_WIDTH = 400;
 const DEFAULT_SERVER = 'https://app.tolgee.io';
-const LEARN_MORE_PROJECT_ID =
-  'https://docs.tolgee.io/js-sdk/api/core_package/options#projectid';
-const API_KEY_HELP =
-  'https://docs.tolgee.io/platform/account_settings/api_keys_and_pat_tokens';
 
 export const TolgeeDetector = () => {
   const [state, dispatch] = useDetectorForm();
@@ -62,6 +65,19 @@ export const TolgeeDetector = () => {
   );
   const apiKeyValid = isApiKeyValid(apiKeyCheck);
 
+  const isInDevelopmentMode =
+    !appliedValues &&
+    (libConfig?.mode || libConfig?.config?.mode) === 'development';
+
+  const valuesNotChanged =
+    isInDevelopmentMode &&
+    libConfig?.config.apiKey === values?.apiKey &&
+    libConfig?.config.apiUrl === values?.apiUrl &&
+    (libConfig?.config.branch || '') === (values?.branch || '');
+
+  const canApplyApiKey =
+    Boolean(validateValues(values)) && !valuesNotChanged && apiKeyValid;
+
   useEffect(() => {
     if (values?.apiKey && !values?.authToken) {
       setTab('apiKey');
@@ -77,11 +93,9 @@ export const TolgeeDetector = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    // On the API-key tab, Enter must also respect the live key check (like the field's own handler and the button).
     if (
       e.key === 'Enter' &&
-      validateValues(values) &&
-      (tab !== 'apiKey' || apiKeyValid)
+      canApplyOnEnter(hasSession, tab, values, canApplyApiKey)
     ) {
       dispatch({ type: 'APPLY_VALUES' });
     }
@@ -104,10 +118,15 @@ export const TolgeeDetector = () => {
         accessToken?: string;
         error?: string;
       };
-      if (res?.accessToken) {
+      if (res?.accessToken && projectId !== undefined) {
         dispatch({
           type: 'OAUTH_APPLY',
-          payload: { apiUrl, authToken: res.accessToken, projectId },
+          payload: {
+            apiUrl,
+            authToken: res.accessToken,
+            projectId,
+            projectKey: projectKeyFor(projectId),
+          },
         });
       } else {
         setConnectError(res?.error || 'Connection failed');
@@ -121,14 +140,10 @@ export const TolgeeDetector = () => {
   const isOauthSession = isOAuth(activeValues);
 
   const handleDisconnect = async () => {
-    const apiUrl = activeValues?.apiUrl;
-    if (isOauthSession && apiUrl) {
-      const tab = await getActiveTab();
+    if (isOauthSession) {
+      const activeTab = await getActiveTab();
       await sendToBackground('OAUTH_LOGOUT', {
-        apiUrl,
-        authToken: activeValues?.authToken,
-        projectId: activeValues?.projectId,
-        pageOrigin: safeOrigin(tab?.url),
+        pageOrigin: safeOrigin(activeTab?.url),
       });
     }
     dispatch({ type: 'CLEAR_ALL' });
@@ -217,19 +232,6 @@ export const TolgeeDetector = () => {
       />
     );
 
-  // The project is fixed by the credentials, so show it as a read-only field (same for API-key and OAuth sessions).
-  const projectField = (name: string) => (
-    <FormControl fullWidth>
-      <TextField
-        label="Project"
-        variant="outlined"
-        size="small"
-        value={name}
-        InputProps={{ readOnly: true }}
-      />
-    </FormControl>
-  );
-
   const footer = (
     <Box display="flex" justifyContent="space-between" alignItems="center">
       <Box display="flex" alignItems="center" style={{ gap: 5 }}>
@@ -267,83 +269,27 @@ export const TolgeeDetector = () => {
       </Box>
     );
   } else if (tolgeePresent === 'present' || appliedValues) {
-    const isInDevelopmentMode =
-      !appliedValues &&
-      (libConfig?.mode || libConfig?.config?.mode) === 'development';
-
-    const valuesNotChanged =
-      isInDevelopmentMode &&
-      libConfig?.config.apiKey === values?.apiKey &&
-      libConfig?.config.apiUrl === values?.apiUrl &&
-      (libConfig?.config.branch || '') === (values?.branch || '');
-
     const projectDetected = declaredProjectId(libConfig) !== undefined;
 
-    const rawServer = values?.apiUrl || DEFAULT_SERVER;
-    let serverHost = rawServer;
-    // Restrict the link target to http(s): the Server field is editable, and a value like `javascript:...` would become
-    // an executable link running with extension privileges. Fall back to the default when it isn't a valid web URL yet.
-    let serverLink = DEFAULT_SERVER;
-    try {
-      const parsed = new URL(rawServer);
-      serverHost = parsed.host;
-      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-        serverLink = parsed.toString();
-      }
-    } catch {
-      serverLink = DEFAULT_SERVER;
-    }
+    const { host: serverHost, link: serverLink } = httpDisplayUrl(
+      values?.apiUrl || DEFAULT_SERVER,
+      DEFAULT_SERVER
+    );
+
     if (hasSession) {
       return (
-        <Box
-          p={2}
-          width={POPUP_WIDTH}
-          style={{ display: 'flex', flexDirection: 'column', gap: 15 }}
-        >
-          <Typography variant="h6">Tolgee plugin</Typography>
-
-          <FormControl fullWidth>
-            <TextField
-              label="Server"
-              variant="outlined"
-              size="small"
-              value={values?.apiUrl ?? ''}
-              InputProps={{ readOnly: true }}
-            />
-          </FormControl>
-
-          {isOauthSession ? (
-            <>
-              <Typography style={{ fontSize: 12, color: 'green' }}>
-                {oauthUser
-                  ? `Connected as ${oauthUser.userFullName}`
-                  : 'Connected'}
-              </Typography>
-              {declaredProjectInaccessible ? (
-                <Alert severity="error" variant="outlined">
-                  This site requests a project you can’t edit on {serverHost}.
-                  Check the projectId in the site’s Tolgee configuration, or ask
-                  for access.
-                </Alert>
-              ) : (
-                declaredProject && projectField(declaredProject.name)
-              )}
-            </>
-          ) : (
-            <>
-              {isProjectInfo(credentialsCheck) ? (
-                projectField(credentialsCheck.projectName)
-              ) : credentialsCheck === 'invalid' ? (
-                <Typography style={{ fontSize: 12, color: 'red' }}>
-                  Invalid API key
-                </Typography>
-              ) : null}
-              {branchField}
-            </>
-          )}
-
-          {footer}
-        </Box>
+        <ConnectedPanel
+          apiUrl={values?.apiUrl ?? ''}
+          isOauthSession={isOauthSession}
+          oauthUserFullName={oauthUser?.userFullName ?? null}
+          oauthInvalid={isOauthSession && credentialsCheck === 'invalid'}
+          declaredProject={declaredProject}
+          declaredProjectInaccessible={declaredProjectInaccessible}
+          serverHost={serverHost}
+          credentialsCheck={credentialsCheck}
+          branchField={branchField}
+          footer={footer}
+        />
       );
     }
     return (
@@ -364,142 +310,33 @@ export const TolgeeDetector = () => {
           <Tab value="apiKey" label="API key" />
         </Tabs>
 
-        {tab === 'login' &&
-          (projectDetected ? (
-            <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
-              {serverOpen ? (
-                serverField
-              ) : (
-                <Typography variant="body2">
-                  Connect to your account on{' '}
-                  <Link
-                    href={serverLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    underline="hover"
-                  >
-                    {serverHost}
-                  </Link>{' '}
-                  and start translating.
-                </Typography>
-              )}
-              <Button
-                variant="contained"
-                color="primary"
-                disabled={connecting}
-                onClick={handleConnect}
-              >
-                {connecting ? 'Connecting…' : 'Connect to Tolgee'}
-              </Button>
-              {connectError && <Alert severity="error">{connectError}</Alert>}
-              {serverOpen ? (
-                <Typography style={{ fontSize: 12, color: '#535353' }}>
-                  Change if you have your own instance of Tolgee.
-                </Typography>
-              ) : (
-                <Box display="flex" justifyContent="center">
-                  <Link
-                    component="button"
-                    type="button"
-                    underline="hover"
-                    onClick={() => setServerOpen(true)}
-                  >
-                    Change server
-                  </Link>
-                </Box>
-              )}
-            </Box>
-          ) : (
-            <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
-              <Typography variant="body2" fontWeight="bold">
-                Project not detected
-              </Typography>
-              <Typography variant="body2">
-                Ask the website administrator to add projectId to the Tolgee
-                configuration.{' '}
-                <Link
-                  href={LEARN_MORE_PROJECT_ID}
-                  target="_blank"
-                  rel="noreferrer"
-                  underline="hover"
-                >
-                  Learn more
-                </Link>
-              </Typography>
-              <Button variant="contained" color="primary" disabled>
-                Connect to Tolgee
-              </Button>
-            </Box>
-          ))}
+        {tab === 'login' && (
+          <LoginTab
+            projectDetected={projectDetected}
+            serverOpen={serverOpen}
+            serverField={serverField}
+            serverHost={serverHost}
+            serverLink={serverLink}
+            connecting={connecting}
+            connectError={connectError}
+            onConnect={handleConnect}
+            onOpenServerField={() => setServerOpen(true)}
+          />
+        )}
 
         {tab === 'apiKey' && (
-          <Box display="flex" flexDirection="column" style={{ gap: 15 }}>
-            {serverField}
-            <FormControl fullWidth>
-              <TextField
-                label="API key"
-                variant="outlined"
-                value={values?.apiKey || ''}
-                onChange={(e) =>
-                  dispatch({
-                    type: 'CHANGE_VALUES',
-                    payload: { apiKey: e.target.value },
-                  })
-                }
-                onKeyDown={handleKeyDown}
-                size="small"
-              />
-              <FormHelperText
-                error={
-                  apiKeyCheck === 'invalid' || apiKeyCheck === 'unreachable'
-                }
-                style={{ minHeight: 15 }}
-                sx={{ marginLeft: 0 }}
-              >
-                {apiKeyCheck === null ? (
-                  ''
-                ) : apiKeyCheck === 'loading' ? (
-                  '...'
-                ) : apiKeyCheck === 'invalid' ? (
-                  'Invalid API key for this server'
-                ) : apiKeyCheck === 'unreachable' ? (
-                  'Could not reach the server'
-                ) : (
-                  <span style={{ color: 'green' }}>
-                    {apiKeyCheck.projectName}
-                  </span>
-                )}
-              </FormHelperText>
-            </FormControl>
-            <Typography variant="body2">
-              Where can I get an{' '}
-              <Link
-                href={API_KEY_HELP}
-                target="_blank"
-                rel="noreferrer"
-                underline="hover"
-              >
-                API key
-              </Link>
-              ?
-            </Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => dispatch({ type: 'APPLY_VALUES' })}
-              disabled={
-                !validateValues(values) || valuesNotChanged || !apiKeyValid
-              }
-            >
-              Connect with API key
-            </Button>
-            {isInDevelopmentMode && (
-              <Typography style={{ fontSize: 12, color: '#535353' }}>
-                Api key is included directly in Tolgee configuration. <br /> Use
-                this setup only in development environment.
-              </Typography>
-            )}
-          </Box>
+          <ApiKeyTab
+            serverField={serverField}
+            apiKey={values?.apiKey || ''}
+            onChangeApiKey={(apiKey) =>
+              dispatch({ type: 'CHANGE_VALUES', payload: { apiKey } })
+            }
+            onKeyDown={handleKeyDown}
+            apiKeyCheck={apiKeyCheck}
+            canApply={canApplyApiKey}
+            onApply={() => dispatch({ type: 'APPLY_VALUES' })}
+            isInDevelopmentMode={isInDevelopmentMode}
+          />
         )}
       </Box>
     );

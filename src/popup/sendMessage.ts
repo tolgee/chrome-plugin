@@ -6,11 +6,5 @@ export const sendMessage = async (type: string, data?: any) => {
   if (tab?.id == null) {
     throw new Error('No active tab to message');
   }
-  const response = await browser.tabs.sendMessage(tab.id, { type, data });
-
-  if (browser.runtime.lastError) {
-    throw browser.runtime.lastError;
-  }
-
-  return response;
+  return browser.tabs.sendMessage(tab.id, { type, data });
 };

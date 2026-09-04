@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { normalizeUrl } from './tools';
+import { normalizeUrl } from '../oauth/url';
 
 export type ApiKeyCheck =
   | null
@@ -30,7 +30,6 @@ export const useApiKeyCheck = (
     let cancelled = false;
     setCheck('loading');
     const timer = setTimeout(() => {
-      // Key goes in the header, never the query string, so it can't leak via URLs/history/logs.
       fetch(`${url}/v2/api-keys/current`, { headers: { 'X-API-Key': apiKey } })
         .then((r) => {
           if (r.ok) {

@@ -49,8 +49,7 @@ export const initialState = {
   error: null as string | null,
   frameId: null as number | null,
   branches: null as BranchOption[] | null,
-  // The project the page declared (via its Tolgee config), resolved against the connected server: the project when the
-  // user can edit it there, or `declaredProjectInaccessible` when they can't (wrong id / no access).
+  // Not the page's raw declared id: it is that id resolved against the connected server into a real project.
   declaredProject: null as ProjectOption | null,
   declaredProjectInaccessible: false,
 };
@@ -72,7 +71,12 @@ export type Action =
   | { type: 'LOAD_VALUES' }
   | {
       type: 'OAUTH_APPLY';
-      payload: { apiUrl: string; authToken: string; projectId?: number };
+      payload: {
+        apiUrl: string;
+        authToken: string;
+        projectId: number;
+        projectKey: string;
+      };
     }
   | { type: 'SET_BRANCHES'; payload: BranchOption[] | null }
   | {
@@ -147,6 +151,7 @@ export const createReducer =
           branch: effectiveBranch,
           authToken: state.values?.authToken,
           projectId: state.values?.projectId,
+          projectKey: state.values?.projectKey,
         };
         return {
           ...state,
@@ -171,7 +176,8 @@ export const createReducer =
         const oauthValues = {
           apiUrl: action.payload.apiUrl,
           authToken: action.payload.authToken,
-          projectId: action.payload.projectId ?? state.values?.projectId,
+          projectId: action.payload.projectId,
+          projectKey: action.payload.projectKey,
         };
         return {
           ...state,
@@ -193,8 +199,7 @@ export const createReducer =
         }
         apply();
         const oauthValues = { ...state.values, projectId: project.id };
-        // Respect the Applied toggle: binding the page's project must update the (stored) session, but must NOT
-        // re-apply a session the user switched off — otherwise the auto-resolve fights the toggle and the popup flickers.
+        // Never re-apply a session the user switched off: doing so would fight the Applied toggle and flicker the popup.
         const isApplied = state.appliedValues != null;
         return {
           ...state,

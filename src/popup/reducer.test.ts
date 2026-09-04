@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { LibConfig } from '../types';
 import {
   Action,
@@ -8,16 +8,19 @@ import {
   State,
 } from './reducer';
 
-const lib = (overrides: Partial<LibConfig>): LibConfig =>
-  ({
-    uiPresent: true,
-    mode: 'production',
-    config: { apiUrl: 'https://app.tolgee.io', apiKey: '' },
-    ...overrides,
-  }) as unknown as LibConfig;
+const lib = (
+  overrides: Partial<Omit<LibConfig, 'config'>> & {
+    config?: Partial<LibConfig['config']>;
+  }
+): LibConfig => ({
+  uiPresent: true,
+  mode: 'production',
+  ...overrides,
+  config: { apiUrl: 'https://app.tolgee.io', apiKey: '', ...overrides.config },
+});
 
 describe('detector reducer', () => {
-  let apply: ReturnType<typeof vi.fn>;
+  let apply: Mock<() => void>;
   let reduce: (state: State, action: Action) => State;
 
   beforeEach(() => {
@@ -31,7 +34,7 @@ describe('detector reducer', () => {
         type: 'CHANGE_LIB_CONFIG',
         payload: {
           libData: lib({
-            config: { apiUrl: 'https://x.io', apiKey: '' } as any,
+            config: { apiUrl: 'https://x.io', apiKey: '' },
           }),
           frameId: 0,
         },
@@ -43,7 +46,7 @@ describe('detector reducer', () => {
     it('reports legacy when uiPresent is missing', () => {
       const next = reduce(initialState, {
         type: 'CHANGE_LIB_CONFIG',
-        payload: { libData: lib({ uiPresent: undefined as any }), frameId: 0 },
+        payload: { libData: lib({ uiPresent: undefined }), frameId: 0 },
       });
       expect(next.tolgeePresent).toBe('legacy');
     });
@@ -65,7 +68,7 @@ describe('detector reducer', () => {
         type: 'CHANGE_LIB_CONFIG',
         payload: {
           libData: lib({
-            config: { apiUrl: 'https://x.io', apiKey: 'tgpak_x' } as any,
+            config: { apiUrl: 'https://x.io', apiKey: 'tgpak_x' },
           }),
           frameId: 0,
         },
@@ -88,26 +91,7 @@ describe('detector reducer', () => {
   });
 
   describe('OAUTH_APPLY', () => {
-    it('applies the token and preserves a previously picked project', () => {
-      const restored: State = {
-        ...initialState,
-        values: { apiUrl: 'https://app.tolgee.io', projectId: 42 },
-      };
-      const next = reduce(restored, {
-        type: 'OAUTH_APPLY',
-        payload: { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' },
-      });
-      expect(next.values).toEqual({
-        apiUrl: 'https://app.tolgee.io',
-        authToken: 'jwt',
-        projectId: 42,
-      });
-      expect(next.appliedValues).toEqual(next.values);
-      expect(next.storedValues).toEqual(next.values);
-      expect(apply).toHaveBeenCalledOnce();
-    });
-
-    it('prefers the projectId from the connect-flow payload over a previously picked one', () => {
+    it('applies the connect-flow payload as the new values, applied and stored', () => {
       const restored: State = {
         ...initialState,
         values: { apiUrl: 'https://app.tolgee.io', projectId: 42 },
@@ -118,9 +102,18 @@ describe('detector reducer', () => {
           apiUrl: 'https://app.tolgee.io',
           authToken: 'jwt',
           projectId: 7,
+          projectKey: '7',
         },
       });
-      expect(next.values?.projectId).toBe(7);
+      expect(next.values).toEqual({
+        apiUrl: 'https://app.tolgee.io',
+        authToken: 'jwt',
+        projectId: 7,
+        projectKey: '7',
+      });
+      expect(next.appliedValues).toEqual(next.values);
+      expect(next.storedValues).toEqual(next.values);
+      expect(apply).toHaveBeenCalledOnce();
     });
   });
 

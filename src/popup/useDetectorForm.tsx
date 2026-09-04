@@ -6,12 +6,12 @@ import { loadAppliedValues } from './loadConfig';
 import { sendMessage } from './sendMessage';
 import { sendToBackground } from './sendToBackground';
 import { loadValues, storeValues } from './storage';
-import { safeOrigin } from '../oauth/url';
+import { normalizeUrl, safeOrigin } from '../oauth/url';
+import { confirmsProjectInaccessible } from '../oauth/sessionRules';
 import {
   compareValues,
   declaredProjectId,
   isOAuth,
-  normalizeUrl,
   validateValues,
   Values,
 } from './tools';
@@ -43,7 +43,7 @@ export const useDetectorForm = () => {
   useEffect(() => {
     // sync applied values
     if (applyRequired) {
-      // Stamp the connected page's origin so the content script delivers only to that frame, not a cross-origin iframe.
+      // Stamp the origin the content script's acceptsCredentialDelivery checks it against.
       getActiveTab()
         .then((tab) =>
           sendMessage('SET_CREDENTIALS', {
@@ -58,8 +58,7 @@ export const useDetectorForm = () => {
 
   useEffect(() => {
     let cancelled = false;
-    // Applying/un-applying reloads the page, so the content script is briefly gone. Retry before declaring the page
-    // inaccessible, otherwise opening the popup mid-reload sticks on the error screen with no recovery.
+    // Applying/un-applying reloads the page, so the content script is briefly gone.
     const detect = (attemptsLeft: number) => {
       sendMessage('DETECT_TOLGEE').catch(() => {
         if (cancelled) {
@@ -99,18 +98,20 @@ export const useDetectorForm = () => {
 
   // after tolgee config is loaded
   // get applied values and stored values
-  const onLibConfigChange = async () => {
+  const syncPageAppliedValues = async () => {
     const pageApplied = await loadAppliedValues();
     if (validateValues(pageApplied)) {
       dispatch({ type: 'SET_APPLIED_VALUES', payload: pageApplied });
     }
+  };
 
+  const restoreStoredSession = async () => {
     const storedData = await loadValues();
     if (storedData.oauth && storedData.apiUrl) {
-      // OAuth sessions store no token; ask the service worker for a fresh (auto-refreshed) one for this project.
+      const activeTab = await getActiveTab();
       const res = (await sendToBackground('OAUTH_GET_TOKEN', {
         apiUrl: storedData.apiUrl,
-        projectId: storedData.projectId,
+        pageOrigin: safeOrigin(activeTab?.url),
       })) as { accessToken?: string };
       if (res?.accessToken) {
         dispatch({
@@ -119,8 +120,12 @@ export const useDetectorForm = () => {
             apiUrl: storedData.apiUrl,
             authToken: res.accessToken,
             projectId: storedData.projectId,
+            projectKey: storedData.projectKey,
           },
         });
+        // The background may have just refreshed the token (OAUTH_GET_TOKEN's push lands in the tab before this
+        // resolves), which the page's own sessionStorage snapshot below wouldn't otherwise pick up until reopened.
+        await syncPageAppliedValues();
       }
     } else if (validateValues(storedData)) {
       dispatch({ type: 'LOAD_STORED_VALUES', payload: storedData });
@@ -129,7 +134,8 @@ export const useDetectorForm = () => {
 
   useEffect(() => {
     if (state.libConfig) {
-      onLibConfigChange();
+      syncPageAppliedValues();
+      restoreStoredSession();
     }
   }, [state.libConfig]);
 
@@ -159,8 +165,7 @@ export const useDetectorForm = () => {
   let checkableValues: Values | undefined | null;
 
   // we want to check validity of values, that are displayed and applied
-  // Fall back to the stored session (not just the page's SDK config) so a connected session stays recognized while the
-  // Applied toggle is off — the page config carries no OAuth token, which would otherwise blank the connected state.
+  // Falls back to storedValues, not just the page's SDK config, which carries no OAuth token on its own.
   const valuesToCompare =
     appliedValues || storedValues || (libConfig?.config as Values);
   if (!storedValues || compareValues(valuesToCompare, storedValues)) {
@@ -176,7 +181,8 @@ export const useDetectorForm = () => {
       const url = normalizeUrl(checkableValues!.apiUrl);
 
       if (isOAuth(checkableValues)) {
-        // OAuth tokens are not tied to a single project; confirm the token and show the connected user instead.
+        // The token is opaque, so the connected user is the only thing this check can confirm; project
+        // reachability is probed separately below (RESOLVE_PROJECT).
         fetch(`${url}/v2/user`, {
           headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
         })
@@ -198,18 +204,13 @@ export const useDetectorForm = () => {
           headers: { 'X-API-Key': checkableValues!.apiKey! },
         })
           .then((r) => {
-            if (r.ok) {
-              return r.json();
-            } else {
-              throw r.json();
+            if (!r.ok) {
+              throw new Error('Invalid API key');
             }
-          })
-          .catch(() => {
-            !cancelled && setCredentialsCheck('invalid');
+            return r.json();
           })
           .then((data) => {
             !cancelled &&
-              data &&
               setCredentialsCheck({
                 projectName: data.projectName,
                 projectId: data.projectId,
@@ -217,6 +218,9 @@ export const useDetectorForm = () => {
                 userFullName: data.userFullName,
                 branchingEnabled: data.branchingEnabled ?? false,
               });
+          })
+          .catch(() => {
+            !cancelled && setCredentialsCheck('invalid');
           });
       }
     } else {
@@ -275,8 +279,6 @@ export const useDetectorForm = () => {
     };
   }, [state.credentialsCheck]);
 
-  // Bind the page's declared project to the OAuth token by resolving it against the connected server, or flag it
-  // inaccessible — else the token stays unscoped and in-context editing fails with "project not selected".
   const declaredId = declaredProjectId(libConfig);
   useEffect(() => {
     let cancelled = false;
@@ -290,34 +292,34 @@ export const useDetectorForm = () => {
       return;
     }
     const url = normalizeUrl(checkableValues!.apiUrl);
-    fetch(`${url}/v2/projects/${declaredId}`, {
-      headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
-    })
-      .then((r) => {
-        if (!r.ok) {
-          throw new Error('inaccessible');
+    const resolveDeclaredProject = async (): Promise<{
+      project: { id: number; name: string } | null;
+      inaccessible: boolean;
+    }> => {
+      try {
+        const r = await fetch(`${url}/v2/projects/${declaredId}`, {
+          headers: { Authorization: `Bearer ${checkableValues!.authToken}` },
+        });
+        if (r.ok) {
+          const data = await r.json();
+          return {
+            project: { id: data.id, name: data.name },
+            inaccessible: false,
+          };
         }
-        return r.json();
-      })
-      .then((data) => {
-        if (!cancelled) {
-          dispatch({
-            type: 'RESOLVE_PROJECT',
-            payload: {
-              project: { id: data.id, name: data.name },
-              inaccessible: false,
-            },
-          });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          dispatch({
-            type: 'RESOLVE_PROJECT',
-            payload: { project: null, inaccessible: true },
-          });
-        }
-      });
+        return {
+          project: null,
+          inaccessible: confirmsProjectInaccessible(r.status),
+        };
+      } catch {
+        return { project: null, inaccessible: false };
+      }
+    };
+    resolveDeclaredProject().then((payload) => {
+      if (!cancelled) {
+        dispatch({ type: 'RESOLVE_PROJECT', payload });
+      }
+    });
     return () => {
       cancelled = true;
     };

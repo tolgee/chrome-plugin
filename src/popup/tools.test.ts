@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canApplyOnEnter,
   compareValues,
   declaredProjectId,
-  decodeTokenProjectSet,
+  httpDisplayUrl,
   isOAuth,
-  normalizeUrl,
   validateValues,
 } from './tools';
 import { LibConfig } from '../types';
 
-const withProjectId = (projectId: unknown) =>
-  ({ config: { projectId } }) as unknown as LibConfig;
+const withProjectId = (projectId: unknown): LibConfig => ({
+  uiPresent: true,
+  mode: 'production',
+  config: { apiUrl: '', apiKey: '', projectId: projectId as number | string },
+});
 
 describe('declaredProjectId', () => {
   it('returns the numeric project id and coerces a string id', () => {
@@ -23,41 +26,6 @@ describe('declaredProjectId', () => {
     expect(declaredProjectId(withProjectId(undefined))).toBeUndefined();
     expect(declaredProjectId(undefined)).toBeUndefined();
     expect(declaredProjectId(withProjectId('abc'))).toBeUndefined();
-  });
-});
-
-// Builds a JWT-shaped string (header.payload.signature) whose payload base64url-encodes the given claims, so we can
-// exercise the token parsing without a real signature.
-const tokenWith = (claims: Record<string, unknown>) => {
-  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
-  return `eyJhbGciOiJSUzI1NiJ9.${payload}.signature`;
-};
-
-describe('decodeTokenProjectSet', () => {
-  it('returns "*" for an all-projects token', () => {
-    expect(decodeTokenProjectSet(tokenWith({ 'tg.prj': '*' }))).toBe('*');
-  });
-
-  it('returns the ids for a project-scoped token', () => {
-    expect(decodeTokenProjectSet(tokenWith({ 'tg.prj': [2] }))).toEqual([2]);
-    expect(decodeTokenProjectSet(tokenWith({ 'tg.prj': [2, 3] }))).toEqual([
-      2, 3,
-    ]);
-  });
-
-  it('coerces string ids to numbers and drops non-numeric entries', () => {
-    expect(
-      decodeTokenProjectSet(tokenWith({ 'tg.prj': ['2', 'x', 3] }))
-    ).toEqual([2, 3]);
-  });
-
-  it('returns undefined when the claim is absent', () => {
-    expect(decodeTokenProjectSet(tokenWith({ sub: '1' }))).toBeUndefined();
-  });
-
-  it('returns undefined for an empty or malformed token', () => {
-    expect(decodeTokenProjectSet(undefined)).toBeUndefined();
-    expect(decodeTokenProjectSet('not-a-jwt')).toBeUndefined();
   });
 });
 
@@ -101,22 +69,6 @@ describe('isOAuth', () => {
   });
 });
 
-describe('normalizeUrl', () => {
-  it('strips a single trailing slash', () => {
-    expect(normalizeUrl('https://app.tolgee.io/')).toBe(
-      'https://app.tolgee.io'
-    );
-  });
-
-  it('leaves a url without a trailing slash untouched', () => {
-    expect(normalizeUrl('https://app.tolgee.io')).toBe('https://app.tolgee.io');
-  });
-
-  it('passes through undefined', () => {
-    expect(normalizeUrl(undefined)).toBeUndefined();
-  });
-});
-
 describe('compareValues', () => {
   const base = {
     apiUrl: 'https://app.tolgee.io',
@@ -150,6 +102,64 @@ describe('compareValues', () => {
     const oauth = { apiUrl: base.apiUrl, authToken: 'jwt', projectId: 1 };
     expect(compareValues({ ...oauth, apiKey: null as any }, { ...oauth })).toBe(
       true
+    );
+  });
+});
+
+describe('httpDisplayUrl', () => {
+  const FALLBACK = 'https://app.tolgee.io';
+
+  it('shows the host and links to an http(s) url as-is', () => {
+    expect(httpDisplayUrl('https://my.tolgee.example/x', FALLBACK)).toEqual({
+      host: 'my.tolgee.example',
+      link: 'https://my.tolgee.example/x',
+    });
+  });
+
+  it('falls back the link (never executing it) for a non-http(s) scheme', () => {
+    expect(
+      httpDisplayUrl('javascript:alert(document.cookie)', FALLBACK)
+    ).toEqual({
+      host: '',
+      link: FALLBACK,
+    });
+  });
+
+  it('falls back both host and link for an unparseable value', () => {
+    expect(httpDisplayUrl('not a url', FALLBACK)).toEqual({
+      host: 'not a url',
+      link: FALLBACK,
+    });
+  });
+});
+
+describe('canApplyOnEnter', () => {
+  const oauthValues = { apiUrl: 'https://app.tolgee.io', authToken: 'jwt' };
+
+  it('connected panel (hasSession): applies whenever the current values validate, regardless of tab', () => {
+    expect(canApplyOnEnter(true, 'login', oauthValues, false)).toBe(true);
+    expect(canApplyOnEnter(true, 'apiKey', oauthValues, false)).toBe(true);
+  });
+
+  it('connected panel (hasSession): does not apply when values do not validate', () => {
+    expect(canApplyOnEnter(true, 'login', { apiUrl: 'x' }, false)).toBe(false);
+  });
+
+  it('API-key tab (not connected): applies only when canApplyApiKey is true, ignoring values', () => {
+    expect(canApplyOnEnter(false, 'apiKey', oauthValues, true)).toBe(true);
+    expect(canApplyOnEnter(false, 'apiKey', oauthValues, false)).toBe(false);
+  });
+
+  it('Login tab (not connected): never applies, even with a stale/foreign apiKey sitting in values', () => {
+    const staleApiKeyValues = {
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: 'tgpak_x',
+    };
+    expect(canApplyOnEnter(false, 'login', staleApiKeyValues, true)).toBe(
+      false
+    );
+    expect(canApplyOnEnter(false, 'login', staleApiKeyValues, false)).toBe(
+      false
     );
   });
 });

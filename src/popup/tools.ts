@@ -1,11 +1,13 @@
 import { LibConfig } from '../types';
 
+// See oauth/sessionRules.ts for the projectId-vs-projectKey distinction these two fields carry.
 export type Values = {
   apiUrl?: string;
   apiKey?: string;
   branch?: string;
   authToken?: string;
   projectId?: number;
+  projectKey?: string;
 };
 
 export const declaredProjectId = (
@@ -29,13 +31,21 @@ export const validateValues = (values?: Values | null) => {
 export const isOAuth = (values?: Values | null) =>
   Boolean(values?.authToken && !values?.apiKey);
 
+export const canApplyOnEnter = (
+  hasSession: boolean,
+  tab: 'login' | 'apiKey',
+  values: Values | null | undefined,
+  canApplyApiKey: boolean
+): boolean =>
+  Boolean(
+    hasSession ? validateValues(values) : tab === 'apiKey' && canApplyApiKey
+  );
+
 export const compareValues = (
   values1?: Values | null,
   values2?: Values | null
 ) => {
-  // A restored session and the page's applied values describe the same credentials but not identically: sessionStorage
-  // hands back projectId as a string and apiKey as null, while the stored copy holds a number and undefined. Normalize
-  // so a healthy OAuth session isn't seen as "changed" (which would skip the connected-user lookup).
+  // sessionStorage hands back projectId as a string and apiKey as null; the stored copy holds a number and undefined.
   const str = (v?: string | null) => v || undefined;
   const num = (v?: number | string | null) =>
     v === undefined || v === null || v === '' ? undefined : Number(v);
@@ -48,5 +58,20 @@ export const compareValues = (
   );
 };
 
-export { normalizeUrl } from '../oauth/url';
-export { decodeTokenProjectSet } from '../oauth/tokenScope';
+// A display host and a link target for a user-editable server URL. Restricted to http(s): the raw value could be
+// `javascript:...`, which a plain `<a href>` would execute with extension privileges, so anything else falls back.
+export const httpDisplayUrl = (
+  raw: string,
+  fallback: string
+): { host: string; link: string } => {
+  try {
+    const parsed = new URL(raw);
+    const link =
+      parsed.protocol === 'http:' || parsed.protocol === 'https:'
+        ? parsed.toString()
+        : fallback;
+    return { host: parsed.host, link };
+  } catch {
+    return { host: raw, link: fallback };
+  }
+};
