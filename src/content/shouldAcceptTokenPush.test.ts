@@ -4,7 +4,7 @@ import { shouldAcceptTokenPush } from './shouldAcceptTokenPush';
 const base = {
   authToken: 'jwt',
   projectKey: '2',
-  pageProjectId: '2',
+  pageProjectKey: '2',
   pageApiUrl: 'https://app.tolgee.io',
   pushApiUrl: 'https://app.tolgee.io',
 };
@@ -14,20 +14,20 @@ describe('shouldAcceptTokenPush', () => {
     expect(shouldAcceptTokenPush(base)).toBe(true);
   });
 
-  it('accepts an all-projects (*) push for any page project', () => {
-    expect(
-      shouldAcceptTokenPush({ ...base, projectKey: '*', pageProjectId: '9' })
-    ).toBe(true);
-  });
-
   it('rejects an empty token', () => {
     expect(shouldAcceptTokenPush({ ...base, authToken: '' })).toBe(false);
     expect(shouldAcceptTokenPush({ ...base, authToken: null })).toBe(false);
   });
 
+  it('rejects a push with no projectKey', () => {
+    expect(shouldAcceptTokenPush({ ...base, projectKey: undefined })).toBe(
+      false
+    );
+  });
+
   it('rejects a push whose concrete scope does not serve the page project', () => {
     expect(
-      shouldAcceptTokenPush({ ...base, projectKey: '3', pageProjectId: '2' })
+      shouldAcceptTokenPush({ ...base, projectKey: '3', pageProjectKey: '2' })
     ).toBe(false);
   });
 

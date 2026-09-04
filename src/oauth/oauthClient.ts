@@ -1,5 +1,9 @@
 import browser from 'webextension-polyfill';
-import { OAUTH_CLIENT_ID, OAUTH_SCOPES } from '../constants';
+import {
+  OAUTH_CLIENT_ID,
+  OAUTH_REFRESH_SKEW_MS,
+  OAUTH_SCOPES,
+} from '../constants';
 import { challengeFromVerifier, randomUrlSafe } from './pkce';
 import { normalizeUrl } from './url';
 
@@ -19,7 +23,7 @@ export class OAuthTokenEndpointError extends Error {
   }
 }
 
-export const getRedirectUri = () => browser.identity.getRedirectURL();
+const getRedirectUri = () => browser.identity.getRedirectURL();
 
 export const login = async (
   apiUrl: string,
@@ -107,7 +111,21 @@ export const parseTokenResponse = (
 export const wasCancelledByUser = (message: string) =>
   /cancel|did not approve|denied|closed by the user/i.test(message);
 
-const DEFAULT_TOKEN_LIFETIME_SECONDS = 5 * 60;
+// RFC 7009: revoking either token ends the whole grant server-side. Best-effort — a failure here must not block
+// Disconnect from clearing the local session, so callers swallow the rejection.
+export const revoke = async (apiUrl: string, token: string): Promise<void> => {
+  const res = await fetch(`${normalizeUrl(apiUrl)}/oauth2/revoke`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token, client_id: OAUTH_CLIENT_ID }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new OAuthTokenEndpointError(res.status, body);
+  }
+};
+
+const DEFAULT_TOKEN_LIFETIME_SECONDS = OAUTH_REFRESH_SKEW_MS / 1000 + 60;
 
 const postToken = async (
   base: string,
@@ -129,7 +147,7 @@ const postToken = async (
 const AUTH_MAX_ATTEMPTS = 3;
 const AUTH_RETRY_DELAY_MS = 500;
 
-// launchWebAuthFlow intermittently fails to load the bootstrap SPA; retry any launch failure but never a user cancel.
+// launchWebAuthFlow intermittently fails to load the bootstrap SPA.
 const launchAuthWithRetry = async (url: string): Promise<string> => {
   let lastError: unknown;
   for (let attempt = 1; attempt <= AUTH_MAX_ATTEMPTS; attempt++) {

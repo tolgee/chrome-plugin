@@ -10,7 +10,6 @@ describe('acceptsCredentialDelivery', () => {
         pageOrigin: 'https://a.io',
       })
     ).toBe(true);
-    // a cross-origin frame is rejected even if it is (somehow) the top frame
     expect(
       acceptsCredentialDelivery({
         currentOrigin: 'https://evil.io',

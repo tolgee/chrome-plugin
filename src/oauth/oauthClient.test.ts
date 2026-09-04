@@ -17,6 +17,7 @@ vi.mock('./pkce', () => ({
   challengeFromVerifier: async () => 'challenge',
 }));
 
+import { OAUTH_REFRESH_SKEW_MS } from '../constants';
 import {
   login,
   OAuthTokenEndpointError,
@@ -187,17 +188,22 @@ describe('parseTokenResponse', () => {
     expect(t.refreshToken).toBe('r1');
   });
 
-  it('falls back to a 5-minute lifetime when expires_in is missing or non-positive', () => {
+  it('falls back to a 7-minute lifetime when expires_in is missing or non-positive', () => {
     const before = Date.now();
     const t = parseTokenResponse({ access_token: 'a2' }, 'r1');
-    expect(t.expiresAt).toBeGreaterThanOrEqual(before + 5 * 60 * 1000);
-    expect(t.expiresAt).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000 + 1000);
+    expect(t.expiresAt).toBeGreaterThanOrEqual(before + 7 * 60 * 1000);
+    expect(t.expiresAt).toBeLessThanOrEqual(Date.now() + 7 * 60 * 1000 + 1000);
 
     const zero = parseTokenResponse(
       { access_token: 'a2', expires_in: 0 },
       'r1'
     );
-    expect(zero.expiresAt).toBeGreaterThan(Date.now() + 4 * 60 * 1000);
+    expect(zero.expiresAt).toBeGreaterThan(Date.now() + 6 * 60 * 1000);
+  });
+
+  it('the fallback lifetime always exceeds the refresh skew, so a defaulted token is never stale on arrival', () => {
+    const t = parseTokenResponse({ access_token: 'a2' }, 'r1');
+    expect(t.expiresAt - OAUTH_REFRESH_SKEW_MS).toBeGreaterThan(Date.now());
   });
 
   it('throws when the response has no access token', () => {

@@ -1,13 +1,14 @@
 import {
-  API_KEY_LOCAL_STORAGE,
-  API_URL_LOCAL_STORAGE,
-  AUTH_TOKEN_LOCAL_STORAGE,
-  BRANCH_LOCAL_STORAGE,
-  PROJECT_ID_LOCAL_STORAGE,
+  API_KEY_SESSION_STORAGE,
+  API_URL_SESSION_STORAGE,
+  AUTH_TOKEN_SESSION_STORAGE,
+  BRANCH_SESSION_STORAGE,
+  PROJECT_ID_SESSION_STORAGE,
+  PROJECT_KEY_SESSION_STORAGE,
 } from '../constants';
 import { LibConfig } from '../types';
 import { acceptsCredentialDelivery } from './acceptsCredentialDelivery';
-import { acceptTokenPush, writeCredentials } from './credentialSink';
+import { acceptTokenPush, writeCredentialsIfChanged } from './credentialSink';
 import { injectUiLib } from './injectUiLib';
 import { Messages } from './Messages';
 import { updateState } from './updateState';
@@ -19,11 +20,12 @@ messages.startWindowListening();
 
 const getAppliedCredentials = () => {
   return {
-    apiKey: sessionStorage.getItem(API_KEY_LOCAL_STORAGE),
-    apiUrl: sessionStorage.getItem(API_URL_LOCAL_STORAGE),
-    branch: sessionStorage.getItem(BRANCH_LOCAL_STORAGE),
-    authToken: sessionStorage.getItem(AUTH_TOKEN_LOCAL_STORAGE),
-    projectId: sessionStorage.getItem(PROJECT_ID_LOCAL_STORAGE),
+    apiKey: sessionStorage.getItem(API_KEY_SESSION_STORAGE),
+    apiUrl: sessionStorage.getItem(API_URL_SESSION_STORAGE),
+    branch: sessionStorage.getItem(BRANCH_SESSION_STORAGE),
+    authToken: sessionStorage.getItem(AUTH_TOKEN_SESSION_STORAGE),
+    projectId: sessionStorage.getItem(PROJECT_ID_SESSION_STORAGE),
+    projectKey: sessionStorage.getItem(PROJECT_KEY_SESSION_STORAGE),
   };
 };
 
@@ -43,6 +45,11 @@ messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
     messages.sendToPlugin('OAUTH_TAB_CONNECTED', {
       apiUrl: appliedCredentials.apiUrl,
     });
+  } else {
+    // Tells the worker this tab is no longer holding a token (e.g. the user just un-applied it), so the tab
+    // registry — the worker's own view of which tabs to keep refreshing and pushing to — drops it symmetrically
+    // with how OAUTH_TAB_CONNECTED adds it above.
+    messages.sendToPlugin('OAUTH_TAB_DISCONNECTED');
   }
   updateState(configuration, messages);
   if (firstHandshake) {
@@ -92,7 +99,7 @@ messages.listenRuntime('SET_CREDENTIALS', async (data) => {
   if (!acceptsDelivery(data.pageOrigin)) {
     return;
   }
-  if (writeCredentials(sessionStorage, data)) {
+  if (writeCredentialsIfChanged(sessionStorage, data)) {
     location.reload();
   }
   updateState(configuration, messages);
