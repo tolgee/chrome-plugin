@@ -96,7 +96,11 @@ export const LoginTab = ({
       {serverOpen && (
         <Box display="flex" flexDirection="column" gap={0.5}>
           {serverField}
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <Typography
+            variant="caption"
+            sx={{ color: 'text.secondary' }}
+            data-testid="server-helper"
+          >
             Change if you have your own instance of Tolgee.
           </Typography>
         </Box>

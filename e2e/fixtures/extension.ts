@@ -39,10 +39,18 @@ export const test = base.extend<Fixtures>({
     await use(context);
     await context.close();
   },
-  worker: async ({ context }, use) => {
+  worker: async ({ context, state }, use) => {
     let [worker] = context.serviceWorkers();
     if (!worker) {
-      worker = await context.waitForEvent('serviceworker');
+      // The MV3 worker normally starts with the extension; if Chromium has already parked it, a content script's
+      // first runtime message (any page on the testapp origin) starts it again.
+      const started = context.waitForEvent('serviceworker');
+      const wake = setTimeout(async () => {
+        const page = await context.newPage().catch(() => undefined);
+        await page?.goto(state.apps[0].url).catch(() => undefined);
+        await page?.close().catch(() => undefined);
+      }, 5_000);
+      worker = await started.finally(() => clearTimeout(wake));
     }
     await use(worker);
   },

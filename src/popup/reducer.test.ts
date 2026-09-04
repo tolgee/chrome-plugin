@@ -289,7 +289,9 @@ describe('detector reducer', () => {
   });
 
   describe('CLEAR_ALL', () => {
-    const page = lib({ config: { apiUrl: 'https://my.tolgee.io', apiKey: '' } });
+    const page = lib({
+      config: { apiUrl: 'https://my.tolgee.io', apiKey: '' },
+    });
     const dirty: State = {
       ...initialState,
       tolgeePresent: 'present',

@@ -14,6 +14,7 @@ export type RunState = {
   apps: TestApp[];
   apiKey: string;
   seed: SeedCleanup;
+  tolgeeJsDir: string;
   testappPids: number[];
 };
 

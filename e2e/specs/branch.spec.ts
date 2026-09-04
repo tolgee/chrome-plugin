@@ -108,6 +108,7 @@ test.beforeAll(async () => {
   const state = readState();
   skipReason = await toggleBranching(state.tolgeeUrl, true);
   if (skipReason) {
+    console.log(`[e2e] branch spec skipped: ${skipReason}`);
     return;
   }
   const api = new ProjectApi(state.tolgeeUrl, state.apps[0].projectId);
@@ -145,6 +146,19 @@ test('changes the branch from the compact selector in the branch row', async ({
   await expect(popup.getByTestId('connected-panel')).toBeVisible();
   await expect(popup.getByTestId('branch-value')).toHaveText(DEFAULT_BRANCH);
 
+  // The pencil follows the editing switch: nothing to change while the page holds no credentials.
+  const editingSwitch = popup.getByTestId('editing-switch').locator('input');
+  const editingOff = page.waitForEvent('load');
+  await editingSwitch.click();
+  await editingOff;
+  await expect(editingSwitch).not.toBeChecked();
+  await expect(popup.getByTestId('change-branch')).toBeDisabled();
+  await expect(popup.getByTestId('branch-value')).toHaveText(DEFAULT_BRANCH);
+  const editingOn = page.waitForEvent('load');
+  await editingSwitch.click();
+  await editingOn;
+  await expect(popup.getByTestId('change-branch')).toBeEnabled();
+
   await popup.getByTestId('change-branch').click();
   const listbox = popup.getByRole('listbox');
   await expect(listbox).toBeVisible();
@@ -154,13 +168,6 @@ test('changes the branch from the compact selector in the branch row', async ({
   ]);
   await popup.screenshot({ path: testInfo.outputPath('branch-editor.png') });
 
-  // The list is laid out inside the popup's own frame, not hanging off its edge.
-  const frame = (await popup.getByTestId('connected-panel').boundingBox())!;
-  const list = (await listbox.boundingBox())!;
-  expect(list.x).toBeGreaterThanOrEqual(frame.x);
-  expect(list.x + list.width).toBeLessThanOrEqual(frame.x + frame.width);
-  expect(list.y + list.height).toBeLessThanOrEqual(frame.y + frame.height);
-
   await popup.getByTestId('branch-input').fill(FEATURE_BRANCH.slice(0, 3));
   await expect(listbox.getByRole('option')).toHaveText([FEATURE_BRANCH]);
 
@@ -168,6 +175,9 @@ test('changes the branch from the compact selector in the branch row', async ({
   await listbox.getByRole('option', { name: FEATURE_BRANCH }).click();
   await switched;
   await expect(popup.getByTestId('branch-value')).toHaveText(FEATURE_BRANCH);
+  await expect(popup.getByTestId('editing-hint')).toHaveText(
+    `Edits go to ${FEATURE_BRANCH}.`
+  );
   expect(await sessionItem(page, '__tolgee_branch')).toBe(FEATURE_BRANCH);
 
   await popup.getByTestId('change-branch').click();

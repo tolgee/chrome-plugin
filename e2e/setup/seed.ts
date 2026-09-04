@@ -37,7 +37,7 @@ export type Seeded = {
 const isHtml = (res: Response) =>
   (res.headers.get('content-type') ?? '').includes('text/html');
 
-class TolgeeApi {
+export class TolgeeApi {
   private token: string | undefined;
 
   constructor(private readonly baseUrl: string) {}
@@ -103,13 +103,17 @@ class TolgeeApi {
     return organizations[0].id;
   }
 
-  async createProject(name: string): Promise<Project> {
+  async createProject(
+    name: string,
+    options: { useBranching?: boolean } = {}
+  ): Promise<Project> {
     const project = await this.request('POST', 'projects', {
       name,
       organizationId: await this.defaultOrganizationId(),
       languages: [{ name: 'English', originalName: 'English', tag: 'en' }],
       baseLanguageTag: 'en',
       icuPlaceholders: true,
+      ...options,
     });
     return { id: project.id, name: project.name };
   }
@@ -122,12 +126,26 @@ class TolgeeApi {
   }
 
   async createApiKey(projectId: number): Promise<string> {
+    return (await this.createApiKeyWithId(projectId)).key;
+  }
+
+  async createApiKeyWithId(
+    projectId: number
+  ): Promise<{ id: number; key: string }> {
     const created = await this.request('POST', 'api-keys', {
       projectId,
       scopes: API_KEY_SCOPES,
       description: 'browser extension e2e',
     });
-    return created.key;
+    return { id: created.id, key: created.key };
+  }
+
+  deleteApiKey(id: number) {
+    return this.request('DELETE', `api-keys/${id}`);
+  }
+
+  currentUser(): Promise<{ id: number; name: string; username: string }> {
+    return this.request('GET', 'user');
   }
 
   deleteProject(id: number) {

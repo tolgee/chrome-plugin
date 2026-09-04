@@ -138,6 +138,7 @@ export type StoredSession = {
   projectKey: string;
   accessToken: string;
   refreshToken?: string;
+  expiresAt: number;
 };
 
 /** The OAuth sessions the extension holds in `chrome.storage.local` (see oauth/tokenStore.ts). */
@@ -148,4 +149,35 @@ export const storedOAuthSessions = (worker: Worker): Promise<StoredSession[]> =>
         .filter(([key]) => key.startsWith('oauth:'))
         .map(([, value]) => value)
     )
+  );
+
+type SignInArgs = Omit<AuthorizationArgs, 'decision'> & { popup: Page };
+
+/** Connect to Tolgee from the popup: stubbed identity flow, consent allowed, page reloaded with the token. */
+export const signInThroughPopup = async ({ popup, ...args }: SignInArgs) => {
+  await installIdentityStub(args.worker);
+  const reloaded = args.target.waitForEvent('load');
+  await popup.getByTestId('connect-oauth').click();
+  await completeAuthorization(args);
+  await reloaded;
+  await expect(popup.getByTestId('connected-panel')).toBeVisible();
+};
+
+/** Backdates every stored OAuth session so the next freshness check sees an expired access token. */
+export const expireStoredSessions = (worker: Worker) =>
+  worker.evaluate(async () => {
+    const all: Record<string, any> = await chrome.storage.local.get(null);
+    const expired = Object.fromEntries(
+      Object.entries(all)
+        .filter(([key]) => key.startsWith('oauth:'))
+        .map(([key, value]) => [key, { ...value, expiresAt: Date.now() - 1 }])
+    );
+    await chrome.storage.local.set(expired);
+  });
+
+// Replaces the periodic alarm with one that fires right away (see REFRESH_ALARM in background.ts); an unpacked
+// extension is allowed sub-minute alarms.
+export const fireRefreshAlarm = (worker: Worker) =>
+  worker.evaluate(() =>
+    chrome.alarms.create('tolgee-oauth-refresh', { when: Date.now() + 100 })
   );

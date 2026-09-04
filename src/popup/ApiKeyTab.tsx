@@ -69,6 +69,7 @@ export const ApiKeyTab = ({
                   edge="end"
                   aria-label={keyVisible ? 'Hide API key' : 'Show API key'}
                   onClick={() => setKeyVisible((visible) => !visible)}
+                  data-testid="toggle-api-key-visibility"
                 >
                   {keyVisible ? (
                     <VisibilityOffIcon fontSize="small" />
@@ -139,7 +140,11 @@ export const ApiKeyTab = ({
         Connect with API key
       </Button>
       {isInDevelopmentMode && (
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary' }}
+          data-testid="dev-mode-note"
+        >
           Api key is included directly in Tolgee configuration. <br /> Use this
           setup only in development environment.
         </Typography>

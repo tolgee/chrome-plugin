@@ -19,15 +19,24 @@ support extensions).
 
 ## Specs
 
-| Spec                    | What it covers                                                                                                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `detection.spec.ts`     | The popup detects the page project and offers sign-in; opened during a slow page reload it recovers instead of reporting "No access to this page".                     |
-| `api-key.spec.ts`       | Connect with a project API key, in-context dialog opens on alt+click and the page's requests carry `X-API-Key`, "Remove key" returns to the sign-in screen.            |
-| `oauth.spec.ts`         | Connect to Tolgee through the (stubbed) identity flow with consent, requests carry `Authorization: Bearer` only, "Sign out" revokes the grant (`POST /oauth2/revoke`). |
-| `multi-project.spec.ts` | Two testapps declaring different projects on the same server get two distinct OAuth sessions, each tab holding its own project id and token.                           |
+| Spec                          | What it covers                                                                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `detection.spec.ts`           | What the popup makes of the page: project detected, page still reloading, no Tolgee at all, no content script (about:blank), another tab's handshakes, a legacy SDK, two Tolgee instances (iframe). |
+| `sign-in.spec.ts`             | The sign-in screen: no project declared, server shown and changeable, invalid server URL, unreachable server, switching to the API-key screen and back.                                          |
+| `api-key-screen.spec.ts`      | The API-key screen: empty key, foreign key, unreachable server, valid key (Enter submits), key masking, a page whose config already carries the key (development mode).                          |
+| `api-key.spec.ts`             | Connect with a project API key, in-context dialog opens on alt+click and the page's requests carry `X-API-Key`, "Remove key" returns to the sign-in screen.                                      |
+| `connected-api-key.spec.ts`   | The connected panel for a key: contents, editing switch off/on (page credentials cleared and restored), Remove key with editing off, a key revoked on the server.                               |
+| `oauth.spec.ts`               | Connect to Tolgee through the (stubbed) identity flow with consent, requests carry `Authorization: Bearer` only, "Sign out" revokes the grant (`POST /oauth2/revoke`).                           |
+| `oauth-session.spec.ts`       | OAuth session states: account name, session revoked on the server and "Sign in again", page declaring a project the token cannot reach, sign out clearing every tab, consent denied, token refresh. |
+| `multi-project.spec.ts`       | Two testapps declaring different projects on the same server get two distinct OAuth sessions, each tab holding its own project id and token.                                                     |
+| `branch.spec.ts`              | Branch row and inline branch editor. Skipped, with the reason printed, on a server where branching is not available.                                                                             |
 
-The two OAuth specs need a server with the OAuth authorization server (tolgee/tolgee-platform#3893) and only run
+The OAuth specs need a server with the OAuth authorization server (tolgee/tolgee-platform#3893) and only run
 with `TOLGEE_OAUTH=1`; otherwise they are skipped.
+
+Every popup state, alert and transition has at least one assertion in these specs. `e2e/fixtures/testapp.ts`
+rewrites the testapp's inlined env on the way to the browser (`declareProject`, `declareApiKey`) and serves extra
+pages on its origin (`servePage`), so the two testapps can play every page shape the popup distinguishes.
 
 ## Running locally
 

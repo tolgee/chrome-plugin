@@ -40,6 +40,7 @@ export default async function globalSetup() {
     state.apiKey = seeded.apiKey;
 
     const tolgeeJsDir = prepareTolgeeJs();
+    state.tolgeeJsDir = tolgeeJsDir;
     const apps: TestApp[] = [];
     const children = seeded.projects.map((project, i) => {
       const port = ports[i];
