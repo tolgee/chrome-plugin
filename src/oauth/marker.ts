@@ -1,8 +1,20 @@
 import browser from 'webextension-polyfill';
+import { sameOrigin } from './url';
 
-// The write helper for the per-origin "connected via OAuth here" marker, called by both the popup and the worker.
-// `projectKey` is the scope of the token actually delivered here — the authoritative binding a page can't forge, so
-// token delivery keys off it rather than the page-supplied projectId. `projectId` is only the popup's UX restore hint.
+// The one storage.local[origin] record shape, covering both the api-key and OAuth forms a given origin can hold.
+export type OriginRecord = {
+  apiUrl?: string;
+  apiKey?: string;
+  branch?: string;
+  oauth?: boolean;
+  projectId?: number;
+  projectKey?: string;
+};
+
+export const isConnectedMarker = (
+  m: OriginRecord | undefined
+): m is OriginRecord & { apiUrl: string } => Boolean(m?.oauth && m.apiUrl);
+
 export const storeOAuthMarker = async (
   origin: string,
   marker: { apiUrl: string; projectId?: number; projectKey: string }
@@ -17,7 +29,40 @@ export const storeOAuthMarker = async (
   });
 };
 
-// The page origin's marker (null if none). Extension-written, so unforgeable — the trust anchor for "was connected".
+export const updateMarkerProjectHint = async (
+  origin: string,
+  projectId: number | undefined
+) => {
+  const existing = (await browser.storage.local.get(origin))[
+    origin
+  ] as OriginRecord;
+  if (!isConnectedMarker(existing)) {
+    return;
+  }
+  await browser.storage.local.set({
+    [origin]: { ...existing, projectId },
+  });
+};
+
+export const clearMarker = (origin: string) =>
+  browser.storage.local.remove(origin);
+
+export const isSessionReferencedByAnyOrigin = async (
+  apiUrl: string,
+  projectKey: string
+): Promise<boolean> => {
+  const all = await browser.storage.local.get(null);
+  return Object.values(all).some((value) => {
+    const marker = value as OriginRecord;
+    return (
+      isConnectedMarker(marker) &&
+      sameOrigin(marker.apiUrl, apiUrl) &&
+      marker.projectKey === projectKey
+    );
+  });
+};
+
+// A marker means the origin *was* connected, not that the connection is still live — it never expires on its own.
 export const loadOAuthMarker = async (
   origin: string
 ): Promise<{
@@ -26,14 +71,9 @@ export const loadOAuthMarker = async (
   projectKey?: string;
 } | null> => {
   const stored = (await browser.storage.local.get(origin))[origin] as
-    | {
-        apiUrl?: string;
-        oauth?: boolean;
-        projectId?: number;
-        projectKey?: string;
-      }
+    | OriginRecord
     | undefined;
-  if (!stored?.oauth || !stored.apiUrl) {
+  if (!isConnectedMarker(stored)) {
     return null;
   }
   return {

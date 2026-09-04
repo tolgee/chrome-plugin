@@ -3,8 +3,8 @@ export type LibConfig = {
   uiVersion?: string;
   mode: 'production' | 'development';
   config: {
-    apiUrl: '';
-    apiKey: '';
+    apiUrl: string;
+    apiKey: string;
     branch?: string;
     projectId?: number | string;
     // @deprecated older versions
