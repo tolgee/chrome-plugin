@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { REFRESH_ALARM_PERIOD_MINUTES } from '../constants';
 
 const store = new Map<string, unknown>();
@@ -793,6 +793,61 @@ describe('background message handling', () => {
     expect(revoke).toHaveBeenCalledWith('https://app.tolgee.io', 'rtok');
     expect(store.has('oauth:https://app.tolgee.io:5')).toBe(false);
     expect(store.has('https://site-a.example')).toBe(false);
+  });
+
+  it('OAUTH_LOGOUT drops the origin marker and tab registration before a tab is told to clear, so its reload cannot get the token re-applied', async () => {
+    store.set('https://site-a.example', {
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectKey: '5',
+    });
+    store.set('injectedTabs', {
+      7: {
+        apiUrl: 'https://app.tolgee.io',
+        pageOrigin: 'https://site-a.example',
+        projectKey: '5',
+      },
+    });
+    store.set('oauth:https://app.tolgee.io:5', {
+      accessToken: 'tok',
+      refreshToken: 'rtok',
+      expiresAt: future(),
+      apiUrl: 'https://app.tolgee.io',
+      projectKey: '5',
+    });
+    const browser = (await import('webextension-polyfill')).default;
+    let atClear: { marker: boolean; registered: boolean } | undefined;
+    (browser.tabs.sendMessage as Mock).mockImplementationOnce(
+      async (tabId: number, message: unknown) => {
+        atClear = {
+          marker: store.has('https://site-a.example'),
+          registered: Boolean(
+            (store.get('injectedTabs') as Record<string, unknown>)?.[7]
+          ),
+        };
+        sent.push({ tabId, message });
+      }
+    );
+
+    await respond({
+      type: 'OAUTH_LOGOUT',
+      data: {
+        apiUrl: 'https://app.tolgee.io',
+        pageOrigin: 'https://site-a.example',
+      },
+    });
+
+    expect(sent).toEqual([
+      {
+        tabId: 7,
+        message: {
+          type: 'SET_CREDENTIALS',
+          data: { pageOrigin: 'https://site-a.example' },
+        },
+      },
+    ]);
+    expect(atClear).toEqual({ marker: false, registered: false });
+    expect(store.has('oauth:https://app.tolgee.io:5')).toBe(false);
   });
 
   it('OAUTH_LOGOUT does not revoke when disconnecting site is not the only reference to a shared session', async () => {

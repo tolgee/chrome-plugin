@@ -306,31 +306,32 @@ const disconnect = async (data: { pageOrigin?: string }) => {
     return;
   }
   const marker = await loadOAuthMarker(data.pageOrigin);
-  // The popup only clears its own (active) tab's sessionStorage; a session shared with another origin survives
-  // Disconnect, so any OTHER tab of this origin would otherwise keep a live, still-working token indefinitely.
-  await clearTabCredentials(data.pageOrigin);
+  const tabIds = (await loadTabEntries())
+    .filter(([, tab]) => tab.pageOrigin === data.pageOrigin)
+    .map(([tabId]) => Number(tabId));
+  // The origin's marker and tab registrations go first: a tab reloads as soon as it is told to clear, and the popup
+  // re-applies whatever OAUTH_GET_TOKEN still finds for the origin when the reloaded page handshakes.
   await unregisterTabsForOrigin(data.pageOrigin);
   await clearMarker(data.pageOrigin);
+  // The popup only clears its own (active) tab's sessionStorage; a session shared with another origin survives
+  // Disconnect, so any OTHER tab of this origin would otherwise keep a live, still-working token indefinitely.
+  await clearTabCredentials(tabIds, data.pageOrigin);
   if (marker?.projectKey) {
     await endSessionIfUnreferenced(marker.apiUrl, marker.projectKey);
   }
 };
 
-const clearTabCredentials = async (pageOrigin: string) => {
-  const injected = await loadTabEntries();
-  await Promise.all(
-    injected
-      .filter(([, tab]) => tab.pageOrigin === pageOrigin)
-      .map(([tabId]) =>
-        browser.tabs
-          .sendMessage(Number(tabId), {
-            type: 'SET_CREDENTIALS',
-            data: { pageOrigin },
-          })
-          .catch(() => undefined)
-      )
+const clearTabCredentials = (tabIds: number[], pageOrigin: string) =>
+  Promise.all(
+    tabIds.map((tabId) =>
+      browser.tabs
+        .sendMessage(tabId, {
+          type: 'SET_CREDENTIALS',
+          data: { pageOrigin },
+        })
+        .catch(() => undefined)
+    )
   );
-};
 
 // A session can be shared by more than one origin on the same backend, so it is only cleared — and only then
 // revoked server-side — once no origin's marker still references it.
