@@ -365,7 +365,22 @@ describe('background message handling', () => {
       data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
     });
 
-    expect(res).toMatchObject({ error: expect.stringContaining('boom') });
+    expect(res).toMatchObject({ error: 'boom' });
+  });
+
+  it('OAUTH_LOGIN reports the error message without the error class prefix', async () => {
+    login.mockRejectedValue(
+      new Error('Tolgee authorization failed: access_denied')
+    );
+
+    const res = await respond({
+      type: 'OAUTH_LOGIN',
+      data: { apiUrl: 'https://app.tolgee.io', projectId: 5, tabId: 1 },
+    });
+
+    expect(res).toEqual({
+      error: 'Tolgee authorization failed: access_denied',
+    });
   });
 
   it('OAUTH_LOGIN refuses to connect without a project id, rather than creating a shared session', async () => {

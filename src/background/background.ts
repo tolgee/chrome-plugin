@@ -135,9 +135,13 @@ const respondAsync = <T>(
     .then((value) => sendResponse(toSuccess(value)))
     .catch((e) => {
       console.error(`[tolgee] ${label} failed`, e);
-      sendResponse({ ...toError(e), error: String(e) });
+      sendResponse({ ...toError(e), error: errorMessage(e) });
     });
 };
+
+// The popup shows this text as-is; String(error) would prefix it with the error's class name.
+export const errorMessage = (e: unknown): string =>
+  e instanceof Error ? e.message : String(e);
 
 // Registers from the marker (see oauth/marker.ts), never from the page's own message.
 const registerConnectedTab = async (
