@@ -2,7 +2,11 @@ import type { Request } from '@playwright/test';
 import { apiAs } from '../fixtures/api';
 import { expect, type Page, test, type Worker } from '../fixtures/extension';
 import { signInThroughPopup } from '../fixtures/oauth';
-import { openInContextDialog, openTestapp } from '../fixtures/testapp';
+import {
+  IN_CONTEXT_DIALOG_TEXT,
+  openInContextDialog,
+  openTestapp,
+} from '../fixtures/testapp';
 import { API_KEY_SCOPES, type TolgeeApi } from '../setup/seed';
 import type { RunState } from '../setup/state';
 
@@ -143,6 +147,9 @@ const takeScreenshotAndCheckHops = async (
   expect((await uploads[0].response())?.status()).toBe(201);
 };
 
+const dialogTitle = (page: Page) =>
+  page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT);
+
 /** Saves the dialog and returns the key's screenshots as the server lists them once the save went through. */
 const saveAndReadScreenshots = async (
   page: Page,
@@ -150,7 +157,8 @@ const saveAndReadScreenshots = async (
   projectId: number
 ) => {
   await saveButton(page).click();
-  await expect(saveButton(page)).toHaveText('Saved! ✓');
+  // A successful save closes the dialog by itself; a failed one keeps it open with an alert.
+  await expect(dialogTitle(page)).toBeHidden();
   const keyId = await api.findKeyId(projectId, KEY_NAME);
   expect(keyId, `key ${KEY_NAME} exists after the save`).not.toBeNull();
   return {
@@ -293,7 +301,7 @@ test('reports the missing upload scope instead of silently dropping the screensh
   await expect(dialogAlert(page)).toContainText(
     'Missing scopes: screenshots.upload'
   );
-  await expect(saveButton(page)).not.toHaveText('Saved! ✓');
+  await expect(dialogTitle(page)).toBeVisible();
   const keyId = await api.findKeyId(app.projectId, KEY_NAME);
   if (keyId !== null) {
     expect(await api.keyScreenshots(app.projectId, keyId)).toEqual([]);
