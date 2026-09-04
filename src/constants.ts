@@ -15,6 +15,7 @@ export const REFRESH_ALARM_PERIOD_MINUTES = 5;
 // The + 1 keeps a stale token inside the alarm's next tick, not past it (avoiding the 401 window).
 export const OAUTH_REFRESH_SKEW_MS =
   (REFRESH_ALARM_PERIOD_MINUTES + 1) * 60_000;
+export const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
 export const OAUTH_SCOPES = [
   'translations.view',
   'translations.edit',

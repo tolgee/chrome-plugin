@@ -140,13 +140,16 @@ export const TolgeeDetector = () => {
   const isOauthSession = isOAuth(activeValues);
 
   const handleDisconnect = async () => {
-    if (isOauthSession) {
-      const activeTab = await getActiveTab();
-      await sendToBackground('OAUTH_LOGOUT', {
-        pageOrigin: safeOrigin(activeTab?.url),
-      });
+    try {
+      if (isOauthSession) {
+        const activeTab = await getActiveTab();
+        await sendToBackground('OAUTH_LOGOUT', {
+          pageOrigin: safeOrigin(activeTab?.url),
+        });
+      }
+    } finally {
+      dispatch({ type: 'CLEAR_ALL' });
     }
-    dispatch({ type: 'CLEAR_ALL' });
   };
 
   const serverField = (

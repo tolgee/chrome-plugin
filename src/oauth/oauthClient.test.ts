@@ -164,9 +164,10 @@ describe('refresh', () => {
 
     const [tokenUrl, init] = fetchMock.mock.calls[0] as unknown as [
       string,
-      { body: URLSearchParams },
+      { body: URLSearchParams; signal: AbortSignal },
     ];
     expect(tokenUrl).toBe('https://api/oauth2/token');
+    expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(init.body.get('grant_type')).toBe('refresh_token');
     expect(init.body.get('refresh_token')).toBe('r1');
     expect(init.body.get('client_id')).toBeTruthy();

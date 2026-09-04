@@ -2,6 +2,7 @@ import browser from 'webextension-polyfill';
 import {
   OAUTH_CLIENT_ID,
   OAUTH_REFRESH_SKEW_MS,
+  OAUTH_REQUEST_TIMEOUT_MS,
   OAUTH_SCOPES,
 } from '../constants';
 import { challengeFromVerifier, randomUrlSafe } from './pkce';
@@ -118,6 +119,7 @@ export const revoke = async (apiUrl: string, token: string): Promise<void> => {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ token, client_id: OAUTH_CLIENT_ID }),
+    signal: AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -136,6 +138,7 @@ const postToken = async (
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
+    signal: AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');

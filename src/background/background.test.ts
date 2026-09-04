@@ -824,6 +824,64 @@ describe('background message handling', () => {
     expect(store.has('https://site-a.example')).toBe(true);
   });
 
+  it("OAUTH_GET_TOKEN from a tab resolves the origin from the sender tab, so a claimed pageOrigin cannot read another origin's token", async () => {
+    store.set('https://other.example', {
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectKey: '5',
+    });
+    store.set('oauth:https://app.tolgee.io:5', {
+      accessToken: 'tok',
+      refreshToken: 'rtok',
+      expiresAt: future(),
+      apiUrl: 'https://app.tolgee.io',
+      projectKey: '5',
+    });
+
+    const res = await respond(
+      {
+        type: 'OAUTH_GET_TOKEN',
+        data: {
+          apiUrl: 'https://app.tolgee.io',
+          pageOrigin: 'https://other.example',
+        },
+      },
+      PAGE_TAB
+    );
+
+    expect(res).toEqual({ accessToken: null });
+  });
+
+  it("OAUTH_LOGOUT from a tab acts on the sender tab origin, so a claimed pageOrigin cannot end another origin's session", async () => {
+    store.set('https://other.example', {
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectKey: '5',
+    });
+    store.set('oauth:https://app.tolgee.io:5', {
+      accessToken: 'tok',
+      refreshToken: 'rtok',
+      expiresAt: future(),
+      apiUrl: 'https://app.tolgee.io',
+      projectKey: '5',
+    });
+
+    await respond(
+      {
+        type: 'OAUTH_LOGOUT',
+        data: {
+          apiUrl: 'https://app.tolgee.io',
+          pageOrigin: 'https://other.example',
+        },
+      },
+      PAGE_TAB
+    );
+
+    expect(revoke).not.toHaveBeenCalled();
+    expect(store.has('oauth:https://app.tolgee.io:5')).toBe(true);
+    expect(store.has('https://other.example')).toBe(true);
+  });
+
   it("does not push a session's token to a tab registered for a different project", async () => {
     store.set('injectedTabs', {
       2: {

@@ -1,5 +1,8 @@
 import browser from 'webextension-polyfill';
-import { REFRESH_ALARM_PERIOD_MINUTES } from '../constants';
+import {
+  OAUTH_REQUEST_TIMEOUT_MS,
+  REFRESH_ALARM_PERIOD_MINUTES,
+} from '../constants';
 import { ScreenshotMaker } from './ScreenshotMaker';
 import { RuntimeMessage } from '../content/Messages';
 import { login, revoke } from '../oauth/oauthClient';
@@ -65,14 +68,19 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'OAUTH_GET_TOKEN':
       respondAsync(
         sendResponse,
-        getTokenAndPush(data.apiUrl, data.pageOrigin),
+        getTokenAndPush(data.apiUrl, requesterOrigin(sender, data.pageOrigin)),
         'token lookup',
         (accessToken) => ({ accessToken }),
         () => ({ accessToken: null })
       );
       return true;
     case 'OAUTH_LOGOUT':
-      respondAsync(sendResponse, disconnect(data), 'logout', () => ({}));
+      respondAsync(
+        sendResponse,
+        disconnect({ pageOrigin: requesterOrigin(sender, data.pageOrigin) }),
+        'logout',
+        () => ({})
+      );
       return true;
     case 'OAUTH_TAB_CONNECTED':
       // Respond only after the registration resolves: returning true keeps the MV3 worker alive for the async work, so a
@@ -94,6 +102,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({});
   }
 });
+
+// A tab can only ever act for its own origin; a claimed pageOrigin is honoured solely for extension pages (the
+// popup), which have no sender.tab.
+const requesterOrigin = (
+  sender: { tab?: { url?: string } },
+  claimed?: string
+): string | undefined => (sender.tab ? safeOrigin(sender.tab.url) : claimed);
 
 const setStateIcon = (state: State, tabId: number) => {
   browser.action.setIcon({
@@ -240,6 +255,7 @@ const serverRejectsSession = async (
       `${normalizeUrl(apiUrl)}/v2/projects/${projectId}`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS),
       }
     );
     return (
