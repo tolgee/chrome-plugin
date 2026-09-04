@@ -65,8 +65,18 @@ test('signs in with OAuth, edits in context through the extension and signs out'
   const pageRequests = collectProjectRequests(page);
   const workerRequests = collectWorkerRequests(context);
   await openInContextDialog(page);
+  // The dialog title renders before its queries go out; wait for the worker to have sent them for this project.
+  await expect
+    .poll(
+      () =>
+        workerRequests.some((request) =>
+          request.url().includes(`/v2/projects/${app.projectId}/`)
+        ),
+      { message: 'the worker to send the dialog requests' }
+    )
+    .toBe(true);
+  await Promise.all(workerRequests.map((request) => request.response()));
   expect(pageRequests).toEqual([]);
-  expect(workerRequests.length).toBeGreaterThan(0);
   for (const request of workerRequests) {
     const headers = await request.allHeaders();
     expect(headers['authorization'], request.url()).toMatch(/^Bearer /);

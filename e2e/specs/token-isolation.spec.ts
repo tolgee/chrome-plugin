@@ -2,6 +2,7 @@ import type { Frame } from '@playwright/test';
 import { expect, type Page, test } from '../fixtures/extension';
 import {
   collectPageRequests,
+  collectWorkerRequests,
   requireOAuthServer,
   signInThroughPopup,
   storedOAuthSessions,
@@ -97,6 +98,9 @@ test('keeps the access token out of the page and refuses what the SDK does not n
   openPopup,
 }) => {
   const [app, other] = state.apps;
+  // Attached before the page loads: the app's own loads are in here too, so the page is never silent.
+  const pageRequests = collectPageRequests(page);
+  const workerRequests = collectWorkerRequests(context);
   await openTestapp(page, app.url);
   const popup = await openPopup(page);
   await signInThroughPopup({
@@ -117,14 +121,28 @@ test('keeps the access token out of the page and refuses what the SDK does not n
     expect(await findInPage(page, session.refreshToken)).toEqual([]);
   }
 
-  // Nothing the page sends carries a credential; the worker does the authorized calls.
-  const pageRequests = collectPageRequests(page);
+  // Nothing the page sends carries a credential; the worker does the authorized calls, with the token.
   await openInContextDialog(page);
+  await expect
+    .poll(
+      () =>
+        workerRequests.some((request) =>
+          request.url().includes(`/v2/projects/${app.projectId}/`)
+        ),
+      { message: 'the worker to send the dialog requests' }
+    )
+    .toBe(true);
+  await Promise.all(workerRequests.map((request) => request.response()));
   expect(pageRequests.length).toBeGreaterThan(0);
   for (const request of pageRequests) {
     const headers = await request.allHeaders();
     expect(headers['authorization'], request.url()).toBeUndefined();
     expect(headers['x-api-key'], request.url()).toBeUndefined();
+  }
+  for (const request of workerRequests) {
+    expect((await request.allHeaders())['authorization'], request.url()).toBe(
+      `Bearer ${session.accessToken}`
+    );
   }
   await page.keyboard.press('Escape');
 
