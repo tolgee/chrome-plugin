@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       platform_branch:
-        description: tolgee-platform branch to build the image from (default: the branch named like this one, else tolgee/tolgee:latest)
+        description: "tolgee-platform branch to build the image from (default: the branch named like this one, else tolgee/tolgee:latest)"
         required: false
 
 jobs:
