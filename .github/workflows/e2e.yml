@@ -3,6 +3,10 @@ name: E2E
 on:
   push:
   workflow_dispatch:
+    inputs:
+      platform_branch:
+        description: tolgee-platform branch to build the image from (default: the branch named like this one, else tolgee/tolgee:latest)
+        required: false
 
 jobs:
   e2e:
@@ -16,14 +20,16 @@ jobs:
 
       # tolgee-platform publishes no per-branch image, so a platform branch named like this one is built into a
       # local image here; without one the run uses the published tolgee/tolgee:latest.
-      - name: Look for a tolgee-platform branch named ${{ env.SIBLING_BRANCH }}
+      - name: Look for a tolgee-platform branch named ${{ github.event.inputs.platform_branch || env.SIBLING_BRANCH }}
         id: platform
+        env:
+          WANTED: ${{ github.event.inputs.platform_branch || env.SIBLING_BRANCH }}
         run: |
-          if [ "$SIBLING_BRANCH" != main ] && [ -n "$(git ls-remote --heads https://github.com/tolgee/tolgee-platform.git "refs/heads/$SIBLING_BRANCH")" ]; then
-            echo "tolgee-platform has a branch named $SIBLING_BRANCH, building its image"
-            echo "ref=$SIBLING_BRANCH" >> "$GITHUB_OUTPUT"
+          if [ "$WANTED" != main ] && [ -n "$(git ls-remote --heads https://github.com/tolgee/tolgee-platform.git "refs/heads/$WANTED")" ]; then
+            echo "tolgee-platform has a branch named $WANTED, building its image"
+            echo "ref=$WANTED" >> "$GITHUB_OUTPUT"
           else
-            echo "tolgee-platform has no branch named $SIBLING_BRANCH, using tolgee/tolgee:latest"
+            echo "tolgee-platform has no branch named $WANTED, using tolgee/tolgee:latest"
           fi
 
       - name: Checkout tolgee-platform

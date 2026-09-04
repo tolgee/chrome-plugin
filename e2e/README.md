@@ -91,7 +91,8 @@ A change that needs a sibling repo gets tested together with it by giving both b
   looks for a platform branch named like the extension's, and when there is one checks it out into `.platform/`,
   builds it (`./gradlew dockerPrepare` plus `docker build` of `build/docker`, the same steps as the platform's own
   image build) into `tolgee/tolgee:e2e-branch` and runs the suite with `TOLGEE_IMAGE` pointing at it. That adds
-  10 to 15 minutes to the job. Without one the job uses `tolgee/tolgee:latest`. Locally, build the image the same
+  10 to 15 minutes to the job. Without one the job uses `tolgee/tolgee:latest`; a manual run (`workflow_dispatch`)
+  can name the platform branch to build in its `platform_branch` input. Locally, build the image the same
   way from a platform checkout **without** the billing repo next to it (a `../billing` sibling is compiled into the
   image and changes what the server does) and pass it as `TOLGEE_IMAGE`.
 
