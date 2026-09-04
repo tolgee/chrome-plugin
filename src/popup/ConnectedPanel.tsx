@@ -230,79 +230,52 @@ export const ConnectedPanel = ({
             </Value>
           </>
         )}
-        {branch && !editingBranch && (
+        {branch && (
           <>
             <Label>Branch</Label>
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="space-between"
-              gap={1}
-              minWidth={0}
-            >
-              <Value>
-                {branchInEffect(
-                  branch.override,
-                  branch.pageBranch,
-                  branch.options
-                )}
-              </Value>
-              <IconButton
-                size="small"
-                title="Change branch"
-                aria-label="Change branch"
-                disabled={!editingOn}
-                onClick={() => setEditingBranch(true)}
-                sx={{ mr: -0.75 }}
+            {editingBranch ? (
+              <BranchEditor
+                value={branch.override ?? ''}
+                options={branch.options ?? []}
+                placeholder={pageBranchLabel(branch.pageBranch, branch.options)}
+                onCommit={(next) => {
+                  setEditingBranch(false);
+                  if (next !== (branch.override ?? '')) {
+                    onChangeBranch(next);
+                  }
+                }}
+                onCancel={() => setEditingBranch(false)}
+              />
+            ) : (
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+                gap={1}
+                minWidth={0}
               >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Box>
-            {overrideSet && (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ gridColumn: '1 / -1' }}
-              >
-                Page uses{' '}
-                <Box component="b" sx={{ fontWeight: 500 }}>
-                  {pageBranchLabel(branch.pageBranch, branch.options)}
-                </Box>
-                .
-                {editingOn && (
-                  <>
-                    {' '}
-                    <Link
-                      component="button"
-                      type="button"
-                      underline="hover"
-                      variant="caption"
-                      onClick={() => onChangeBranch('')}
-                    >
-                      Reset
-                    </Link>
-                  </>
-                )}
-              </Typography>
+                <Value>
+                  {branchInEffect(
+                    branch.override,
+                    branch.pageBranch,
+                    branch.options
+                  )}
+                </Value>
+                <IconButton
+                  size="small"
+                  title="Change branch"
+                  aria-label="Change branch"
+                  disabled={!editingOn}
+                  onClick={() => setEditingBranch(true)}
+                  sx={{ mr: -0.75 }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </Box>
             )}
           </>
         )}
       </Box>
-
-      {branch && editingBranch && (
-        <BranchEditor
-          value={branch.override ?? ''}
-          options={branch.options ?? []}
-          placeholder={pageBranchLabel(branch.pageBranch, branch.options)}
-          onCommit={(next) => {
-            setEditingBranch(false);
-            if (next !== (branch.override ?? '')) {
-              onChangeBranch(next);
-            }
-          }}
-          onCancel={() => setEditingBranch(false)}
-        />
-      )}
 
       <Box
         display="flex"

@@ -51,7 +51,7 @@ export const BranchEditor = ({
   return (
     <Autocomplete
       open
-      style={{ marginBottom: 150 }}
+      fullWidth
       freeSolo
       size="small"
       disablePortal
@@ -88,12 +88,11 @@ export const BranchEditor = ({
         <TextField
           {...params}
           autoFocus
-          label="Branch"
           variant="outlined"
           placeholder={placeholder}
-          helperText="Leave empty to use the branch from SDK config"
           onKeyDown={handleKeyDown}
           onBlur={cancel}
+          inputProps={{ ...params.inputProps, style: { padding: '2px 4px' } }}
         />
       )}
     />
