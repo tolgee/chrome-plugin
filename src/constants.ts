@@ -8,6 +8,10 @@ export const PROJECT_KEY_SESSION_STORAGE = '__tolgee_projectKey';
 
 export const POPUP_WIDTH = 400;
 
+// Page <-> extension wire protocol. 2 = the SDK sends its Tolgee API requests through the extension (no token in
+// the page); the SDK reports the version it speaks in TOLGEE_READY, the content script in TOLGEE_PONG.
+export const PROTOCOL_VERSION = 2;
+
 // Public client id pre-registered on every Tolgee backend (see PreRegisteredClients on the platform).
 export const OAUTH_CLIENT_ID = 'tolgee-browser-extension';
 

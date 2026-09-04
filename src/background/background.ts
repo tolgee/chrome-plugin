@@ -4,6 +4,12 @@ import {
   REFRESH_ALARM_PERIOD_MINUTES,
 } from '../constants';
 import { ScreenshotMaker } from './ScreenshotMaker';
+import {
+  authorizedFetch,
+  handleApiRequest,
+  handleScreenshotUpload,
+} from './apiProxy';
+import { requesterOrigin } from './sender';
 import { RuntimeMessage } from '../content/Messages';
 import { login, revoke } from '../oauth/oauthClient';
 import {
@@ -16,7 +22,7 @@ import {
   sessionKey,
   StoredSession,
 } from '../oauth/tokenStore';
-import { normalizeUrl, safeOrigin, sameOrigin } from '../oauth/url';
+import { safeOrigin, sameOrigin } from '../oauth/url';
 import {
   confirmsProjectInaccessible,
   confirmsTokenUnusable,
@@ -48,6 +54,20 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       ScreenshotMaker.capture(sender.tab!.windowId!).then((data) => {
         sendResponse(data);
       });
+      return true;
+    case 'TOLGEE_API_REQUEST':
+      handleApiRequest(data, sender)
+        .catch((e) => ({
+          error: { kind: 'unavailable', message: errorMessage(e) },
+        }))
+        .then(sendResponse);
+      return true;
+    case 'TOLGEE_SCREENSHOT_UPLOAD':
+      handleScreenshotUpload(data, sender)
+        .catch((e) => ({
+          error: { kind: 'unavailable', message: errorMessage(e) },
+        }))
+        .then(sendResponse);
       return true;
     case 'TOLGEE_SET_STATE':
       setStateIcon(data, sender.tab!.id!);
@@ -102,20 +122,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({});
   }
 });
-
-// A tab can only ever act for its own origin; a claimed pageOrigin is honoured solely for the extension's own pages
-// (the popup). Those are told apart by their URL, not by a missing sender.tab: the action popup has none, but the
-// same page opened in a tab does.
-const requesterOrigin = (
-  sender: { url?: string; tab?: { url?: string } },
-  claimed?: string
-): string | undefined =>
-  sender.tab && !isExtensionPage(sender.url)
-    ? safeOrigin(sender.tab.url)
-    : claimed;
-
-const isExtensionPage = (url?: string): boolean =>
-  Boolean(url?.startsWith(browser.runtime.getURL('')));
 
 const setStateIcon = (state: State, tabId: number) => {
   browser.action.setIcon({
@@ -262,10 +268,13 @@ const serverRejectsSession = async (
   accessToken: string
 ): Promise<boolean> => {
   try {
-    const res = await fetch(
-      `${normalizeUrl(apiUrl)}/v2/projects/${projectId}`,
+    const res = await authorizedFetch(
+      apiUrl,
+      `/v2/projects/${projectId}`,
+      accessToken,
       {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        method: 'GET',
+        headers: {},
         signal: AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS),
       }
     );

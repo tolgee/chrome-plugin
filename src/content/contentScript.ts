@@ -5,6 +5,7 @@ import {
   BRANCH_SESSION_STORAGE,
   PROJECT_ID_SESSION_STORAGE,
   PROJECT_KEY_SESSION_STORAGE,
+  PROTOCOL_VERSION,
 } from '../constants';
 import { LibConfig } from '../types';
 import { acceptsCredentialDelivery } from './acceptsCredentialDelivery';
@@ -63,7 +64,7 @@ messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
 });
 
 messages.listenWindow('TOLGEE_PING', () => {
-  messages.sendToLib('TOLGEE_PONG');
+  messages.sendToLib('TOLGEE_PONG', { protocolVersion: PROTOCOL_VERSION });
 });
 
 // resend message to take screenshot to background

@@ -56,6 +56,36 @@ export const ensureFreshToken = async (
   return pending;
 };
 
+// A 401 on a locally-fresh token is the grant-revoked case, so this bypasses isTokenFresh: routing it through
+// ensureFreshToken would hand the same rejected token straight back. A sibling request that already rotated the
+// session is honoured without a network call, so a late 401 can never clobber its rotation.
+export const refreshAfterRejection = (
+  session: StoredSession,
+  rejectedAccessToken: string
+): Promise<string | null> => {
+  const key = sessionKey(session);
+  const existing = inFlightRefresh.get(key);
+  if (existing) {
+    return existing;
+  }
+  const pending = (async () => {
+    const current = await loadByKey(session.apiUrl, session.projectKey);
+    if (!current) {
+      return null;
+    }
+    if (current.accessToken !== rejectedAccessToken) {
+      return current.accessToken;
+    }
+    if (!current.refreshToken) {
+      await browser.storage.local.remove(key);
+      return null;
+    }
+    return refreshSession(current);
+  })().finally(() => inFlightRefresh.delete(key));
+  inFlightRefresh.set(key, pending);
+  return pending;
+};
+
 // Re-read at refresh time: the caller may hold a stale snapshot, so a rotated single-use refresh token isn't double-spent.
 const refreshCurrent = async (
   session: StoredSession,

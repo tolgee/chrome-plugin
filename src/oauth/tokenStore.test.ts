@@ -43,6 +43,7 @@ import {
   clearSessionByKey,
   ensureFreshToken,
   loadSession,
+  refreshAfterRejection,
   saveSession,
 } from './tokenStore';
 
@@ -295,5 +296,82 @@ describe('tokenStore per-project keying', () => {
     });
     expect(await getValidAccessToken(URL_A, 3)).toBe('token-3c');
     expect(refresh).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('refreshAfterRejection', () => {
+  beforeEach(() => {
+    store.clear();
+    refresh.mockReset();
+  });
+
+  it('refreshes a locally-fresh token the server rejected (grant revoked), bypassing the freshness check', async () => {
+    const session = await saveSession(URL_A, tokens('3'), 3);
+    refresh.mockResolvedValue({
+      accessToken: 'token-3b',
+      refreshToken: 'r2',
+      expiresAt: future(),
+    });
+
+    expect(await refreshAfterRejection(session, 'token-3')).toBe('token-3b');
+    expect(refresh).toHaveBeenCalledWith(URL_A, 'refresh');
+    expect((await loadSession(URL_A, 3))?.accessToken).toBe('token-3b');
+  });
+
+  it('returns the current token without a network call when a sibling already rotated the session', async () => {
+    const stale = await saveSession(URL_A, tokens('3'), 3);
+    await saveSession(URL_A, tokens('3-rotated'), 3);
+
+    expect(await refreshAfterRejection(stale, 'token-3')).toBe(
+      'token-3-rotated'
+    );
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('joins an in-flight refresh instead of spending the refresh token twice', async () => {
+    const session = await saveSession(
+      URL_A,
+      tokens('3', { expiresAt: Date.now() - 1 }),
+      3
+    );
+    let resolveRefresh!: (v: unknown) => void;
+    refresh.mockReturnValue(new Promise((res) => (resolveRefresh = res)));
+
+    const viaExpiry = ensureFreshToken(session);
+    const viaRejection = refreshAfterRejection(session, 'token-3');
+    await new Promise((r) => setTimeout(r, 0));
+    resolveRefresh({
+      accessToken: 'token-3b',
+      refreshToken: 'r2',
+      expiresAt: future(),
+    });
+
+    expect(await Promise.all([viaExpiry, viaRejection])).toEqual([
+      'token-3b',
+      'token-3b',
+    ]);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers null and clears the session when the refresh token is dead', async () => {
+    const session = await saveSession(URL_A, tokens('3'), 3);
+    refresh.mockRejectedValue(endpointError(401));
+
+    expect(await refreshAfterRejection(session, 'token-3')).toBeNull();
+    expect(await loadSession(URL_A, 3)).toBeNull();
+  });
+
+  it('answers null for a session that is gone or has no refresh token', async () => {
+    const gone = { ...tokens('3'), apiUrl: URL_A, projectKey: '3' };
+    expect(await refreshAfterRejection(gone, 'token-3')).toBeNull();
+
+    const session = await saveSession(
+      URL_A,
+      tokens('3', { refreshToken: undefined }),
+      3
+    );
+    expect(await refreshAfterRejection(session, 'token-3')).toBeNull();
+    expect(await loadSession(URL_A, 3)).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
