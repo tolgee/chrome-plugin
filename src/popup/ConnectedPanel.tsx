@@ -120,7 +120,11 @@ const Footer = ({
     alignItems="center"
   >
     {note && (
-      <Typography variant="caption" color="text.secondary">
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        data-testid="footer-note"
+      >
         {note}
       </Typography>
     )}
@@ -334,12 +338,20 @@ export const ConnectedPanel = ({
           data-testid="editing-switch"
         />
         <Box minWidth={0}>
-          <Typography variant="body2" fontWeight={500}>
+          <Typography
+            variant="body2"
+            fontWeight={500}
+            data-testid="editing-title"
+          >
             {editingOn
               ? 'In-context editing on this page'
               : 'In-context editing off on this page'}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            data-testid="editing-hint"
+          >
             {editingHint}
           </Typography>
         </Box>
