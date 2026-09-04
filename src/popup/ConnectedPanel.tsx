@@ -14,7 +14,7 @@ import {
 
 import { BranchOption } from './reducer';
 import { abbreviateApiKey, branchInEffect, pageBranchLabel } from './branch';
-import { BranchEditor } from './BranchEditor';
+import { BRANCH_EDITOR_LIST_SPACE, BranchEditor } from './BranchEditor';
 import { EditIcon } from './icons';
 import { PopupFrame } from './PopupFrame';
 
@@ -260,18 +260,24 @@ export const ConnectedPanel = ({
           <>
             <Label>Branch</Label>
             {editingBranch ? (
-              <BranchEditor
-                value={branch.override ?? ''}
-                options={branch.options ?? []}
-                placeholder={pageBranchLabel(branch.pageBranch, branch.options)}
-                onCommit={(next) => {
-                  setEditingBranch(false);
-                  if (next !== (branch.override ?? '')) {
-                    onChangeBranch(next);
-                  }
-                }}
-                onCancel={() => setEditingBranch(false)}
-              />
+              <>
+                <BranchEditor
+                  value={branch.override ?? ''}
+                  options={branch.options ?? []}
+                  placeholder={pageBranchLabel(
+                    branch.pageBranch,
+                    branch.options
+                  )}
+                  onCommit={(next) => {
+                    setEditingBranch(false);
+                    if (next !== (branch.override ?? '')) {
+                      onChangeBranch(next);
+                    }
+                  }}
+                  onCancel={() => setEditingBranch(false)}
+                />
+                <Box gridColumn="1 / -1" height={BRANCH_EDITOR_LIST_SPACE} />
+              </>
             ) : (
               <Box
                 display="flex"

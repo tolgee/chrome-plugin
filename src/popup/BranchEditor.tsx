@@ -4,6 +4,11 @@ import { Autocomplete, TextField } from '@mui/material';
 import { BranchOption } from './reducer';
 import { branchEditorKeyAction } from './branch';
 
+const LISTBOX_MAX_HEIGHT = 150;
+// The popup window only grows with in-flow content, so whoever renders the editor keeps this much room below
+// the row for the option list.
+export const BRANCH_EDITOR_LIST_SPACE = LISTBOX_MAX_HEIGHT + 20;
+
 type Props = {
   value: string;
   options: BranchOption[];
@@ -57,11 +62,11 @@ export const BranchEditor = ({
       disablePortal
       slotProps={{
         popper: {
-          placement: 'bottom',
+          placement: 'bottom-start',
           modifiers: [{ name: 'flip', enabled: false }],
         },
       }}
-      ListboxProps={{ style: { maxHeight: 150 } }}
+      ListboxProps={{ style: { maxHeight: LISTBOX_MAX_HEIGHT } }}
       options={options}
       getOptionLabel={(option) =>
         typeof option === 'string' ? option : option.name
@@ -92,7 +97,7 @@ export const BranchEditor = ({
           placeholder={placeholder}
           onKeyDown={handleKeyDown}
           onBlur={cancel}
-          inputProps={{ ...params.inputProps, style: { padding: '2px 4px' } }}
+          inputProps={{ ...params.inputProps, 'data-testid': 'branch-input' }}
         />
       )}
     />
