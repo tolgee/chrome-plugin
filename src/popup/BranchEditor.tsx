@@ -5,9 +5,8 @@ import { BranchOption } from './reducer';
 import { branchEditorKeyAction } from './branch';
 
 const LISTBOX_MAX_HEIGHT = 150;
-// The popup window only grows with in-flow content, so whoever renders the editor keeps this much room below
-// the row for the option list.
-export const BRANCH_EDITOR_LIST_SPACE = LISTBOX_MAX_HEIGHT + 20;
+// The option list floats over the rest of the popup, so nothing has to be reserved below the row.
+export const BRANCH_EDITOR_LIST_SPACE = 0;
 
 type Props = {
   value: string;
@@ -25,6 +24,7 @@ export const BranchEditor = ({
   onCancel,
 }: Props) => {
   const [input, setInput] = useState(value);
+  const [open, setOpen] = useState(true);
   // Enter can reach both the field's own handler and the Autocomplete's selection; only the first outcome counts.
   const settled = useRef(false);
 
@@ -55,15 +55,29 @@ export const BranchEditor = ({
 
   return (
     <Autocomplete
-      open
+      open={open}
+      onOpen={() => setOpen(true)}
+      onClose={() => setOpen(false)}
+      openOnFocus
       fullWidth
       freeSolo
       size="small"
-      disablePortal
       slotProps={{
         popper: {
           placement: 'bottom-start',
-          modifiers: [{ name: 'flip', enabled: false }],
+          modifiers: [
+            { name: 'flip', enabled: false },
+            {
+              name: 'sameWidth',
+              enabled: true,
+              phase: 'beforeWrite',
+              requires: ['computeStyles'],
+              fn: ({ state }) => {
+                state.styles.popper.width = `${state.rects.reference.width}px`;
+              },
+            },
+          ],
+          style: { zIndex: 1500 },
         },
       }}
       ListboxProps={{ style: { maxHeight: LISTBOX_MAX_HEIGHT } }}
