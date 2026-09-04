@@ -7,10 +7,12 @@ import logo from '../../icons/logo.png';
 type Props = {
   title: string;
   children: React.ReactNode;
+  testId?: string;
 };
 
-export const PopupFrame = ({ title, children }: Props) => (
+export const PopupFrame = ({ title, children, testId }: Props) => (
   <Box
+    data-testid={testId}
     p={2}
     width={POPUP_WIDTH}
     boxSizing="border-box"

@@ -63,6 +63,7 @@ const AccountCard = ({
   return (
     <Paper
       variant="outlined"
+      data-testid="account-card"
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -71,10 +72,20 @@ const AccountCard = ({
       }}
     >
       <Box minWidth={0}>
-        <Typography variant="body2" fontWeight={500} noWrap>
+        <Typography
+          variant="body2"
+          fontWeight={500}
+          noWrap
+          data-testid="account-name"
+        >
           {name}
         </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          noWrap
+          data-testid="account-detail"
+        >
           {detail}
         </Typography>
       </Box>
@@ -113,7 +124,12 @@ const Footer = ({
         {note}
       </Typography>
     )}
-    <Button size="small" color="error" onClick={onAction}>
+    <Button
+      size="small"
+      color="error"
+      onClick={onAction}
+      data-testid="sign-out"
+    >
       {action}
     </Button>
   </Box>
@@ -144,14 +160,19 @@ export const ConnectedPanel = ({
 
   if (isOauth && sessionEnded) {
     return (
-      <PopupFrame title={title}>
+      <PopupFrame title={title} testId="connected-panel">
         <AccountCard session={session} serverHost={serverHost} />
-        <Alert severity="info">
+        <Alert severity="info" data-testid="session-ended">
           <AlertTitle>Your session ended</AlertTitle>
           It expired or was revoked on the server. Sign in again to keep
           editing.
         </Alert>
-        <Button variant="contained" color="primary" onClick={onSignInAgain}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={onSignInAgain}
+          data-testid="sign-in-again"
+        >
           Sign in again
         </Button>
       </PopupFrame>
@@ -160,9 +181,9 @@ export const ConnectedPanel = ({
 
   if (isOauth && projectInaccessible) {
     return (
-      <PopupFrame title={title}>
+      <PopupFrame title={title} testId="connected-panel">
         <AccountCard session={session} serverHost={serverHost} />
-        <Alert severity="warning">
+        <Alert severity="warning" data-testid="project-inaccessible">
           <AlertTitle>No access to this page&apos;s project</AlertTitle>
           This site requests a project this session can&apos;t reach on{' '}
           {serverHost}. Either you don&apos;t have access to it, or a different
@@ -184,9 +205,9 @@ export const ConnectedPanel = ({
 
   if (!isOauth && apiKeyRejected) {
     return (
-      <PopupFrame title={title}>
+      <PopupFrame title={title} testId="connected-panel">
         <AccountCard session={session} serverHost={serverHost} />
-        <Alert severity="error">
+        <Alert severity="error" data-testid="api-key-rejected">
           <AlertTitle>
             This API key doesn&apos;t work on {serverHost}
           </AlertTitle>
@@ -206,7 +227,7 @@ export const ConnectedPanel = ({
       : 'Alt+click any text on the page to edit it.';
 
   return (
-    <PopupFrame title={title}>
+    <PopupFrame title={title} testId="connected-panel">
       <AccountCard session={session} serverHost={serverHost} />
 
       <Box
@@ -221,11 +242,16 @@ export const ConnectedPanel = ({
             <Label>Project</Label>
             <Value>
               {projectUrl ? (
-                <Link href={projectUrl} target="_blank" rel="noreferrer">
+                <Link
+                  href={projectUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="project-link"
+                >
                   {projectName}
                 </Link>
               ) : (
-                projectName
+                <span data-testid="project-name">{projectName}</span>
               )}
             </Value>
           </>
@@ -296,6 +322,7 @@ export const ConnectedPanel = ({
           checked={editingOn}
           onChange={onToggleEditing}
           color="primary"
+          data-testid="editing-switch"
         />
         <Box minWidth={0}>
           <Typography variant="body2" fontWeight={500}>

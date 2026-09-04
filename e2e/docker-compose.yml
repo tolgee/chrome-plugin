@@ -1,0 +1,14 @@
+services:
+  tolgee:
+    container_name: tolgee_extension_e2e
+    image: ${TOLGEE_IMAGE:-tolgee/tolgee:latest}
+    ports:
+      - '${TOLGEE_PORT:-8299}:8080'
+    environment:
+      - tolgee.authentication.enabled=true
+      - tolgee.authentication.initialPassword=admin
+      - tolgee.authentication.create-demo-for-initial-user=false
+      - tolgee.internal.controllerEnabled=true
+      - tolgee.back-end-url=http://localhost:${TOLGEE_PORT:-8299}
+      - tolgee.front-end-url=http://localhost:${TOLGEE_PORT:-8299}
+      - tolgee.oauth2.browser-extension-redirect-uris[0]=https://${EXTENSION_ID}.chromiumapp.org/

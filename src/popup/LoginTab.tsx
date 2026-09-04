@@ -37,7 +37,12 @@ export const LoginTab = ({
   onUseApiKey,
 }: Props) => {
   const useApiKeyButton = (
-    <Button variant="outlined" color="inherit" onClick={onUseApiKey}>
+    <Button
+      variant="outlined"
+      color="inherit"
+      onClick={onUseApiKey}
+      data-testid="use-api-key"
+    >
       Use an API key instead
     </Button>
   );
@@ -45,7 +50,7 @@ export const LoginTab = ({
   if (!projectDetected) {
     return (
       <>
-        <Alert severity="info">
+        <Alert severity="info" data-testid="project-not-detected">
           <AlertTitle>Sign-in not available on this site</AlertTitle>
           To sign in without an API key, the site has to tell the extension
           which Tolgee project it uses. Ask the site&apos;s developer to set
@@ -59,7 +64,12 @@ export const LoginTab = ({
             Learn more
           </Link>
         </Alert>
-        <Button variant="contained" color="primary" disabled>
+        <Button
+          variant="contained"
+          color="primary"
+          disabled
+          data-testid="connect-oauth"
+        >
           Connect to Tolgee
         </Button>
         {useApiKeyButton}
@@ -75,6 +85,7 @@ export const LoginTab = ({
           target="_blank"
           rel="noreferrer"
           underline="hover"
+          data-testid="server-host"
         >
           {serverHost}
         </Link>{' '}
@@ -93,10 +104,15 @@ export const LoginTab = ({
         color="primary"
         disabled={connecting}
         onClick={onConnect}
+        data-testid="connect-oauth"
       >
         {connecting ? 'Connecting...' : 'Connect to Tolgee'}
       </Button>
-      {connectError && <Alert severity="error">{connectError}</Alert>}
+      {connectError && (
+        <Alert severity="error" data-testid="connect-error">
+          {connectError}
+        </Alert>
+      )}
       {useApiKeyButton}
       {!serverOpen && (
         <Box display="flex" justifyContent="center">
@@ -105,6 +121,7 @@ export const LoginTab = ({
             type="button"
             underline="hover"
             onClick={onOpenServerField}
+            data-testid="change-server"
           >
             Change server
           </Link>

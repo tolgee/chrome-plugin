@@ -103,12 +103,19 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// A tab can only ever act for its own origin; a claimed pageOrigin is honoured solely for extension pages (the
-// popup), which have no sender.tab.
+// A tab can only ever act for its own origin; a claimed pageOrigin is honoured solely for the extension's own pages
+// (the popup). Those are told apart by their URL, not by a missing sender.tab: the action popup has none, but the
+// same page opened in a tab does.
 const requesterOrigin = (
-  sender: { tab?: { url?: string } },
+  sender: { url?: string; tab?: { url?: string } },
   claimed?: string
-): string | undefined => (sender.tab ? safeOrigin(sender.tab.url) : claimed);
+): string | undefined =>
+  sender.tab && !isExtensionPage(sender.url)
+    ? safeOrigin(sender.tab.url)
+    : claimed;
+
+const isExtensionPage = (url?: string): boolean =>
+  Boolean(url?.startsWith(browser.runtime.getURL('')));
 
 const setStateIcon = (state: State, tabId: number) => {
   browser.action.setIcon({

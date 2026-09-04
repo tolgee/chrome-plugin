@@ -167,6 +167,7 @@ export const TolgeeDetector = () => {
         variant="outlined"
         value={values?.apiUrl ?? ''}
         placeholder={DEFAULT_SERVER}
+        inputProps={{ 'data-testid': 'server-input' }}
         onChange={(e) =>
           dispatch({
             type: 'CHANGE_VALUES',
@@ -181,7 +182,7 @@ export const TolgeeDetector = () => {
 
   if (error) {
     return (
-      <PopupFrame title="Tolgee plugin">
+      <PopupFrame title="Tolgee plugin" testId="popup-error">
         <Typography variant="body2" fontWeight="bold" color="error">
           Error: {error}
         </Typography>
@@ -189,7 +190,7 @@ export const TolgeeDetector = () => {
     );
   } else if (tolgeePresent === 'loading') {
     return (
-      <PopupFrame title="Tolgee plugin">
+      <PopupFrame title="Tolgee plugin" testId="popup-loading">
         <Box display="flex" justifyContent="center">
           <CircularProgress />
         </Box>
@@ -248,6 +249,7 @@ export const TolgeeDetector = () => {
     return (
       <PopupFrame
         title={tab === 'apiKey' ? 'API key connection' : 'Tolgee plugin'}
+        testId="sign-in-screen"
       >
         {tab === 'login' && (
           <LoginTab
@@ -284,7 +286,7 @@ export const TolgeeDetector = () => {
     );
   } else if (tolgeePresent === 'legacy') {
     return (
-      <PopupFrame title="Tolgee plugin">
+      <PopupFrame title="Tolgee plugin" testId="popup-legacy">
         <Typography variant="body2">
           This website is using old version of Tolgee.
         </Typography>
@@ -292,7 +294,7 @@ export const TolgeeDetector = () => {
     );
   } else {
     return (
-      <PopupFrame title="Tolgee plugin">
+      <PopupFrame title="Tolgee plugin" testId="popup-not-present">
         <Typography variant="body2">
           This website doesn&apos;t seem to be using Tolgee.
         </Typography>

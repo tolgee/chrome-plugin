@@ -1,0 +1,52 @@
+name: E2E
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: Playwright e2e 🧩
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # tolgee-js is a pnpm workspace; e2e/setup/tolgeeJs.ts clones and builds it.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e
+        run: npm run e2e
+        env:
+          # A tolgee-js branch with this name is used when it exists, main otherwise.
+          TOLGEE_JS_BRANCH: ${{ github.head_ref || github.ref_name }}
+          # TOLGEE_IMAGE defaults to tolgee/tolgee:latest. The OAuth specs (oauth, multi-project) need an image
+          # that contains the OAuth authorization server from tolgee/tolgee-platform#3893; once one is published,
+          # point TOLGEE_IMAGE at it and set TOLGEE_OAUTH=1 here. Until then those two specs are skipped.
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14

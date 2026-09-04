@@ -17,4 +17,10 @@ module.exports = {
     ],
     '@typescript-eslint/no-explicit-any': 'off',
   },
+  overrides: [
+    {
+      files: ['e2e/**/*.ts'],
+      env: { node: true },
+    },
+  ],
 };

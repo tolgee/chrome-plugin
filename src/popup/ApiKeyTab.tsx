@@ -60,6 +60,7 @@ export const ApiKeyTab = ({
           onChange={(e) => onChangeApiKey(e.target.value)}
           onKeyDown={onKeyDown}
           size="small"
+          inputProps={{ 'data-testid': 'api-key-input' }}
           InputProps={{
             endAdornment: (
               <InputAdornment position="end">
@@ -83,6 +84,7 @@ export const ApiKeyTab = ({
           error={apiKeyCheck === 'unreachable'}
           style={{ minHeight: 15 }}
           sx={{ marginLeft: 0 }}
+          data-testid="api-key-check"
         >
           {invalid ? (
             ''
@@ -111,7 +113,7 @@ export const ApiKeyTab = ({
         </FormHelperText>
       </FormControl>
       {invalid && (
-        <Alert severity="error">
+        <Alert severity="error" data-testid="api-key-invalid">
           <AlertTitle>
             This API key doesn&apos;t work on {serverHost}
           </AlertTitle>
@@ -132,6 +134,7 @@ export const ApiKeyTab = ({
         color="primary"
         onClick={onApply}
         disabled={!canApply}
+        data-testid="connect-with-api-key"
       >
         Connect with API key
       </Button>
@@ -147,6 +150,7 @@ export const ApiKeyTab = ({
           type="button"
           underline="hover"
           onClick={onBack}
+          data-testid="all-connection-options"
         >
           All connection options
         </Link>

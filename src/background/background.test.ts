@@ -39,6 +39,7 @@ vi.mock('webextension-polyfill', () => ({
         },
       },
       onStartup: { addListener: () => {} },
+      getURL: (path: string) => `chrome-extension://test-extension/${path}`,
     },
     tabs: {
       onRemoved: { addListener: () => {} },
@@ -101,7 +102,10 @@ const { ensureRefreshAlarm, REFRESH_ALARM } = await import('./background');
 
 const respond = (
   message: unknown,
-  sender: { tab?: { id?: number; url?: string; windowId?: number } } = {}
+  sender: {
+    url?: string;
+    tab?: { id?: number; url?: string; windowId?: number };
+  } = {}
 ): Promise<unknown> =>
   new Promise((resolve) => {
     const kept = messageListener(message, sender, resolve);
@@ -115,6 +119,15 @@ const respond = (
 const future = () => Date.now() + 60 * 60 * 1000;
 const PAGE_TAB = {
   tab: { id: 1, url: 'https://page.example/app', windowId: 1 },
+};
+// The popup opened as a tab rather than as the action popup.
+const POPUP_TAB = {
+  url: 'chrome-extension://test-extension/index.html',
+  tab: {
+    id: 7,
+    url: 'chrome-extension://test-extension/index.html',
+    windowId: 1,
+  },
 };
 
 describe('background message handling', () => {
@@ -880,6 +893,36 @@ describe('background message handling', () => {
     expect(revoke).not.toHaveBeenCalled();
     expect(store.has('oauth:https://app.tolgee.io:5')).toBe(true);
     expect(store.has('https://other.example')).toBe(true);
+  });
+
+  it('OAUTH_LOGOUT from the popup opened in a tab still acts on the claimed page origin', async () => {
+    store.set('https://site-a.example', {
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectKey: '5',
+    });
+    store.set('oauth:https://app.tolgee.io:5', {
+      accessToken: 'tok',
+      refreshToken: 'rtok',
+      expiresAt: future(),
+      apiUrl: 'https://app.tolgee.io',
+      projectKey: '5',
+    });
+
+    await respond(
+      {
+        type: 'OAUTH_LOGOUT',
+        data: {
+          apiUrl: 'https://app.tolgee.io',
+          pageOrigin: 'https://site-a.example',
+        },
+      },
+      POPUP_TAB
+    );
+
+    expect(revoke).toHaveBeenCalledWith('https://app.tolgee.io', 'rtok');
+    expect(store.has('oauth:https://app.tolgee.io:5')).toBe(false);
+    expect(store.has('https://site-a.example')).toBe(false);
   });
 
   it("does not push a session's token to a tab registered for a different project", async () => {
