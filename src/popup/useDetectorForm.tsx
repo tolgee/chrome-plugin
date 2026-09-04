@@ -156,21 +156,32 @@ export const useDetectorForm = () => {
 
   // listen for Tolgee config change
   useEffect(() => {
+    let cancelled = false;
+    let activeTabId: number | undefined;
+    // Content scripts broadcast with runtime.sendMessage, so every tab's handshake lands here; only the tab the
+    // popup was opened on may drive its state.
+    getActiveTab().then((tab) => {
+      activeTabId = tab?.id;
+    });
     const listener = (message: unknown, sender: Runtime.MessageSender) => {
       const { type, data } = message as RuntimeMessage;
-
-      const frameId = sender.frameId;
-      if (type === 'TOLGEE_CONFIG_LOADED') {
-        dispatch({
-          type: 'CHANGE_LIB_CONFIG',
-          payload: { libData: data, frameId: frameId ?? null },
-        });
+      if (cancelled || type !== 'TOLGEE_CONFIG_LOADED') {
+        return undefined;
       }
-
+      if (activeTabId === undefined || sender.tab?.id !== activeTabId) {
+        return undefined;
+      }
+      dispatch({
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: data, frameId: sender.frameId ?? null },
+      });
       return undefined;
     };
     browser.runtime.onMessage.addListener(listener);
-    return () => browser.runtime.onMessage.removeListener(listener);
+    return () => {
+      cancelled = true;
+      browser.runtime.onMessage.removeListener(listener);
+    };
   }, []);
 
   const setCredentialsCheck = (val: CredentialsCheck) => {
