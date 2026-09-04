@@ -2,6 +2,7 @@ import { distDir, env, log } from './env';
 import { ensureExtensionBuilt } from './extensionBuild';
 import { manifestExtensionId } from './extensionId';
 import { isPortInUse, waitForHttp } from './http';
+import { probeOAuthServer } from './oauthProbe';
 import { startPlatform } from './platform';
 import { seed } from './seed';
 import { type RunState, type TestApp, writeState } from './state';
@@ -33,6 +34,12 @@ export default async function globalSetup() {
     const platform = await startPlatform(state.extensionId);
     state.tolgeeUrl = platform.url;
     state.docker = platform.docker;
+    state.oauth = await probeOAuthServer(platform.url, state.extensionId);
+    if (state.oauth.redirectUriRejected && platform.docker) {
+      throw new Error(
+        `docker-compose.yml registers the wrong redirect URI: ${state.oauth.reason}`
+      );
+    }
 
     const seeded = await seed(platform.url, PROJECT_COUNT);
     state.seed = seeded.cleanup;
@@ -69,7 +76,9 @@ export default async function globalSetup() {
       `ready: extension ${state.extensionId}, Tolgee ${
         platform.url
       }, testapps ${apps.map((a) => a.url).join(' ')}${
-        env.oauth ? '' : ' (OAuth specs skipped, set TOLGEE_OAUTH=1)'
+        state.oauth.available
+          ? ''
+          : ` (OAuth specs skipped: ${state.oauth.reason})`
       }`
     );
   } catch (e) {

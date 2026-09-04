@@ -1,7 +1,18 @@
 import type { BrowserContext, Page, Worker } from '@playwright/test';
 import { expect } from '@playwright/test';
 import type { User } from '../setup/seed';
+import { readState } from '../setup/state';
+import { test } from './extension';
 import { waitFor } from './wait';
+
+/**
+ * File-level gate for the specs that sign in through OAuth: skips them, with the probe's finding as the reason, on a
+ * server without a usable authorization server (see setup/oauthProbe.ts).
+ */
+export const requireOAuthServer = () => {
+  const oauth = readState().oauth;
+  test.skip(!oauth.available, oauth.reason);
+};
 
 const AUTHORIZE_KEY = 'e2eAuthorizeUrl';
 const REDIRECT_KEY = 'e2eRedirectUrl';

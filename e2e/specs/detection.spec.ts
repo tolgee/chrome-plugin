@@ -180,12 +180,22 @@ test('reports two Tolgee instances on a page embedding another one', async ({
      <h1>Wrapper with its own Tolgee</h1>
      <iframe src="/" width="600" height="300"></iframe>
      <script>
-       window['@tolgee/web'].Tolgee().init({
-         apiUrl: ${JSON.stringify(state.tolgeeUrl)},
-         projectId: ${app.projectId},
-         language: 'en',
-         staticData: { en: {} },
-       }).run();
+       // The SDK handshakes with the extension only a few times right after run(); the content script arrives at
+       // document_idle, so an instance started this early would go unnoticed. Start once the content script answers.
+       const start = () =>
+         window['@tolgee/web'].Tolgee().init({
+           apiUrl: ${JSON.stringify(state.tolgeeUrl)},
+           projectId: ${app.projectId},
+           language: 'en',
+           staticData: { en: {} },
+         }).run();
+       const ping = setInterval(() => window.postMessage({ type: 'TOLGEE_PING' }, '*'), 200);
+       window.addEventListener('message', function onPong(event) {
+         if (event.data?.type !== 'TOLGEE_PONG') return;
+         window.removeEventListener('message', onPong);
+         clearInterval(ping);
+         start();
+       });
      </script>`
   );
   await page.goto(url);

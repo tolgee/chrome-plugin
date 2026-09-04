@@ -3,13 +3,11 @@ import {
   completeAuthorization,
   installIdentityStub,
   storedOAuthSessions,
+  requireOAuthServer,
 } from '../fixtures/oauth';
 import { openTestapp, sessionItem } from '../fixtures/testapp';
 
-test.skip(
-  process.env.TOLGEE_OAUTH !== '1',
-  'needs a Tolgee server with the OAuth authorization server (tolgee/tolgee-platform#3893); set TOLGEE_OAUTH=1'
-);
+requireOAuthServer();
 
 test('keeps a separate session for each project on the same server', async ({
   context,

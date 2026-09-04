@@ -20,7 +20,6 @@ export const env = {
   tolgeeJsDir: process.env.TOLGEE_JS_DIR,
   tolgeeJsBranch: process.env.TOLGEE_JS_BRANCH,
   testappPort: Number(process.env.TESTAPP_PORT || 5173),
-  oauth: process.env.TOLGEE_OAUTH === '1',
 };
 
 export const log = (message: string) => console.log(`[e2e] ${message}`);

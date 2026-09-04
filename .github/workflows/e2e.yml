@@ -8,9 +8,58 @@ jobs:
   e2e:
     name: Playwright e2e 🧩
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
+    env:
+      SIBLING_BRANCH: ${{ github.head_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+
+      # tolgee-platform publishes no per-branch image, so a platform branch named like this one is built into a
+      # local image here; without one the run uses the published tolgee/tolgee:latest.
+      - name: Look for a tolgee-platform branch named ${{ env.SIBLING_BRANCH }}
+        id: platform
+        run: |
+          if [ "$SIBLING_BRANCH" != main ] && [ -n "$(git ls-remote --heads https://github.com/tolgee/tolgee-platform.git "refs/heads/$SIBLING_BRANCH")" ]; then
+            echo "tolgee-platform has a branch named $SIBLING_BRANCH, building its image"
+            echo "ref=$SIBLING_BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "tolgee-platform has no branch named $SIBLING_BRANCH, using tolgee/tolgee:latest"
+          fi
+
+      - name: Checkout tolgee-platform
+        if: steps.platform.outputs.ref
+        uses: actions/checkout@v4
+        with:
+          repository: tolgee/tolgee-platform
+          ref: ${{ steps.platform.outputs.ref }}
+          path: .platform
+
+      - name: Setup JDK for tolgee-platform
+        if: steps.platform.outputs.ref
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+
+      - name: Setup node for the tolgee-platform webapp
+        if: steps.platform.outputs.ref
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: |
+            .platform/webapp/package-lock.json
+            .platform/library/package-lock.json
+
+      - name: Build the tolgee-platform image
+        if: steps.platform.outputs.ref
+        working-directory: .platform
+        run: |
+          ./gradlew dockerPrepare --no-watch-fs --console=plain
+          docker build build/docker -t tolgee/tolgee:e2e-branch \
+            --build-arg "OTEL_AGENT_VERSION=$(grep '^opentelemetryJavaagentVersion=' gradle.properties | cut -d= -f2)"
+          echo "TOLGEE_IMAGE=tolgee/tolgee:e2e-branch" >> "$GITHUB_ENV"
 
       # tolgee-js is a pnpm workspace; e2e/setup/tolgeeJs.ts clones and builds it.
       - uses: pnpm/action-setup@v4
@@ -36,10 +85,7 @@ jobs:
         run: npm run e2e
         env:
           # A tolgee-js branch with this name is used when it exists, main otherwise.
-          TOLGEE_JS_BRANCH: ${{ github.head_ref || github.ref_name }}
-          # TOLGEE_IMAGE defaults to tolgee/tolgee:latest. The OAuth specs (oauth, multi-project) need an image
-          # that contains the OAuth authorization server from tolgee/tolgee-platform#3893; once one is published,
-          # point TOLGEE_IMAGE at it and set TOLGEE_OAUTH=1 here. Until then those two specs are skipped.
+          TOLGEE_JS_BRANCH: ${{ env.SIBLING_BRANCH }}
 
       - name: Upload Playwright report
         if: failure()

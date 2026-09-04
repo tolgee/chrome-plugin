@@ -7,6 +7,7 @@ import {
   installIdentityStub,
   signInThroughPopup,
   storedOAuthSessions,
+  requireOAuthServer,
 } from '../fixtures/oauth';
 import {
   collectProjectRequests,
@@ -17,10 +18,7 @@ import {
   sessionItem,
 } from '../fixtures/testapp';
 
-test.skip(
-  process.env.TOLGEE_OAUTH !== '1',
-  'needs a Tolgee server with the OAuth authorization server (tolgee/tolgee-platform#3893); set TOLGEE_OAUTH=1'
-);
+requireOAuthServer();
 
 test('offers to sign in again once the session was revoked on the server', async ({
   page,
@@ -333,7 +331,10 @@ test('shows the signed-in account by its name', async ({
   await expect(popup.getByTestId('connected-panel')).toContainText(
     'Tolgee plugin'
   );
-  await expect(popup.getByTestId('account-name')).toHaveText(me.name);
+  // The platform's oauth2-consent test-data user has no name, so the internal seed mode exercises the fallback.
+  await expect(popup.getByTestId('account-name')).toHaveText(
+    me.name || 'Tolgee account'
+  );
   await expect(popup.getByTestId('editing-title')).toHaveText(
     'In-context editing on this page'
   );

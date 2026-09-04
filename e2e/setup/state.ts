@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { stateFile } from './env';
+import type { OAuthAvailability } from './oauthProbe';
 import type { SeedCleanup } from './seed';
 
 export type TestApp = { url: string; projectId: number; projectName: string };
@@ -10,6 +11,7 @@ export type RunState = {
   distDir: string;
   tolgeeUrl: string;
   docker: boolean;
+  oauth: OAuthAvailability;
   user: { username: string; password: string };
   apps: TestApp[];
   apiKey: string;

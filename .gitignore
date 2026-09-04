@@ -30,3 +30,6 @@ dist-zip
 e2e/.cache
 e2e/test-results
 e2e/playwright-report
+
+# tolgee-platform checkout the e2e workflow builds its image from
+.platform

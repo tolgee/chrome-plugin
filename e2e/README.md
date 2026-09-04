@@ -31,8 +31,11 @@ support extensions).
 | `multi-project.spec.ts`       | Two testapps declaring different projects on the same server get two distinct OAuth sessions, each tab holding its own project id and token.                                                     |
 | `branch.spec.ts`              | Branch row and inline branch editor. Skipped, with the reason printed, on a server where branching is not available.                                                                             |
 
-The OAuth specs need a server with the OAuth authorization server (tolgee/tolgee-platform#3893) and only run
-with `TOLGEE_OAUTH=1`; otherwise they are skipped.
+The OAuth specs need a server with the OAuth authorization server (tolgee/tolgee-platform#3893). The setup probes
+`/.well-known/oauth-authorization-server` and `/oauth2/authorize` with the extension's client id and redirect URI;
+when the server has no authorization server the OAuth specs are skipped with that reason, when it has one but
+rejects the extension's redirect URI the docker setup fails (its `docker-compose.yml` registers the URI) and a
+`TOLGEE_URL` server skips them with the reason.
 
 Every popup state, alert and transition has at least one assertion in these specs. `e2e/fixtures/testapp.ts`
 rewrites the testapp's inlined env on the way to the browser (`declareProject`, `declareApiKey`) and serves extra
@@ -48,7 +51,6 @@ The fastest loop when the platform and tolgee-js are already checked out and run
 TOLGEE_URL=http://localhost:3324 \
 TOLGEE_JS_DIR=../tolgee-js \
 TESTAPP_PORT=5199 \
-TOLGEE_OAUTH=1 \
 npm run e2e
 ```
 
@@ -79,10 +81,18 @@ Without `TOLGEE_JS_DIR` tolgee-js is cloned into `e2e/.cache/tolgee-js`, install
 
 ### Branch matching
 
-The cloned tolgee-js uses the branch with the same name as the current extension branch when
-`git ls-remote --heads` finds one, `main` otherwise. `TOLGEE_JS_BRANCH` overrides the name to look for; CI passes
-`github.head_ref || github.ref_name`. So a change that needs both repos gets tested together by giving both
-branches the same name.
+A change that needs a sibling repo gets tested together with it by giving both branches the same name:
+
+- **tolgee-js**: the cloned checkout uses the branch with the same name as the current extension branch when
+  `git ls-remote --heads` finds one, `main` otherwise. `TOLGEE_JS_BRANCH` overrides the name to look for; CI passes
+  `github.head_ref || github.ref_name`.
+- **tolgee-platform**: the platform publishes no per-branch image, so the CI workflow (`.github/workflows/e2e.yml`)
+  looks for a platform branch named like the extension's, and when there is one checks it out into `.platform/`,
+  builds it (`./gradlew dockerPrepare` plus `docker build` of `build/docker`, the same steps as the platform's own
+  image build) into `tolgee/tolgee:e2e-branch` and runs the suite with `TOLGEE_IMAGE` pointing at it. That adds
+  10 to 15 minutes to the job. Without one the job uses `tolgee/tolgee:latest`. Locally, build the image the same
+  way from a platform checkout **without** the billing repo next to it (a `../billing` sibling is compiled into the
+  image and changes what the server does) and pass it as `TOLGEE_IMAGE`.
 
 ## How it works
 
