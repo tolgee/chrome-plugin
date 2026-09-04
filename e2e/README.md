@@ -30,6 +30,7 @@ support extensions).
 | `oauth-session.spec.ts`       | OAuth session states: account name, session revoked on the server and "Sign in again", page declaring a project the token cannot reach, sign out clearing every tab, consent denied, token refresh. |
 | `multi-project.spec.ts`       | Two testapps declaring different projects on the same server get two distinct OAuth sessions, each tab holding its own project id and token.                                                     |
 | `branch.spec.ts`              | Branch row and inline branch editor. Skipped, with the reason printed, on a server where branching is not available.                                                                             |
+| `screenshot.spec.ts`          | In-context screenshots: the dialog's camera button makes the worker capture the tab, the upload is multipart with the right credential header only, the screenshot lands in the gallery and on the key (API key and OAuth); a key without `screenshots.upload` gets no camera, one losing the scope gets the "Operation not permitted" alert. |
 
 The OAuth specs need a server with the OAuth authorization server (tolgee/tolgee-platform#3893). The setup probes
 `/.well-known/oauth-authorization-server` and `/oauth2/authorize` with the extension's client id and redirect URI;

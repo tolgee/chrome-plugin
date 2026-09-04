@@ -6,7 +6,7 @@ const ADMIN = 'admin';
 // Its generate-standard creates one user with one project: see OAuth2ConsentE2eData on the platform.
 const INTERNAL_RESOURCE = 'oauth2-consent';
 
-const API_KEY_SCOPES = [
+export const API_KEY_SCOPES = [
   'translations.view',
   'translations.edit',
   'keys.view',
@@ -130,18 +130,54 @@ export class TolgeeApi {
   }
 
   async createApiKeyWithId(
-    projectId: number
+    projectId: number,
+    scopes: string[] = API_KEY_SCOPES
   ): Promise<{ id: number; key: string }> {
     const created = await this.request('POST', 'api-keys', {
       projectId,
-      scopes: API_KEY_SCOPES,
+      scopes,
       description: 'browser extension e2e',
     });
     return { id: created.id, key: created.key };
   }
 
+  updateApiKeyScopes(id: number, scopes: string[]) {
+    return this.request('PUT', `api-keys/${id}`, {
+      scopes,
+      description: 'browser extension e2e',
+    });
+  }
+
   deleteApiKey(id: number) {
     return this.request('DELETE', `api-keys/${id}`);
+  }
+
+  async findKeyId(projectId: number, keyName: string): Promise<number | null> {
+    const data = await this.request(
+      'GET',
+      `projects/${projectId}/translations?filterKeyName=${encodeURIComponent(
+        keyName
+      )}`
+    );
+    return data._embedded?.keys?.[0]?.keyId ?? null;
+  }
+
+  async keyScreenshots(
+    projectId: number,
+    keyId: number
+  ): Promise<{ id: number; keyReferences: { keyId: number }[] }[]> {
+    const data = await this.request(
+      'GET',
+      `projects/${projectId}/keys/${keyId}/screenshots`
+    );
+    return data._embedded?.screenshots ?? [];
+  }
+
+  deleteKeyScreenshots(projectId: number, keyId: number, ids: number[]) {
+    return this.request(
+      'DELETE',
+      `projects/${projectId}/keys/${keyId}/screenshots/${ids.join(',')}`
+    );
   }
 
   currentUser(): Promise<{ id: number; name: string; username: string }> {
