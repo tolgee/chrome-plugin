@@ -290,8 +290,6 @@ export const askExtension = (
     path
   );
 
-// Every place a page script could read a secret from, if it were there: web storage, cookies, the DOM, and every
-// object reachable from window (the SDK instance and its options included), a few levels deep.
 export const findInPage = (page: Page, needle: string): Promise<string[]> =>
   page.evaluate((needle) => {
     const hits: string[] = [];

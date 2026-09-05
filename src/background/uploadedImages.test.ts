@@ -51,12 +51,23 @@ describe('uploadedImages', () => {
     expect(await wasUploadedThroughSession(other, '42')).toBe(false);
   });
 
+  it('loses none of a batch of ids remembered concurrently (a multi-file upload)', async () => {
+    const { rememberUploadedImage, wasUploadedThroughSession } = await import(
+      './uploadedImages'
+    );
+    const ids = ['1', '2', '3', '4', '5'];
+
+    await Promise.all(ids.map((id) => rememberUploadedImage(connection, id)));
+
+    for (const id of ids) {
+      expect(await wasUploadedThroughSession(connection, id)).toBe(true);
+    }
+  });
+
   it('survives the worker module being re-instantiated (an MV3 restart), because it lives in storage.session', async () => {
     const before = await import('./uploadedImages');
     await before.rememberUploadedImage(connection, '42');
 
-    // A real worker restart tears down every module-level variable; resetModules simulates re-importing
-    // uploadedImages.ts fresh against the same (persistent) storage.session backing.
     vi.resetModules();
     const after = await import('./uploadedImages');
 

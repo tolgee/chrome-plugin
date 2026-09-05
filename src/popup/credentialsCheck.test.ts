@@ -8,7 +8,11 @@ vi.mock('./activeTab', () => ({
 }));
 
 import { checkApiKey, checkOAuthSession } from './credentialsCheck';
-import { InconclusiveHttpStatus, ProxyFetchError } from './proxyFetch';
+import {
+  InconclusiveHttpStatus,
+  isInconclusiveSessionCheckError,
+  ProxyFetchError,
+} from './proxyFetch';
 
 const OAUTH = { apiUrl: 'https://app.tolgee.io', oauth: true, projectKey: '7' };
 const KEY = { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' };
@@ -64,6 +68,19 @@ describe('checkOAuthSession', () => {
     await expect(checkOAuthSession(OAUTH)).rejects.toBeInstanceOf(
       ProxyFetchError
     );
+  });
+
+  it('treats the worker refusing a blocked redirect (unavailable) as inconclusive, not a rejected session', async () => {
+    sendToBackground.mockResolvedValue({
+      error: { kind: 'unavailable', message: 'redirected' },
+    });
+
+    const outcome = checkOAuthSession(OAUTH);
+
+    await expect(outcome).rejects.toMatchObject({ kind: 'unavailable' });
+    await expect(
+      outcome.catch((e) => isInconclusiveSessionCheckError(e))
+    ).resolves.toBe(true);
   });
 });
 

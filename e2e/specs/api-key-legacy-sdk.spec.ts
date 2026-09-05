@@ -181,7 +181,7 @@ test('turns editing off and on again for a key the page uses directly', async ({
   await expect(popup.getByTestId('sdk-too-old')).toHaveCount(0);
   expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
   expect(await sessionItem(page, '__tolgee_apiUrl')).toBeNull();
-  // The switch is marked in the page either way; an SDK from before the slot existed keeps asking to sign in instead.
+  // The switch is marked in the page either way.
   expect(await sessionItem(page, '__tolgee_editing')).toBe('off');
   expect(await dialogSaysEditingOff(page)).toBe(true);
 

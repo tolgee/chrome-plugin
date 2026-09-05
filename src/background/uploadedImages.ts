@@ -4,32 +4,26 @@ import { Connection, ProxyResponse } from './proxyTypes';
 
 const KEY_PREFIX = 'uploadedImages:';
 
-const connectionKey = (connection: Connection): string =>
-  `${KEY_PREFIX}${originOf(connection.apiUrl)}:${connection.projectKey}`;
-
-const loadIds = async (connection: Connection): Promise<string[]> => {
-  const key = connectionKey(connection);
-  const stored = (await sessionArea().get(key))[key];
-  return Array.isArray(stored) ? (stored as string[]) : [];
-};
+// One storage key per image, not one array shared by every upload for a connection: concurrent uploads (a
+// multi-file drop) each set their own key with no read-modify-write, so none can be lost racing another.
+const imageKey = (connection: Connection, id: string): string =>
+  `${KEY_PREFIX}${originOf(connection.apiUrl)}:${connection.projectKey}:${id}`;
 
 export const rememberUploadedImage = async (
   connection: Connection,
   id: string
 ): Promise<void> => {
-  const key = connectionKey(connection);
-  const ids = new Set(await loadIds(connection));
-  ids.add(id);
-  await sessionArea().set({ [key]: Array.from(ids) });
+  await sessionArea().set({ [imageKey(connection, id)]: true });
 };
 
 export const wasUploadedThroughSession = async (
   connection: Connection,
   id: string
-): Promise<boolean> => (await loadIds(connection)).includes(id);
+): Promise<boolean> => {
+  const key = imageKey(connection, id);
+  return Boolean((await sessionArea().get(key))[key]);
+};
 
-// Shared by both upload paths that create an image through the proxy: a screenshot capture and a plain relayed
-// POST /v2/image-upload.
 export const rememberUploadIfSuccessful = async (
   connection: Connection,
   response: ProxyResponse

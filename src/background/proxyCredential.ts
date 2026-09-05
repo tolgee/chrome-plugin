@@ -125,8 +125,10 @@ export const performWithRefresh = async (
       res = await attempt({ bearer: rotated.accessToken });
     }
     if (isBlockedRedirect(res)) {
+      // Says nothing about whether the session/credential is valid, so this must stay inconclusive
+      // (isInconclusiveProxyErrorKind), the same bucket a network error already falls into.
       return failure(
-        'not_allowed',
+        'unavailable',
         `${gate.connection.apiUrl} redirected this request instead of answering it`
       );
     }

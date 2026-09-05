@@ -116,8 +116,6 @@ export const isConnectedSession = (values?: Values | null): boolean =>
 export const isOAuth = (values?: Values | null) =>
   Boolean(values?.oauth && !values?.apiKey);
 
-// A project API key encodes its own project id (see projectIdOfApiKey), so a pre-1.9.0 record missing projectKey
-// can be pinned without a network round-trip instead of being left as an unrecognisable, unremovable credential.
 export const migrateLegacyApiKeyRecord = (values: Values): Values | null => {
   if (values.oauth || values.projectKey || !values.apiKey || !values.apiUrl) {
     return null;

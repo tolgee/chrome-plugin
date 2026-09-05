@@ -127,8 +127,8 @@ const isAllowedPath = async (
   );
 };
 
-// Image uploads aren't project-scoped on the platform (see uploadedImages.ts), so a proxied DELETE is pinned here
-// instead to ids this same worker session uploaded.
+// The platform scopes an uploaded image to the uploading account, not to any project (no project param on upload;
+// delete only checks the account), so a proxied DELETE is pinned here instead to ids this browser session uploaded.
 const deletesOnlyOwnUploads = async (
   pathname: string,
   connection: Connection
