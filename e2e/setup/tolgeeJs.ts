@@ -78,6 +78,18 @@ const build = (dir: string) =>
     dir
   );
 
+/**
+ * Pre-bundles the testapp's dependencies, so that the dev servers below only ever read that cache.
+ *
+ * Both testapps are vite dev servers on this one package, sharing its `node_modules/.vite`. On a cold cache vite
+ * optimizes lazily, re-running for every dependency it discovers while the first page loads, and every rerun stamps
+ * a new hash on the URLs of the optimized dependencies. A page loaded while that is still settling gets `react.js`
+ * and `react-dom_client.js` from two different runs, i.e. two copies of React, and dies on an invalid hook call
+ * inside TolgeeProvider instead of rendering. The second server hits this mid-suite, when its first page is opened.
+ */
+const optimizeDeps = (dir: string) =>
+  run('pnpm', ['--filter', TESTAPP, 'exec', 'vite', 'optimize'], dir);
+
 /** Returns the tolgee-js checkout whose react testapp is ready to be served. */
 export const prepareTolgeeJs = (): string => {
   let dir: string;
@@ -102,6 +114,7 @@ export const prepareTolgeeJs = (): string => {
     inContextBuild(dir),
     path.join(dir, 'testapps', 'react', 'public', IN_CONTEXT_FILE)
   );
+  optimizeDeps(dir);
   return dir;
 };
 
