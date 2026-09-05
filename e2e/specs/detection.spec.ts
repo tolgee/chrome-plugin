@@ -153,9 +153,7 @@ test('reports an old SDK without the in-context UI as legacy', async ({
   );
 });
 
-// An SDK from before the proxied-request protocol cannot send its requests through the extension, which is what
-// signing in needs: the popup says so and offers the API key instead, which such an SDK uses directly (see
-// api-key-legacy-sdk.spec.ts for that path).
+// See CredentialDelivery in src/types.ts for the protocol-2 requirement; api-key-legacy-sdk.spec.ts covers that path.
 test('refuses to sign in on an SDK without proxy support and offers an API key instead', async ({
   page,
   state,

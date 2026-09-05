@@ -2,12 +2,13 @@ import { isExtensionPage, MessageSender } from './sender';
 import {
   locateSession,
   performWithRefresh,
-  refreshGate,
+  authorizeSession,
 } from './proxyCredential';
 import { PROXY_BUDGET_MS } from '../protocol';
 import {
   allowedHeaders,
   buildBody,
+  IMAGE_UPLOAD_PATH,
   resolvePopupTarget,
   resolveTabTarget,
   TargetResolver,
@@ -18,6 +19,7 @@ import {
   failure,
   ProxyResult,
 } from './proxyTypes';
+import { rememberUploadIfSuccessful } from './uploadedImages';
 
 export type { ProxyFailure, ProxyResult } from './proxyTypes';
 
@@ -44,7 +46,7 @@ const proxyApiRequest = async (
   resolveRequestTarget: TargetResolver
 ): Promise<ProxyResult> => {
   const deadline = Date.now() + PROXY_BUDGET_MS;
-  // Target resolution (and, for handleApiRequest, the allowlist) runs before refreshGate, so a disallowed
+  // Target resolution (and, for handleApiRequest, the allowlist) runs before authorizeSession, so a disallowed
   // method/path can never trigger a refresh (and rotate the refresh token) it has no business causing.
   const located = await locateSession(data, sender);
   if ('error' in located) {
@@ -58,7 +60,7 @@ const proxyApiRequest = async (
   if ('error' in target) {
     return target;
   }
-  const gate = await refreshGate(located);
+  const gate = await authorizeSession(located);
   if ('error' in gate) {
     return gate;
   }
@@ -73,5 +75,18 @@ const proxyApiRequest = async (
     headers: allowedHeaders(data.headers),
     body,
   };
-  return performWithRefresh(gate, target.pathWithQuery, request, deadline);
+  const result = await performWithRefresh(
+    gate,
+    target.pathWithQuery,
+    request,
+    deadline
+  );
+  // A plain (non-screenshot) image upload also has to be remembered here, or a same-session delete of it would be
+  // refused by uploadedImages.ts's session-scoped ownership check the same way a stranger's would be.
+  if (target.method === 'POST' && target.pathWithQuery === IMAGE_UPLOAD_PATH) {
+    if ('response' in result) {
+      rememberUploadIfSuccessful(located.connection, result.response);
+    }
+  }
+  return result;
 };

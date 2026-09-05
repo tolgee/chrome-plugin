@@ -7,7 +7,7 @@ import {
   PROJECT_ID_SESSION_STORAGE,
   PROJECT_KEY_SESSION_STORAGE,
 } from '../sessionStorageKeys';
-import { SessionKind } from '../protocol';
+import { SessionKind, sessionKindOf } from '../protocol';
 
 export type SessionStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
@@ -38,6 +38,18 @@ export const writeCredentialsIfChanged = (
   writeEditing(store, data.editing);
   return changed;
 };
+
+// The reader side of writeCredentialsIfChanged's slot list, kept in this file so the two can't drift apart.
+export const readAppliedCredentials = (
+  store: SessionStore
+): PageCredentials => ({
+  apiKey: store.getItem(API_KEY_SESSION_STORAGE),
+  apiUrl: store.getItem(API_URL_SESSION_STORAGE),
+  branch: store.getItem(BRANCH_SESSION_STORAGE),
+  session: sessionKindOf(store.getItem(EXTENSION_SESSION_STORAGE)),
+  projectId: store.getItem(PROJECT_ID_SESSION_STORAGE),
+  projectKey: store.getItem(PROJECT_KEY_SESSION_STORAGE),
+});
 
 // Never part of the reload decision: the SDK reads the slot on every dialog request.
 const writeEditing = (

@@ -5,8 +5,8 @@ import {
   handlePopupApiRequest,
   ProxyFailure,
 } from './apiProxy';
-import { handleScreenshotUpload, isActiveTab } from './proxyScreenshot';
-import { locateSession, refreshGate } from './proxyCredential';
+import { captureAndUploadScreenshot, isActiveTab } from './proxyScreenshot';
+import { locateSession, authorizeSession } from './proxyCredential';
 import {
   isCrossOriginFrame,
   isWebPageSender,
@@ -15,8 +15,15 @@ import {
 } from './sender';
 import { RuntimeMessage } from '../content/Messages';
 import { connectRefusalOf } from '../oauth/connectRefusal';
+import { TOLGEE_API_REQUEST, TOLGEE_SCREENSHOT_UPLOAD } from '../protocol';
 import { connect, disconnect } from './connectFlow';
-import { openPopup, setStateIcon } from './popupControl';
+import {
+  openPopup,
+  registerPopupControlListeners,
+  setStateIcon,
+} from './popupControl';
+
+registerPopupControlListeners();
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { type, data } = message as RuntimeMessage;
@@ -28,7 +35,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       });
       return true;
-    case 'TOLGEE_API_REQUEST':
+    case TOLGEE_API_REQUEST:
       handleApiRequest(data, sender)
         .catch((e) => proxyFailure(e, 'API proxy'))
         .then(sendResponse);
@@ -38,8 +45,8 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .catch((e) => proxyFailure(e, 'popup API proxy'))
         .then(sendResponse);
       return true;
-    case 'TOLGEE_SCREENSHOT_UPLOAD':
-      handleScreenshotUpload(data, sender)
+    case TOLGEE_SCREENSHOT_UPLOAD:
+      captureAndUploadScreenshot(data, sender)
         .catch((e) => proxyFailure(e, 'screenshot proxy'))
         .then(sendResponse);
       return true;
@@ -131,6 +138,6 @@ const refreshAndCheckSession = async (
   if ('error' in located) {
     return false;
   }
-  const gate = await refreshGate(located);
+  const gate = await authorizeSession(located);
   return !('error' in gate) || gate.error.kind !== 'no_session';
 };

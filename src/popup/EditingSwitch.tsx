@@ -3,17 +3,17 @@ import { alpha, Box, Switch, Typography } from '@mui/material';
 export const EditingSwitch = ({
   editingOn,
   disabled,
-  checkingKey,
+  keyProjectPending,
   branchOverride,
   onToggle,
 }: {
   editingOn: boolean;
   disabled: boolean;
-  checkingKey: boolean;
+  keyProjectPending: boolean;
   branchOverride: string | undefined;
   onToggle: () => void;
 }) => {
-  const editingHint = checkingKey
+  const editingHint = keyProjectPending
     ? 'Checking the key…'
     : !editingOn
       ? 'You stay signed in. Turn it on to edit here.'
@@ -42,6 +42,11 @@ export const EditingSwitch = ({
         onChange={onToggle}
         color="primary"
         data-testid="editing-switch"
+        inputProps={
+          {
+            'data-testid': 'editing-switch-input',
+          } as React.InputHTMLAttributes<HTMLInputElement>
+        }
       />
       <Box minWidth={0}>
         <Typography

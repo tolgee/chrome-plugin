@@ -1,27 +1,21 @@
 import { apiAs } from '../fixtures/api';
 import { expect, type Page, test } from '../fixtures/extension';
 import { signInThroughPopup } from '../fixtures/oauth';
-import { IN_CONTEXT_DIALOG_TEXT, openTestapp } from '../fixtures/testapp';
+import {
+  connectWithApiKey,
+  DEV_TOOLS,
+  IN_CONTEXT_DIALOG_TEXT,
+  openTestapp,
+} from '../fixtures/testapp';
 import type { TolgeeApi } from '../setup/seed';
 import type { RunState } from '../setup/state';
 
 // The testapp renders this key but the seed never imports it, so its dialog opens for a key the project lacks.
 const MISSING_KEY = 'share-button';
 const MISSING_KEY_ELEMENT = '.items__buttons button:first-child';
-const DEV_TOOLS = '#__tolgee_dev_tools';
 
 const dialogTitle = (page: Page) =>
   page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT);
-
-const connectWithApiKey = async (popup: Page, page: Page, apiKey: string) => {
-  await popup.getByTestId('use-api-key').click();
-  await popup.getByTestId('api-key-input').fill(apiKey);
-  await expect(popup.getByTestId('connect-with-api-key')).toBeEnabled();
-  const reloaded = page.waitForEvent('load');
-  await popup.getByTestId('connect-with-api-key').click();
-  await reloaded;
-  await expect(popup.getByTestId('connected-panel')).toBeVisible();
-};
 
 /** Alt+clicks the missing key's element, types an English translation and saves; the dialog closes on success. */
 const createKeyFromDialog = async (page: Page, text: string) => {

@@ -4,7 +4,8 @@ import { SdkTooOldAlert } from './SdkTooOldAlert';
 import { BranchRow, BranchState } from './BranchRow';
 import { EditingSwitch } from './EditingSwitch';
 import { PopupFrame } from './PopupFrame';
-import { AccountCard, ConnectionSummary } from './AccountCard';
+import { AccountCard } from './AccountCard';
+import { ConnectionSummary } from './ConnectionSummaryView';
 import { ConnectedFooter } from './ConnectedFooter';
 import {
   KeyRejected,
@@ -21,15 +22,13 @@ import { Label, Value } from './fields';
 type Props = {
   session: Session;
   serverHost: string;
-  // The server rejected the session or key outright (a 401 / an unknown key), not an outage.
-  credentialRejected: boolean;
+  credentialsCheckInvalid: boolean;
   projectName: string | null;
   projectUrl: string | null;
   projectInaccessible: boolean;
   declaredProjectId: number | undefined;
   sdkTooOld: boolean;
-  // The key's project is not known yet, so there is nothing to switch editing on with.
-  checkingKey: boolean;
+  keyProjectPending: boolean;
   branch: BranchState | null;
   editingOn: boolean;
   onToggleEditing: () => void;
@@ -42,13 +41,13 @@ type Props = {
 export const ConnectedPanel = ({
   session,
   serverHost,
-  credentialRejected,
+  credentialsCheckInvalid,
   projectName,
   projectUrl,
   projectInaccessible,
   declaredProjectId,
   sdkTooOld,
-  checkingKey,
+  keyProjectPending,
   branch,
   editingOn,
   onToggleEditing,
@@ -62,7 +61,7 @@ export const ConnectedPanel = ({
   const title = connectionTitle(session);
   const footerProps = { session, onSignOut, onUseAnotherKey };
 
-  if (isOauth && credentialRejected) {
+  if (isOauth && credentialsCheckInvalid) {
     return (
       <SessionEnded
         session={session}
@@ -80,7 +79,7 @@ export const ConnectedPanel = ({
       />
     );
   }
-  if (!isOauth && credentialRejected) {
+  if (!isOauth && credentialsCheckInvalid) {
     return <KeyRejected {...footerProps} serverHost={serverHost} />;
   }
 
@@ -137,8 +136,8 @@ export const ConnectedPanel = ({
       {hasEditingSwitch(session) && (
         <EditingSwitch
           editingOn={editingOn}
-          disabled={sdkTooOld || checkingKey}
-          checkingKey={checkingKey}
+          disabled={sdkTooOld || keyProjectPending}
+          keyProjectPending={keyProjectPending}
           branchOverride={branch?.override}
           onToggle={onToggleEditing}
         />

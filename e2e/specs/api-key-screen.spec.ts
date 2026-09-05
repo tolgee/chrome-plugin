@@ -53,7 +53,6 @@ test('shares the server behind the gear with the sign-in screen', async ({
     'https://my.tolgee.io/'
   );
 
-  // The gear closes the panel again, and the host carries over to the sign-in screen.
   await popup.getByTestId('server-settings').click();
   await expect(popup.getByTestId('server-input')).toHaveCount(0);
   await popup.getByTestId('all-connection-options').click();
@@ -84,7 +83,6 @@ test('rejects a key that does not belong to this server', async ({
   await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
   expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
 
-  // A shorter garbage value is rejected the same way, in a field that stays editable.
   await popup.getByTestId('api-key-input').fill('nonsense');
   await expect(popup.getByTestId('api-key-invalid')).toBeVisible();
   await expect(popup.getByTestId('api-key-input')).toHaveValue('nonsense');
@@ -204,7 +202,6 @@ test('warns about a view-only key and connects with it', async ({
     expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
     expect(await sessionItem(page, '__tolgee_session')).toBe('apiKey');
 
-    // A popup opened later reads the page's handshake, which now reports the injected key; still the same verdict.
     await popup.reload();
     await expect(popup.getByTestId('connection-summary')).toContainText(
       "You're connected with a view-only API key."

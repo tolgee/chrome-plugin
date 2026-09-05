@@ -10,16 +10,15 @@ import {
 } from '../sessionStorageKeys';
 import { PROTOCOL_VERSION } from '../protocol';
 import { LibConfig } from '../types';
-import { siteKeyFromCode } from '../popup/apiKeyScreen';
-import { credentialDelivery, sdkTooOldFor } from '../popup/delivery';
-import { initialState } from '../popup/popupState';
-import { changeLibConfig } from '../popup/reducerTransitions';
+import { siteKeyFromCode } from './apiKeyScreen';
+import { credentialDelivery, sdkTooOldFor } from './delivery';
+import { initialState } from './popupState';
+import { changeLibConfig } from './reducerTransitions';
+import { declaredProjectId, pageCredentials, sdkSupportsProxy } from './tools';
 import {
-  declaredProjectId,
-  pageCredentials,
-  sdkSupportsProxy,
-} from '../popup/tools';
-import { SessionStore, writeCredentialsIfChanged } from './credentialSink';
+  SessionStore,
+  writeCredentialsIfChanged,
+} from '../content/credentialSink';
 
 /*
  * The page-facing API the extension spoke before the proxied-request protocol, pinned so that sites on a published
@@ -155,7 +154,7 @@ const loadContentScript = async (store: SessionStore) => {
   runtime.sent.length = 0;
   runtime.responses = {};
   vi.resetModules();
-  await import('./contentScript');
+  await import('../content/contentScript');
 
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
   const fromPage = async (type: string, data?: unknown) => {
@@ -447,7 +446,7 @@ describe('popup classification of a published release', () => {
       expect(state.values).toMatchObject({ apiUrl: API_URL });
       expect(declaredProjectId(ready)).toBeUndefined();
       expect(sdkSupportsProxy(ready)).toBe(false);
-      expect(credentialDelivery(ready)).toBe('page');
+      expect(credentialDelivery(ready, true)).toBe('page');
       expect(
         sdkTooOldFor({
           libConfig: ready,
@@ -477,6 +476,6 @@ describe('popup classification of a published release', () => {
   it('a release from before the in-context UI (no uiPresent) is legacy', () => {
     const state = changeLibConfig(initialState, PRE_UI_READY, 0);
     expect(state.tolgeePresent).toBe('legacy');
-    expect(credentialDelivery(PRE_UI_READY)).toBe('page');
+    expect(credentialDelivery(PRE_UI_READY, true)).toBe('page');
   });
 });

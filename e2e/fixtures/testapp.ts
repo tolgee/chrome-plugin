@@ -23,11 +23,7 @@ export const collectProjectRequests = (page: Page): Request[] => {
   return requests;
 };
 
-/**
- * The extension's service worker calls to the Tolgee project API, i.e. the requests it sends for a page connected
- * through it. Playwright reports service worker requests only with PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS
- * (set in playwright.config.ts).
- */
+// See collectWorkerRequests in fixtures/oauth.ts for the PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS requirement.
 export const collectWorkerProjectRequests = (
   context: BrowserContext
 ): Request[] => {
@@ -44,7 +40,6 @@ export const collectWorkerProjectRequests = (
   return requests;
 };
 
-/** Connects with a project API key from the popup and waits for the page to come back connected. */
 export const connectWithApiKey = async (
   popup: Page,
   page: Page,
@@ -59,14 +54,14 @@ export const connectWithApiKey = async (
   await expect(popup.getByTestId('connected-panel')).toBeVisible();
 };
 
-const DEV_TOOLS = '#__tolgee_dev_tools';
+export const DEV_TOOLS = '#__tolgee_dev_tools';
 // The dialog's alert for a page holding no credential (the SDK's api_key_not_specified).
 export const SIGN_IN_ALERT_TEXT = 'Sign in to make changes';
 
 export const openInContextDialog = async (page: Page) => {
   await page.locator(TITLE).click({ modifiers: ['Alt'] });
   await expect(
-    page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT)
+    page.locator(DEV_TOOLS).locator('[data-cy="key-form-submit"]')
   ).toBeVisible({ timeout: 30_000 });
 };
 
@@ -75,7 +70,11 @@ export const openInContextDialog = async (page: Page) => {
 export const EDITING_OFF_ALERT_TEXT = 'In-context editing is switched off';
 
 export const signInAlert = (page: Page) =>
-  page.locator(DEV_TOOLS).getByText(SIGN_IN_ALERT_TEXT);
+  page
+    .locator(DEV_TOOLS)
+    .locator(
+      '[data-cy="error-alert"][data-cy-error-code="api_key_not_specified"]'
+    );
 
 export const editingOffAlert = (page: Page) =>
   page
@@ -86,7 +85,6 @@ export const editingOffAlert = (page: Page) =>
 
 type DialogState = 'asks-to-sign-in' | 'editing-off' | 'editable';
 
-/** Opens the dialog, waits for it to settle on one of its three states and closes it again. */
 const dialogState = async (page: Page): Promise<DialogState> => {
   await openInContextDialog(page);
   await expect(page.locator(DEV_TOOLS)).toContainText(
@@ -105,11 +103,9 @@ const dialogState = async (page: Page): Promise<DialogState> => {
   return state;
 };
 
-/** Opens the dialog and reports whether it asks for a credential instead of offering the string. */
 export const dialogAsksToSignIn = async (page: Page): Promise<boolean> =>
   (await dialogState(page)) === 'asks-to-sign-in';
 
-/** Opens the dialog and reports whether it says editing was switched off in the popup, with the alert's own text. */
 export const dialogSaysEditingOff = async (page: Page): Promise<boolean> => {
   if ((await dialogState(page)) !== 'editing-off') {
     return false;
@@ -122,6 +118,9 @@ export const dialogSaysEditingOff = async (page: Page): Promise<boolean> => {
   await page.keyboard.press('Escape');
   return true;
 };
+
+export const editingSwitchInput = (popup: Page) =>
+  popup.getByTestId('editing-switch-input');
 
 export const sessionItem = (page: Page, key: string) =>
   page.evaluate((k) => sessionStorage.getItem(k), key);
@@ -200,13 +199,7 @@ export const waitForContentScript = (page: Page) =>
       })
   );
 
-/**
- * Makes the testapp's SDK handshake like one from before the proxied-request protocol: every `TOLGEE_READY` it posts
- * loses its `protocolVersion`, on this load and on every reload. The extension then treats the page as an old SDK,
- * and a key it hands to the page is used by the SDK directly, as an old SDK would (a page `__tolgee_apiKey` takes
- * precedence over the extension session in every @tolgee/web release). A real old release would need its own
- * in-context bundle from the CDN, which the suite must not depend on.
- */
+// A real old release would need its own in-context bundle from the CDN, which the suite must not depend on.
 export const pretendOldSdk = (page: Page) =>
   page.addInitScript(() => {
     const post = window.postMessage.bind(window);

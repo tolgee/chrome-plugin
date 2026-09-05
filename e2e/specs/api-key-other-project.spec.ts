@@ -3,6 +3,7 @@ import { expect, test } from '../fixtures/extension';
 import { collectWorkerRequests } from '../fixtures/oauth';
 import {
   connectWithApiKey,
+  DEV_TOOLS,
   IN_CONTEXT_DIALOG_TEXT,
   openInContextDialog,
   openTestapp,
@@ -13,7 +14,6 @@ import {
 // The key behind the testapp's title (see importKeys in setup/seed.ts) and its seeded translation.
 const KEY_NAME = 'app-title';
 const ORIGINAL_TITLE = 'What To Pack';
-const DEV_TOOLS = '#__tolgee_dev_tools';
 
 // A project API key belongs to one project; a page declaring another one is edited in the key's project, not in
 // the declared one, on every request the dialog makes.

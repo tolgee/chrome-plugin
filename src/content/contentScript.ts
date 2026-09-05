@@ -1,15 +1,10 @@
-import {
-  API_KEY_SESSION_STORAGE,
-  API_URL_SESSION_STORAGE,
-  BRANCH_SESSION_STORAGE,
-  EXTENSION_SESSION_STORAGE,
-  PROJECT_ID_SESSION_STORAGE,
-  PROJECT_KEY_SESSION_STORAGE,
-} from '../sessionStorageKeys';
-import { PROTOCOL_VERSION, sessionKindOf } from '../protocol';
+import { PROTOCOL_VERSION } from '../protocol';
 import { LibConfig } from '../types';
 import { acceptsCredentialDelivery } from './acceptsCredentialDelivery';
-import { writeCredentialsIfChanged } from './credentialSink';
+import {
+  readAppliedCredentials,
+  writeCredentialsIfChanged,
+} from './credentialSink';
 import { Messages } from './Messages';
 import { updateState } from './updateState';
 
@@ -17,17 +12,6 @@ let configuration: LibConfig | undefined = undefined;
 
 const messages = new Messages();
 messages.startWindowListening();
-
-const getAppliedCredentials = () => {
-  return {
-    apiKey: sessionStorage.getItem(API_KEY_SESSION_STORAGE),
-    apiUrl: sessionStorage.getItem(API_URL_SESSION_STORAGE),
-    branch: sessionStorage.getItem(BRANCH_SESSION_STORAGE),
-    session: sessionKindOf(sessionStorage.getItem(EXTENSION_SESSION_STORAGE)),
-    projectId: sessionStorage.getItem(PROJECT_ID_SESSION_STORAGE),
-    projectKey: sessionStorage.getItem(PROJECT_KEY_SESSION_STORAGE),
-  };
-};
 
 // handshake with library
 messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
@@ -68,7 +52,9 @@ messages.listenRuntime('DETECT_TOLGEE', async () => {
   }
 });
 
-messages.listenRuntime('GET_CREDENTIALS', async () => getAppliedCredentials());
+messages.listenRuntime('GET_CREDENTIALS', async () =>
+  readAppliedCredentials(sessionStorage)
+);
 
 messages.listenRuntime('SET_CREDENTIALS', async (data) => {
   if (

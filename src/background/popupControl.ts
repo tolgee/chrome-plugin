@@ -8,8 +8,13 @@ const POPUP_WINDOW = { type: 'popup', width: 420, height: 640 } as const;
 // Keyed by the requesting tab, so a page looping OPEN_POPUP cannot spawn more than one fallback window for itself.
 // In storage rather than in memory: the worker is terminated between two such requests as a matter of course.
 const KEY_PREFIX = 'popupWindow:';
+const FOCUS_KEY_PREFIX = 'popupFocus:';
+// A page can otherwise re-post TOLGEE_OPEN_PLUGIN in a loop and steal window focus repeatedly; this bounds it to
+// once per cooldown without breaking a user's single legitimate click.
+const FOCUS_COOLDOWN_MS = 2000;
 
 const keyFor = (tabId: number) => `${KEY_PREFIX}${tabId}`;
+const focusKeyFor = (tabId: number) => `${FOCUS_KEY_PREFIX}${tabId}`;
 
 // Firefox only honours action.openPopup() inside a user-input handler, so from a runtime message it rejects, and
 // older Chrome lacks the call: the same popup page then opens as a small window pointed at the requesting tab
@@ -25,6 +30,9 @@ export const openPopup = async (tabId: number | undefined) => {
 };
 
 const openOrFocusPopupWindow = async (tabId: number) => {
+  if (!(await coolDownElapsed(tabId))) {
+    return;
+  }
   const existing = await rememberedWindow(tabId);
   if (existing !== undefined && (await windowStillOpen(existing))) {
     await browser.windows
@@ -43,6 +51,17 @@ const openOrFocusPopupWindow = async (tabId: number) => {
     return;
   }
   await sessionArea().set({ [keyFor(tabId)]: created.id });
+};
+
+const coolDownElapsed = async (tabId: number): Promise<boolean> => {
+  const key = focusKeyFor(tabId);
+  const last = (await sessionArea().get(key))[key];
+  const now = Date.now();
+  if (typeof last === 'number' && now - last < FOCUS_COOLDOWN_MS) {
+    return false;
+  }
+  await sessionArea().set({ [key]: now });
+  return true;
 };
 
 const rememberedWindow = async (tabId: number): Promise<number | undefined> => {
@@ -72,21 +91,24 @@ const forget = (key: string) =>
     .remove(key)
     .catch(() => undefined);
 
-browser.tabs.onRemoved.addListener((tabId) => {
-  forget(keyFor(tabId));
-});
+export const registerPopupControlListeners = () => {
+  browser.tabs.onRemoved.addListener((tabId) => {
+    forget(keyFor(tabId));
+    forget(focusKeyFor(tabId));
+  });
 
-browser.windows.onRemoved.addListener(async (windowId) => {
-  const all = await sessionArea()
-    .get(null)
-    .catch(() => ({}));
-  const closed = Object.entries(all).find(
-    ([key, value]) => key.startsWith(KEY_PREFIX) && value === windowId
-  );
-  if (closed) {
-    await forget(closed[0]);
-  }
-});
+  browser.windows.onRemoved.addListener(async (windowId) => {
+    const all = await sessionArea()
+      .get(null)
+      .catch(() => ({}));
+    const closed = Object.entries(all).find(
+      ([key, value]) => key.startsWith(KEY_PREFIX) && value === windowId
+    );
+    if (closed) {
+      await forget(closed[0]);
+    }
+  });
+};
 
 export const setStateIcon = (state: IconState, tabId: number) => {
   browser.action.setIcon({

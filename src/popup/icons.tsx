@@ -1,6 +1,7 @@
 import { SvgIcon, SvgIconProps } from '@mui/material';
 
-// Material icon paths inlined: the extension does not ship @mui/icons-material.
+// Material icon paths inlined: the extension does not ship @mui/icons-material. These paths are Apache-2.0 (Google
+// Material icons) - see NOTICE, and any icon added here must be added there too.
 
 export const EditIcon = (props: SvgIconProps) => (
   <SvgIcon {...props}>

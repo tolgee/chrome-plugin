@@ -1,6 +1,7 @@
 import { normalizeUrl } from '../oauth/url';
 import { ProxyBody } from '../protocol';
 import { Connection, failure, ProxyFailure } from './proxyTypes';
+import { wasUploadedThroughSession } from './uploadedImages';
 
 const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const ALLOWED_HEADERS = [
@@ -10,6 +11,7 @@ const ALLOWED_HEADERS = [
   'x-tolgee-sdk-version',
 ];
 const PERMISSIONS_PATH = '/v2/api-keys/current-permissions';
+export const IMAGE_UPLOAD_PATH = '/v2/image-upload';
 
 export type ResolvedTarget = { method: string; pathWithQuery: string };
 
@@ -24,7 +26,7 @@ export const resolveTabTarget: TargetResolver = (method, path, connection) => {
   if ('error' in resolved) {
     return resolved;
   }
-  if (!isAllowedPath(resolved.apiPath, connection.projectKey)) {
+  if (!isAllowedPath(resolved.apiPath, resolved.method, connection)) {
     return failure('not_allowed', `${resolved.apiPath} is not proxied`);
   }
   if (resolved.apiPath === PERMISSIONS_PATH) {
@@ -99,11 +101,35 @@ const resolveWithinServer = (
   return { method: upper, apiPath, search: url.search };
 };
 
-const isAllowedPath = (pathname: string, projectKey: string) =>
-  pathname === '/v2/image-upload' ||
-  pathname.startsWith('/v2/image-upload/') ||
-  pathname === PERMISSIONS_PATH ||
-  pathname.startsWith(`/v2/projects/${projectKey}/`);
+const isAllowedPath = (
+  pathname: string,
+  method: string,
+  connection: Connection
+): boolean => {
+  if (pathname === IMAGE_UPLOAD_PATH) {
+    return true;
+  }
+  if (pathname.startsWith(`${IMAGE_UPLOAD_PATH}/`)) {
+    return method !== 'DELETE' || deletesOnlyOwnUploads(pathname, connection);
+  }
+  return (
+    pathname === PERMISSIONS_PATH ||
+    pathname.startsWith(`/v2/projects/${connection.projectKey}/`)
+  );
+};
+
+// Image uploads aren't project-scoped on the platform (see uploadedImages.ts), so a proxied DELETE is pinned here
+// instead to ids this same worker session uploaded through the screenshot capture path.
+const deletesOnlyOwnUploads = (
+  pathname: string,
+  connection: Connection
+): boolean => {
+  const ids = pathname.slice(`${IMAGE_UPLOAD_PATH}/`.length).split(',');
+  return (
+    ids.length > 0 &&
+    ids.every((id) => id && wasUploadedThroughSession(connection, id))
+  );
+};
 
 export const allowedHeaders = (
   headers: Record<string, string> | undefined

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { LibConfig } from '../types';
-import { credentialDelivery, deliveryChanged, sdkTooOldFor } from './delivery';
+import {
+  credentialDelivery,
+  deliveryChanged,
+  resolveAppliedValues,
+  sdkTooOldFor,
+} from './delivery';
 
 const sdk = (protocolVersion?: number): LibConfig => ({
   uiPresent: true,
@@ -11,10 +16,15 @@ const sdk = (protocolVersion?: number): LibConfig => ({
 
 describe('credentialDelivery', () => {
   it('keeps the key in the worker from protocol 2 on, hands it to the page before', () => {
-    expect(credentialDelivery(sdk(2))).toBe('proxy');
-    expect(credentialDelivery(sdk(3))).toBe('proxy');
-    expect(credentialDelivery(sdk(1))).toBe('page');
-    expect(credentialDelivery(sdk(undefined))).toBe('page');
+    expect(credentialDelivery(sdk(2), true)).toBe('proxy');
+    expect(credentialDelivery(sdk(3), true)).toBe('proxy');
+    expect(credentialDelivery(sdk(1), true)).toBe('page');
+    expect(credentialDelivery(sdk(undefined), true)).toBe('page');
+  });
+
+  it('is always proxy without an api key, whatever the SDK protocol', () => {
+    expect(credentialDelivery(sdk(undefined), false)).toBe('proxy');
+    expect(credentialDelivery(sdk(2), false)).toBe('proxy');
   });
 });
 
@@ -114,5 +124,69 @@ describe('deliveryChanged', () => {
         sdk(2)
       )
     ).toBe(false);
+  });
+});
+
+describe('resolveAppliedValues', () => {
+  // A pre-1.9.0 stored record has no projectKey (git show 5f6502d:src/popup/storage.ts). The worker refuses to
+  // proxy such a record (oauth/connection.ts isApiKeyRecord), so restoring it here must not report a connected
+  // session, and must not redeliver over the page's still-working legacy apiKey slot.
+  it('a legacy stored record with no projectKey is not a connected session, and is never redelivered', () => {
+    const legacyStored = {
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: 'tgpak_legacy',
+    };
+    expect(
+      resolveAppliedValues(
+        { apiKey: 'tgpak_legacy', apiUrl: legacyStored.apiUrl },
+        legacyStored,
+        sdk(2)
+      )
+    ).toBeNull();
+    expect(
+      resolveAppliedValues(
+        { session: 'apiKey', apiUrl: legacyStored.apiUrl },
+        legacyStored,
+        sdk(2)
+      )
+    ).toBeNull();
+  });
+
+  it('redelivers a pinned api-key session once its SDK can proxy', () => {
+    const stored = {
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: 'tgpak_x',
+      projectId: 7,
+      projectKey: '7',
+    };
+    const resolved = resolveAppliedValues(
+      {
+        apiKey: 'tgpak_x',
+        apiUrl: stored.apiUrl,
+        projectId: 7,
+        projectKey: '7',
+      },
+      stored,
+      sdk(2)
+    );
+    expect(resolved).not.toBeNull();
+    expect(resolved?.redeliver).toBe(true);
+    expect(resolved?.applied).toMatchObject({ apiKey: 'tgpak_x' });
+  });
+
+  it('does not redeliver when the delivery already matches the SDK', () => {
+    const stored = {
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: 'tgpak_x',
+      projectId: 7,
+      projectKey: '7',
+    };
+    const resolved = resolveAppliedValues(
+      { session: 'apiKey', apiUrl: stored.apiUrl, projectKey: '7' },
+      stored,
+      sdk(2)
+    );
+    expect(resolved).not.toBeNull();
+    expect(resolved?.redeliver).toBe(false);
   });
 });

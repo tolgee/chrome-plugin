@@ -1,17 +1,16 @@
 import { LibConfig } from '../types';
-import { projectIdOfApiKey } from '../oauth/apiKeyProject';
-import { ApiKeyCheck, isApiKeyValid } from './apiKeyCheck';
+import { CredentialsCheck, isProjectInfo } from './popupState';
 
 export const EDIT_SCOPE = 'translations.edit';
 
 export const scopesAllowEditing = (scopes: string[]): boolean =>
   scopes.includes(EDIT_SCOPE);
 
-export const keyAllowsEditing = (check: ApiKeyCheck): boolean =>
-  isApiKeyValid(check) && scopesAllowEditing(check.scopes);
+export const keyAllowsEditing = (check: CredentialsCheck): boolean =>
+  isProjectInfo(check) && scopesAllowEditing(check.scopes);
 
-export const connectButtonLabel = (check: ApiKeyCheck): string =>
-  isApiKeyValid(check) ? `Connect to ${check.projectName}` : 'Connect';
+export const connectButtonLabel = (check: CredentialsCheck): string =>
+  isProjectInfo(check) ? `Connect to ${check.projectName}` : 'Connect';
 
 export const serverPanelOpen = (toggled: boolean, serverInvalid: boolean) =>
   toggled || serverInvalid;
@@ -30,10 +29,3 @@ export const siteKeyFromCode = (
   const apiKey = libConfig?.config?.apiKey;
   return mode === 'development' && apiKey ? apiKey : undefined;
 };
-
-export const apiKeyProject = (
-  apiKey: string | undefined,
-  check: ApiKeyCheck
-): number | undefined =>
-  projectIdOfApiKey(apiKey) ??
-  (isApiKeyValid(check) ? check.projectId : undefined);

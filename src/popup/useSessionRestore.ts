@@ -5,9 +5,9 @@ import { loadAppliedValues } from './loadConfig';
 import { sendToBackground } from './sendToBackground';
 import { loadValues } from './storage';
 import { loadConnectRefusal } from '../oauth/connectRefusalStore';
-import { deliveryChanged } from './delivery';
+import { resolveAppliedValues } from './delivery';
 import { redeliverToPage, syncToStorageAndPage } from './deliverValues';
-import { appliedValuesFrom, validateValues } from './tools';
+import { isConnectedSession } from './tools';
 import { Action, State } from './popupState';
 
 export const useSessionRestore = (
@@ -41,16 +41,17 @@ export const useSessionRestore = (
 
   const syncPageAppliedValues = async () => {
     const pageApplied = await loadAppliedValues();
-    const applied = appliedValuesFrom(
+    const resolved = resolveAppliedValues(
       pageApplied,
-      pageApplied?.session === 'apiKey' ? await loadValues() : null
+      pageApplied?.session === 'apiKey' ? await loadValues() : null,
+      libConfig
     );
-    if (!validateValues(applied)) {
+    if (!resolved) {
       return;
     }
-    dispatch({ type: 'SET_APPLIED_VALUES', payload: applied });
-    if (deliveryChanged(pageApplied, applied, libConfig)) {
-      await redeliverToPage(applied, libConfig);
+    dispatch({ type: 'SET_APPLIED_VALUES', payload: resolved.applied });
+    if (resolved.redeliver) {
+      await redeliverToPage(resolved.applied, libConfig);
     }
   };
 
@@ -82,7 +83,7 @@ export const useSessionRestore = (
           },
         });
       }
-    } else if (validateValues(storedData)) {
+    } else if (isConnectedSession(storedData)) {
       dispatch({ type: 'LOAD_STORED_VALUES', payload: storedData });
     }
   };

@@ -1,4 +1,4 @@
-// Only the connected page's own frame may receive OAuth credentials — a cross-origin iframe must not harvest the token.
+// Only the connected page's own frame may receive the session/api-key delivery — a cross-origin iframe must not receive it.
 export const acceptsCredentialDelivery = (args: {
   currentOrigin: string;
   isTopFrame: boolean;

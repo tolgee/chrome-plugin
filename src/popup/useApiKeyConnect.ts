@@ -1,11 +1,9 @@
 import { useState, type Dispatch } from 'react';
 import { LibConfig } from '../types';
 import { projectKeyFor } from '../oauth/sessionRules';
-import { isApiKeyValid } from './apiKeyCheck';
 import { useApiKeyCheck } from './useApiKeyCheck';
-import { apiKeyProject } from './apiKeyScreen';
 import { hasSessionOf, siteKeyOf, validateValues, Values } from './tools';
-import { Action } from './popupState';
+import { Action, isProjectInfo, keyProjectId } from './popupState';
 
 type Args = {
   values: Values | null;
@@ -38,10 +36,10 @@ export const useApiKeyConnect = ({
     onApiKeyTab && !hasSession && !siteKeyScreen
   );
   const canApplyApiKey =
-    Boolean(validateValues(values)) && isApiKeyValid(apiKeyCheck);
+    Boolean(validateValues(values)) && isProjectInfo(apiKeyCheck);
 
   const applyApiKey = () => {
-    const projectId = apiKeyProject(values?.apiKey, apiKeyCheck);
+    const projectId = keyProjectId(values?.apiKey, apiKeyCheck);
     if (projectId !== undefined) {
       dispatch({
         type: 'CHANGE_VALUES',
@@ -51,7 +49,7 @@ export const useApiKeyConnect = ({
     dispatch({ type: 'APPLY_VALUES' });
   };
 
-  const useAnotherKey = () => {
+  const switchToAnotherKey = () => {
     dispatch({
       type: 'CHANGE_VALUES',
       payload: { apiKey: '', siteKey: values?.apiKey },
@@ -67,7 +65,7 @@ export const useApiKeyConnect = ({
     apiKeyCheck,
     canApplyApiKey,
     applyApiKey,
-    useAnotherKey,
+    switchToAnotherKey,
     clearOverride: () => setOverridingSiteKey(false),
   };
 };

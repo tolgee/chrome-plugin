@@ -3,8 +3,10 @@ import type { Request } from '@playwright/test';
 import { expect, test } from '../fixtures/extension';
 import { collectPageRequests, collectWorkerRequests } from '../fixtures/oauth';
 import {
+  DEV_TOOLS,
   dialogAsksToSignIn,
   dialogSaysEditingOff,
+  editingSwitchInput,
   IN_CONTEXT_DIALOG_TEXT,
   openInContextDialog,
   openTestapp,
@@ -16,7 +18,6 @@ import {
 // The key behind the testapp's title (see importKeys in setup/seed.ts) and its seeded translation.
 const KEY_NAME = 'app-title';
 const ORIGINAL_TITLE = 'What To Pack';
-const DEV_TOOLS = '#__tolgee_dev_tools';
 const EDITED_TITLE = 'Packed by an old SDK';
 
 const projectRequests = (requests: Request[]) =>
@@ -63,9 +64,7 @@ test('connects an SDK without proxy support with an API key the page uses direct
       );
       await expect(popup.getByTestId('sdk-too-old')).toHaveCount(0);
       await expect(popup.getByTestId('sign-out')).toHaveText('Remove key');
-      const editingSwitch = popup
-        .getByTestId('editing-switch')
-        .locator('input');
+      const editingSwitch = editingSwitchInput(popup);
       await expect(editingSwitch).toBeChecked();
       await expect(editingSwitch).toBeEnabled();
 
@@ -127,9 +126,7 @@ test('connects an SDK without proxy support with an API key the page uses direct
         app.projectName
       );
       await expect(popup.getByTestId('sdk-too-old')).toHaveCount(0);
-      await expect(
-        popup.getByTestId('editing-switch').locator('input')
-      ).toBeChecked();
+      await expect(editingSwitchInput(popup)).toBeChecked();
       await expect(popup.getByTestId('sign-out')).toHaveText('Remove key');
     });
 
@@ -174,7 +171,7 @@ test('turns editing off and on again for a key the page uses directly', async ({
   await popup.getByTestId('connect-with-api-key').click();
   await connected;
   await expect(popup.getByTestId('connected-panel')).toBeVisible();
-  const editingSwitch = popup.getByTestId('editing-switch').locator('input');
+  const editingSwitch = editingSwitchInput(popup);
 
   const reloadedOff = page.waitForEvent('load');
   await editingSwitch.click();

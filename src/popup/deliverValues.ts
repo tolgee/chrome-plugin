@@ -30,16 +30,12 @@ export const syncToStorageAndPage = async (
   await sendMessage('SET_CREDENTIALS', { ...credentials, pageOrigin });
 };
 
-// Removing the session or switching editing off ends it for the whole origin, so it has to reach every tab of it.
-// A stored session merely restored here is a different thing: the other tabs may be using it, and clearing their
-// slots would sign them out.
 const endsSessionForOrigin = ({
   storedValues,
   appliedValues,
   editingSwitchedOff,
 }: Slots) => !appliedValues && (!storedValues || editingSwitchedOff);
 
-// Leaves the editing slot alone: the page it is written to has the session applied, so editing is on there.
 export const redeliverToPage = async (
   values: Values,
   libConfig: LibConfig | null

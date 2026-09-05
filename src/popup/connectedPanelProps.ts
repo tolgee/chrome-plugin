@@ -1,6 +1,5 @@
 import { LibConfig } from '../types';
-import { Values } from './tools';
-import { credentialDelivery } from './delivery';
+import { credentialDelivery, Values } from './tools';
 import { projectUrl } from '../oauth/url';
 import { scopesAllowEditing } from './apiKeyScreen';
 import {
@@ -53,7 +52,10 @@ export const connectedPanelProps = ({
           apiKey: activeValues?.apiKey ?? '',
           source: siteKey ? 'override' : 'own',
           viewOnly,
-          delivery: credentialDelivery(libConfig),
+          delivery: credentialDelivery(
+            libConfig,
+            Boolean(activeValues?.apiKey)
+          ),
         };
   const projectName = isOauthSession
     ? declaredProject?.name ?? null

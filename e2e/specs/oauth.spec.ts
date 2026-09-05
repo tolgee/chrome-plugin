@@ -8,6 +8,7 @@ import {
 } from '../fixtures/oauth';
 import {
   collectProjectRequests,
+  editingSwitchInput,
   openInContextDialog,
   openTestapp,
   sessionItem,
@@ -57,9 +58,7 @@ test('signs in with OAuth, edits in context through the extension and signs out'
     'href',
     `${state.tolgeeUrl}/projects/${app.projectId}`
   );
-  await expect(
-    popup.getByTestId('editing-switch').locator('input')
-  ).toBeChecked();
+  await expect(editingSwitchInput(popup)).toBeChecked();
   const [session] = await storedOAuthSessions(worker);
   expect(session).toBeDefined();
   expect(await sessionItem(page, '__tolgee_projectId')).toBe(

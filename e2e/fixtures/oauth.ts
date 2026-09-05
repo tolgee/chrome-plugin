@@ -54,7 +54,6 @@ export const installIdentityStub = (worker: Worker) =>
     [AUTHORIZE_KEY, REDIRECT_KEY]
   );
 
-/** Resolves once the extension has started the (stubbed) identity flow for a connect attempt. */
 export const waitForAuthorizeUrl = (worker: Worker) =>
   waitFor<string>(
     () =>
@@ -83,7 +82,6 @@ export const loginToWebapp = async (
   );
 };
 
-/** What to pick on the consent screen's project picker instead of leaving the page's declared project selected. */
 export type ConsentProject = { kind: 'all' } | { kind: 'one'; name: string };
 
 type AuthorizationArgs = {
@@ -233,7 +231,6 @@ export const collectWorkerRequests = (
   return requests;
 };
 
-/** The subset of `requests` the worker sent with this session's token, i.e. on this session's behalf. */
 export const requestsSentWith = async (
   requests: Request[],
   session: Pick<StoredSession, 'accessToken'>
@@ -251,7 +248,6 @@ export const requestsSentWith = async (
     .map(({ request }) => request);
 };
 
-/** Every request on the page's own network (frames included), regardless of URL. */
 export const collectPageRequests = (page: Page): Request[] => {
   const requests: Request[] = [];
   page.on('request', (request) => requests.push(request));

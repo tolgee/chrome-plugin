@@ -2,19 +2,28 @@ import {
   API_URL_SESSION_STORAGE,
   PROJECT_KEY_SESSION_STORAGE,
 } from '../sessionStorageKeys';
-import { PROTOCOL_VERSION } from '../protocol';
+import {
+  PROTOCOL_VERSION,
+  TOLGEE_API_REQUEST,
+  TOLGEE_API_RESPONSE,
+  TOLGEE_PROXY_PING,
+  TOLGEE_PROXY_PONG,
+  TOLGEE_SCREENSHOT_CAPTURED,
+  TOLGEE_SCREENSHOT_UPLOAD,
+  TOLGEE_SCREENSHOT_UPLOADED,
+} from '../protocol';
 
 export const MAX_PROXY_PAYLOAD_BYTES = 20 * 1024 * 1024;
 
 // No prototype, so a page message claiming type 'constructor'/'__proto__'/'hasOwnProperty' looks up nothing rather
 // than an inherited Object method.
 const RELAYED: Record<string, string> = Object.assign(Object.create(null), {
-  TOLGEE_API_REQUEST: 'TOLGEE_API_RESPONSE',
-  TOLGEE_SCREENSHOT_UPLOAD: 'TOLGEE_SCREENSHOT_UPLOADED',
+  [TOLGEE_API_REQUEST]: TOLGEE_API_RESPONSE,
+  [TOLGEE_SCREENSHOT_UPLOAD]: TOLGEE_SCREENSHOT_UPLOADED,
 });
-const CAPTURED = 'TOLGEE_SCREENSHOT_CAPTURED';
-const PING = 'TOLGEE_PROXY_PING';
-const PONG = 'TOLGEE_PROXY_PONG';
+const CAPTURED = TOLGEE_SCREENSHOT_CAPTURED;
+const PING = TOLGEE_PROXY_PING;
+const PONG = TOLGEE_PROXY_PONG;
 const TOO_LARGE = {
   error: { kind: 'too_large', message: 'request body is too large' },
 };

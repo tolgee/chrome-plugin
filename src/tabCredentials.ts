@@ -2,8 +2,6 @@ import browser from 'webextension-polyfill';
 import { PageCredentials } from './content/credentialSink';
 import { safeOrigin } from './oauth/url';
 
-// Every tab of an origin shares the one session the extension holds for it, so a session that starts or ends has to
-// reach all of them, not only the tab the popup is on.
 export const deliverToOrigin = async (
   pageOrigin: string,
   credentials: PageCredentials

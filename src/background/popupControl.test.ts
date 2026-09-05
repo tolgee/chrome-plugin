@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const session = new Map<string, unknown>();
 const { windowsCreate, windowsGet, windowsUpdate, openPopup } = vi.hoisted(
@@ -59,8 +59,13 @@ vi.mock('webextension-polyfill', () => ({
 // dedupe survives it.
 const loadPopupControl = async () => {
   vi.resetModules();
-  return (await import('./popupControl')).openPopup;
+  const popupControl = await import('./popupControl');
+  popupControl.registerPopupControlListeners();
+  return popupControl.openPopup;
 };
+
+const COOLDOWN_MS = 2000;
+const pastCooldown = () => vi.setSystemTime(Date.now() + COOLDOWN_MS + 1);
 
 describe('fallback popup window', () => {
   beforeEach(() => {
@@ -69,12 +74,18 @@ describe('fallback popup window', () => {
     windowsGet.mockClear().mockResolvedValue({ id: 99 });
     windowsUpdate.mockClear();
     openPopup.mockClear();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('focuses the window a tab already has instead of opening a second one, after the worker was restarted', async () => {
     await (
       await loadPopupControl()
     )(7);
+    pastCooldown();
     await (
       await loadPopupControl()
     )(7);
@@ -88,6 +99,7 @@ describe('fallback popup window', () => {
       await loadPopupControl()
     )(7);
     windowsGet.mockRejectedValue(new Error('no such window'));
+    pastCooldown();
     await (
       await loadPopupControl()
     )(7);
@@ -108,15 +120,38 @@ describe('fallback popup window', () => {
     await (
       await loadPopupControl()
     )(7);
-    expect(session.size).toBe(1);
+    expect(session.has('popupWindow:7')).toBe(true);
 
     listeners.windowRemoved?.(99);
-    await vi.waitFor(() => expect(session.size).toBe(0));
+    await vi.waitFor(() => expect(session.has('popupWindow:7')).toBe(false));
 
+    pastCooldown();
     await (
       await loadPopupControl()
     )(7);
     listeners.tabRemoved?.(7);
-    await vi.waitFor(() => expect(session.size).toBe(0));
+    await vi.waitFor(() => expect(session.has('popupWindow:7')).toBe(false));
+    expect(session.has('popupFocus:7')).toBe(false);
+  });
+
+  it('throttles repeated focus requests for the same tab within the cooldown', async () => {
+    const open = await loadPopupControl();
+    await open(7);
+    await open(7);
+    await open(7);
+
+    expect(windowsCreate).toHaveBeenCalledOnce();
+    expect(windowsUpdate).not.toHaveBeenCalled();
+  });
+
+  it('allows a further focus request once the cooldown has elapsed', async () => {
+    const open = await loadPopupControl();
+    await open(7);
+    await open(7);
+    pastCooldown();
+    await open(7);
+
+    expect(windowsCreate).toHaveBeenCalledOnce();
+    expect(windowsUpdate).toHaveBeenCalledOnce();
   });
 });

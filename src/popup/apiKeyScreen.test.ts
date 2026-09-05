@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  apiKeyProject,
   connectButtonLabel,
   keyAllowsEditing,
   scopesAllowEditing,
@@ -14,18 +13,16 @@ const valid = {
   projectName: 'Acme Web',
   projectId: 3,
   scopes: ['translations.edit'],
+  userFullName: 'U',
+  branchingEnabled: false,
 };
 
 describe('keyAllowsEditing', () => {
   it('needs a verified key carrying translations.edit', () => {
     expect(keyAllowsEditing(valid)).toBe(true);
-    expect(
-      keyAllowsEditing({
-        projectName: 'Acme Web',
-        projectId: 3,
-        scopes: ['translations.view'],
-      })
-    ).toBe(false);
+    expect(keyAllowsEditing({ ...valid, scopes: ['translations.view'] })).toBe(
+      false
+    );
   });
 
   it('is false while the key is unverified', () => {
@@ -106,24 +103,5 @@ describe('siteKeyFromCode', () => {
     expect(siteKeyFromCode(page('production', 'tgpak_x'))).toBeUndefined();
     expect(siteKeyFromCode(page('development', ''))).toBeUndefined();
     expect(siteKeyFromCode(null)).toBeUndefined();
-  });
-});
-
-describe('apiKeyProject', () => {
-  // See oauth/apiKeyProject.test.ts for the decoding of this key.
-  const PAK_FOR_PROJECT_1 =
-    'tgpak_gfpxm4lin4zdazleoq4gm2rumfxgi2lfom2gw4dpguzxc';
-
-  it('takes the project encoded in the key over the one the server reported', () => {
-    expect(apiKeyProject(PAK_FOR_PROJECT_1, valid)).toBe(1);
-  });
-
-  it('falls back to the project the check reported for a key that encodes none', () => {
-    expect(apiKeyProject('legacykey', valid)).toBe(3);
-  });
-
-  it('knows no project while the key is unverified', () => {
-    expect(apiKeyProject('legacykey', 'loading')).toBeUndefined();
-    expect(apiKeyProject(undefined, null)).toBeUndefined();
   });
 });

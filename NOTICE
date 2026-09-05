@@ -24,3 +24,15 @@ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
 WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 License for the specific language governing permissions and limitations
 under the License.
+
+This project also bundles the following third-party dependencies:
+
+  - webextension-polyfill (https://github.com/mozilla/webextension-polyfill),
+    licensed under the Mozilla Public License, Version 2.0. Its source is
+    available at that repository; this extension's own source is public.
+  - React and ReactDOM (https://react.dev). Copyright (c) Facebook, Inc. and
+    its affiliates. Licensed under MIT.
+  - @mui/material (https://mui.com). Copyright (c) 2014 Call-Em-All.
+    Licensed under MIT.
+  - @emotion/react and @emotion/styled (https://emotion.sh). Copyright (c)
+    Emotion team and other contributors. Licensed under MIT.

@@ -9,7 +9,6 @@ export const TOLGEE_SESSION_STORAGE_PREFIX = '__tolgee_';
 export const API_KEY_SESSION_STORAGE = `${TOLGEE_SESSION_STORAGE_PREFIX}apiKey`;
 export const API_URL_SESSION_STORAGE = `${TOLGEE_SESSION_STORAGE_PREFIX}apiUrl`;
 export const BRANCH_SESSION_STORAGE = `${TOLGEE_SESSION_STORAGE_PREFIX}branch`;
-// The kind of session the extension holds for the page ('oauth' or 'apiKey').
 export const EXTENSION_SESSION_STORAGE = `${TOLGEE_SESSION_STORAGE_PREFIX}session`;
 // See oauth/sessionRules.ts for the projectId-vs-projectKey distinction these two slots carry.
 export const PROJECT_ID_SESSION_STORAGE = `${TOLGEE_SESSION_STORAGE_PREFIX}projectId`;

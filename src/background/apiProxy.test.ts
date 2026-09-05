@@ -63,7 +63,7 @@ vi.stubGlobal('createImageBitmap', async () => ({
 }));
 
 const { handleApiRequest, handlePopupApiRequest } = await import('./apiProxy');
-const { handleScreenshotUpload } = await import('./proxyScreenshot');
+const { captureAndUploadScreenshot } = await import('./proxyScreenshot');
 
 const API = 'https://app.tolgee.io';
 const ORIGIN = 'https://page.example';
@@ -91,7 +91,6 @@ const seedConnection = (overrides: Partial<Record<string, unknown>> = {}) =>
     projectKey: '7',
     ...overrides,
   });
-// An api key entered in the popup: held in the origin record, pinned to the key's project (see oauth/connection.ts).
 const seedApiKeyRecord = (overrides: Partial<Record<string, unknown>> = {}) =>
   store.set(ORIGIN, {
     apiUrl: API,
@@ -164,6 +163,8 @@ describe('handleApiRequest', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe(`${API}/v2/projects/7/keys?size=10`);
     expect(bearerOf(calls[0])).toBe('Bearer tok');
+    expect(calls[0].init.credentials).toBe('omit');
+    expect(calls[0].init.redirect).toBe('error');
     expect(result).toEqual({
       response: {
         status: 200,
@@ -771,7 +772,7 @@ describe('handleApiRequest with an api key held by the worker', () => {
   it('uploads a screenshot with the key, captured in the worker', async () => {
     answer = () => json(201, { id: 5 });
 
-    const result = await handleScreenshotUpload(
+    const result = await captureAndUploadScreenshot(
       { id: 'shot-1', apiUrl: API, projectKey: '7' },
       PAGE_TAB
     );
@@ -784,6 +785,52 @@ describe('handleApiRequest with an api key held by the worker', () => {
     expect(calls[0].url).toBe(`${API}/v2/image-upload`);
     expect(apiKeyOf(calls[0])).toBe('tgpak_secret');
     expect(bearerOf(calls[0])).toBeUndefined();
+  });
+
+  it('refuses a DELETE for an image this session did not upload', async () => {
+    const result = await handleApiRequest(
+      request({ path: '/v2/image-upload/999999', method: 'DELETE' }),
+      PAGE_TAB
+    );
+
+    expect(result).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('allows a DELETE for an image this session uploaded through the screenshot capture path', async () => {
+    answer = () => json(201, { id: 424242 });
+    await captureAndUploadScreenshot(
+      { id: 'shot-del', apiUrl: API, projectKey: '7' },
+      PAGE_TAB
+    );
+    calls.length = 0;
+    answer = () => json(200, {});
+
+    const result = await handleApiRequest(
+      request({ path: '/v2/image-upload/424242', method: 'DELETE' }),
+      PAGE_TAB
+    );
+
+    expect(result).toHaveProperty('response');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('allows a DELETE for an image this session uploaded through a plain (non-screenshot) POST', async () => {
+    answer = () => json(201, { id: 828282 });
+    await handleApiRequest(
+      request({ path: '/v2/image-upload', method: 'POST' }),
+      PAGE_TAB
+    );
+    calls.length = 0;
+    answer = () => json(200, {});
+
+    const result = await handleApiRequest(
+      request({ path: '/v2/image-upload/828282', method: 'DELETE' }),
+      PAGE_TAB
+    );
+
+    expect(result).toHaveProperty('response');
+    expect(calls).toHaveLength(1);
   });
 
   it('does not stand in for an OAuth connection: an oauth record with a stray apiKey field is still served by its session', async () => {
@@ -869,7 +916,7 @@ describe('handlePopupApiRequest', () => {
   });
 });
 
-describe('handleScreenshotUpload', () => {
+describe('captureAndUploadScreenshot', () => {
   beforeEach(() => {
     store.clear();
     sent.length = 0;
@@ -881,7 +928,7 @@ describe('handleScreenshotUpload', () => {
   });
 
   const upload = (sender = PAGE_TAB) =>
-    handleScreenshotUpload(
+    captureAndUploadScreenshot(
       { id: 'shot-1', apiUrl: API, projectKey: '7' },
       sender
     );

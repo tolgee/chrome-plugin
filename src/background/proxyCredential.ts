@@ -68,7 +68,7 @@ const loadConnectedSession = async (
   return { connection: pinned, kind: 'oauth', session };
 };
 
-export const refreshGate = async (
+export const authorizeSession = async (
   located: LocatedSession
 ): Promise<Gate | ProxyFailure> => {
   if (located.kind === 'apiKey') {
@@ -144,6 +144,12 @@ export const authorizedFetch = (
     headers: { ...request.headers, ...credentialHeader(credential) },
     body: request.body,
     signal: request.signal,
+    // Never send the browser's ambient cookies for the Tolgee host: only the scoped bearer/api-key header may
+    // authorize this request. A redirect is refused rather than followed, since fetch forwards X-API-Key (unlike
+    // Authorization) to a redirect target and the allowlist only constrains the URL the worker builds, not one a
+    // redirect could send it to.
+    credentials: 'omit',
+    redirect: 'error',
   });
 
 const credentialHeader = (credential: Credential): Record<string, string> =>

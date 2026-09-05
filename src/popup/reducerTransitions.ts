@@ -1,13 +1,12 @@
 import { LibConfig } from '../types';
 import { projectKeyFor } from '../oauth/sessionRules';
-import { validateValues, Values } from './tools';
+import { validateValues } from './tools';
+import { branchableProjectId, ProjectOption, State } from './popupState';
 import {
-  branchableProjectId,
-  CredentialsCheck,
-  keyProjectId,
-  ProjectOption,
-  State,
-} from './popupState';
+  isSecondTolgeeInstance,
+  pageValues,
+  withKeyProject,
+} from './transitionValues';
 
 /** `applied` is false when the transition changed nothing that has to reach storage and the page. */
 export type Transition = { state: State; applied: boolean };
@@ -112,16 +111,21 @@ export const resolveProject = (
   payload: { project: ProjectOption | null; inaccessible: boolean }
 ): Transition => {
   const { project, inaccessible } = payload;
+  // The check that decided to resolve a project ran against checkableValues (see useDeclaredProject.ts), which can
+  // differ from state.values by the time this dispatches; require an actual OAuth session here too, or a page-config
+  // fallback with no projectKey would otherwise pass the projectKey-mismatch check below and get a project bound in.
+  const isOAuthSession = Boolean(state.values?.oauth);
   const outsideSession =
     project !== null &&
     state.values?.projectKey !== undefined &&
     projectKeyFor(project.id) !== state.values.projectKey;
-  if (!project || outsideSession) {
+  if (!project || !isOAuthSession || outsideSession) {
     return {
       state: {
         ...state,
         declaredProject: null,
-        declaredProjectInaccessible: inaccessible || outsideSession,
+        declaredProjectInaccessible:
+          isOAuthSession && (inaccessible || outsideSession),
       },
       applied: false,
     };
@@ -174,40 +178,4 @@ export const switchEditingOn = (state: State): Transition => {
     },
     applied: true,
   };
-};
-
-const isSecondTolgeeInstance = (
-  state: State,
-  libData: LibConfig | null,
-  frameId: number | null
-): boolean =>
-  // The not-detected timeout dispatches a null config with no frame, and a repeat from the same frame is an update:
-  // only a second frame that itself carries a config counts as another instance.
-  Boolean(
-    libData &&
-      state.libConfig !== null &&
-      state.frameId !== null &&
-      frameId !== null &&
-      state.frameId !== frameId
-  );
-
-const pageValues = (libData: LibConfig | null): Values => ({
-  apiKey: libData?.config?.apiKey,
-  apiUrl: libData?.config?.apiUrl,
-  branch: libData?.config?.branch,
-});
-
-// An api-key session the worker cannot serve is not applied at all: it answers a page's request by the project the
-// origin record pins, so a session slot without one leaves the page's in-context tools dead.
-const withKeyProject = (
-  values: Values | null,
-  check: CredentialsCheck
-): Values | null => {
-  if (!values?.apiKey || values.projectKey) {
-    return values;
-  }
-  const projectId = keyProjectId(values.apiKey, check);
-  return projectId === undefined
-    ? null
-    : { ...values, projectId, projectKey: projectKeyFor(projectId) };
 };

@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  vi,
+} from 'vitest';
 
 const store = new Map<string, unknown>();
 const sent: { tabId: number; message: any }[] = [];
@@ -1329,16 +1337,26 @@ describe('background message handling', () => {
 });
 
 describe('OPEN_POPUP', () => {
-  const flush = () => new Promise((r) => setTimeout(r, 0));
+  const flush = () => vi.advanceTimersByTimeAsync(0);
   const send = (sender: object) =>
     messageListener({ type: 'OPEN_POPUP' }, sender, () => undefined);
+  // The focus-request cooldown (popupControl.ts) is per-tab real time: each test gets its own far-apart slice so
+  // a fresh trigger in one test is never throttled by a timestamp a previous test left behind for the same tab.
+  let clock = Date.now();
+  const pastCooldown = () => vi.setSystemTime((clock += 60_000));
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime((clock += 60_000));
     openPopup.mockReset();
     openPopup.mockResolvedValue(undefined);
     windowsCreate.mockReset().mockResolvedValue({ id: 99 });
     windowsGet.mockReset().mockRejectedValue(new Error('no such window'));
     windowsUpdate.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('opens the action popup and no window when the browser allows it (Chrome)', async () => {
@@ -1403,6 +1421,7 @@ describe('OPEN_POPUP', () => {
 
     send(REPEAT_TAB);
     await flush();
+    pastCooldown();
     send(REPEAT_TAB);
     await flush();
 
@@ -1420,10 +1439,27 @@ describe('OPEN_POPUP', () => {
 
     send(REOPEN_TAB);
     await flush();
+    pastCooldown();
     send(REOPEN_TAB);
     await flush();
 
     expect(windowsCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it('throttles a second focus request for the same tab within the cooldown', async () => {
+    const THROTTLE_TAB = {
+      url: 'https://page.example/app',
+      tab: { id: 423, url: 'https://page.example/app', windowId: 1 },
+    };
+    openPopup.mockRejectedValue(new Error('no user gesture'));
+
+    send(THROTTLE_TAB);
+    await flush();
+    send(THROTTLE_TAB);
+    await flush();
+
+    expect(windowsCreate).toHaveBeenCalledTimes(1);
+    expect(windowsUpdate).not.toHaveBeenCalled();
   });
 });
 

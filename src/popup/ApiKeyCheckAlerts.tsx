@@ -3,59 +3,19 @@ import {
   AlertTitle,
   Box,
   CircularProgress,
-  FormHelperText,
   Link,
   Typography,
 } from '@mui/material';
-import { ApiKeyCheck, isApiKeyValid } from './apiKeyCheck';
 import { ApiKeyRejectedAlert } from './ApiKeyRejectedAlert';
+import { API_KEY_HELP } from './ApiKeyHelper';
 import { keyAllowsEditing } from './apiKeyScreen';
-
-const API_KEY_HELP =
-  'https://docs.tolgee.io/platform/account_settings/api_keys_and_pat_tokens';
-
-export const ApiKeyHelper = ({
-  apiKeyCheck,
-  serverHost,
-}: {
-  apiKeyCheck: ApiKeyCheck;
-  serverHost: string;
-}) => {
-  const unreachable = apiKeyCheck === 'unreachable';
-  if (apiKeyCheck !== null && !unreachable) {
-    return null;
-  }
-  return (
-    <FormHelperText
-      error={unreachable}
-      sx={{ marginLeft: 0 }}
-      data-testid="api-key-check"
-    >
-      {unreachable ? (
-        `Could not reach ${serverHost}`
-      ) : (
-        <>
-          Where can I get an{' '}
-          <Link
-            href={API_KEY_HELP}
-            target="_blank"
-            rel="noreferrer"
-            underline="hover"
-          >
-            API key
-          </Link>
-          ?
-        </>
-      )}
-    </FormHelperText>
-  );
-};
+import { CredentialsCheck, isProjectInfo } from './popupState';
 
 export const ApiKeyCheckAlerts = ({
   apiKeyCheck,
   serverHost,
 }: {
-  apiKeyCheck: ApiKeyCheck;
+  apiKeyCheck: CredentialsCheck;
   serverHost: string;
 }) => (
   <>
@@ -84,7 +44,7 @@ export const ApiKeyCheckAlerts = ({
         </Link>
       </ApiKeyRejectedAlert>
     )}
-    {isApiKeyValid(apiKeyCheck) &&
+    {isProjectInfo(apiKeyCheck) &&
       (keyAllowsEditing(apiKeyCheck) ? (
         <Alert severity="success" data-testid="api-key-valid">
           <AlertTitle sx={{ marginBottom: 0 }}>

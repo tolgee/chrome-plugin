@@ -1,31 +1,18 @@
 import browser from 'webextension-polyfill';
 import { sameOrigin } from './url';
+import {
+  isApiKeyRecord,
+  isOAuthConnection,
+  OriginRecord,
+} from './originRecord';
 
-// The one storage.local[origin] record shape, covering both the api-key and OAuth forms a given origin can hold.
-export type OriginRecord = {
-  apiUrl?: string;
-  apiKey?: string;
-  branch?: string;
-  oauth?: boolean;
-  projectId?: number;
-  projectKey?: string;
-  siteKey?: string;
-};
+export type { OriginRecord };
+export { isApiKeyRecord, isOAuthConnection };
 
 export const loadOriginRecord = async (
   origin: string
 ): Promise<OriginRecord | undefined> =>
   (await browser.storage.local.get(origin))[origin] as OriginRecord | undefined;
-
-export const isOAuthConnection = (
-  m: OriginRecord | undefined
-): m is OriginRecord & { apiUrl: string } => Boolean(m?.oauth && m.apiUrl);
-
-// An api key entered in the popup: pinned to the key's own project.
-export const isApiKeyRecord = (
-  m: OriginRecord | undefined
-): m is OriginRecord & { apiUrl: string; apiKey: string; projectKey: string } =>
-  Boolean(m && !m.oauth && m.apiUrl && m.apiKey && m.projectKey);
 
 export type OriginConnection = {
   apiUrl: string;
@@ -127,7 +114,7 @@ export const isSessionReferencedByAnyOrigin = async (
 };
 
 // A stored connection means the origin *was* connected, not that its session is still live: it never expires on its own.
-export const loadOAuthConnection = async (
+export const loadConnectionForTeardown = async (
   origin: string
 ): Promise<{
   apiUrl: string;

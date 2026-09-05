@@ -9,6 +9,7 @@ import {
 } from '../fixtures/oauth';
 import {
   declareProject,
+  DEV_TOOLS,
   openTestapp,
   sessionItem,
   TITLE,
@@ -16,7 +17,6 @@ import {
 
 requireOAuthServer();
 
-const DEV_TOOLS = '#__tolgee_dev_tools';
 const MISSING_PROJECT_ID = 987654321;
 
 const collectRevokeCalls = (context: BrowserContext): string[] => {

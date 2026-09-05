@@ -20,6 +20,7 @@ export type CredentialsCheck =
   | null
   | 'loading'
   | 'invalid'
+  | 'unreachable'
   | ProjectInfo
   | OAuthUser;
 

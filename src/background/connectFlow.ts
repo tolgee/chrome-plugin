@@ -9,7 +9,7 @@ import { projectKeyFor } from '../oauth/sessionRules';
 import {
   clearConnection,
   isOAuthConnection,
-  loadOAuthConnection,
+  loadConnectionForTeardown,
   loadOriginRecord,
   storeOAuthConnection,
 } from '../oauth/connection';
@@ -21,12 +21,10 @@ import { acquireSession, endSessionIfUnreferenced } from './sessionLifecycle';
 
 export const connect = async (data: {
   apiUrl: string;
-  projectId: number;
+  projectId: number | undefined;
   tabId?: number;
   protocolVersion?: number;
 }): Promise<void> => {
-  // A signed-in page reads nothing but the session marker: an SDK that cannot send its requests through the worker
-  // would be left with a session it can do nothing with.
   if (!supportsProxy(data.protocolVersion)) {
     throw new Error('Tolgee: signing in needs a newer @tolgee/web on the page');
   }
@@ -114,20 +112,6 @@ const reassignOriginConnection = async (
   }
 };
 
-export const disconnect = async (data: { pageOrigin?: string }) => {
-  if (!data.pageOrigin) {
-    return;
-  }
-  const connection = await loadOAuthConnection(data.pageOrigin);
-  // The origin's connection goes first: a tab reloads as soon as it is told to clear, and the popup re-applies whatever
-  // OAUTH_SESSION_STATE still finds for the origin when the reloaded page handshakes.
-  await clearConnection(data.pageOrigin);
-  await deliverToOrigin(data.pageOrigin, { editing: null });
-  if (connection?.projectKey) {
-    await endSessionIfUnreferenced(connection.apiUrl, connection.projectKey);
-  }
-};
-
 const injectCredentials = async (
   tabId: number,
   data: PageCredentials & { pageOrigin: string }
@@ -138,4 +122,18 @@ const injectCredentials = async (
       data: { ...data, editing: null },
     })
     .catch(() => undefined);
+};
+
+export const disconnect = async (data: { pageOrigin?: string }) => {
+  if (!data.pageOrigin) {
+    return;
+  }
+  const connection = await loadConnectionForTeardown(data.pageOrigin);
+  // The origin's connection goes first: a tab reloads as soon as it is told to clear, and the popup re-applies whatever
+  // OAUTH_SESSION_STATE still finds for the origin when the reloaded page handshakes.
+  await clearConnection(data.pageOrigin);
+  await deliverToOrigin(data.pageOrigin, { editing: null });
+  if (connection?.projectKey) {
+    await endSessionIfUnreferenced(connection.apiUrl, connection.projectKey);
+  }
 };

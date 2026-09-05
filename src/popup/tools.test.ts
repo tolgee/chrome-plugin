@@ -7,6 +7,7 @@ import {
   canApplyOnEnter,
   compareValues,
   declaredProjectId,
+  isConnectedSession,
   isOAuth,
   pageCredentials,
   pageEditing,
@@ -64,6 +65,38 @@ describe('validateValues', () => {
   it('rejects null/undefined', () => {
     expect(validateValues(null)).toBeNull();
     expect(validateValues(undefined)).toBeNull();
+  });
+});
+
+describe('isConnectedSession', () => {
+  it('accepts an api key pinned to a project', () => {
+    expect(
+      isConnectedSession({
+        apiKey: 'tgpak_x',
+        apiUrl: 'https://app.tolgee.io',
+        projectKey: '7',
+      })
+    ).toBe(true);
+  });
+
+  it('rejects a pre-cut-over api-key record with no projectKey', () => {
+    expect(
+      isConnectedSession({
+        apiKey: 'tgpak_x',
+        apiUrl: 'https://app.tolgee.io',
+      })
+    ).toBe(false);
+  });
+
+  it('accepts a signed-in session without requiring a projectKey', () => {
+    expect(
+      isConnectedSession({ oauth: true, apiUrl: 'https://app.tolgee.io' })
+    ).toBe(true);
+  });
+
+  it('rejects null/undefined', () => {
+    expect(isConnectedSession(null)).toBe(false);
+    expect(isConnectedSession(undefined)).toBe(false);
   });
 });
 

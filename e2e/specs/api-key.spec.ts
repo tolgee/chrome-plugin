@@ -3,6 +3,7 @@ import {
   collectProjectRequests,
   collectWorkerProjectRequests,
   dialogAsksToSignIn,
+  editingSwitchInput,
   openInContextDialog,
   openTestapp,
   sessionItem,
@@ -39,10 +40,7 @@ test('connects with an API key, edits in context through the worker and removes 
   await expect(popup.getByTestId('account-name')).toHaveText('Project API key');
   await expect(popup.getByTestId('account-detail')).toContainText(host);
   await expect(popup.getByTestId('project-link')).toHaveText(app.projectName);
-  await expect(
-    popup.getByTestId('editing-switch').locator('input')
-  ).toBeChecked();
-  // The page is told the kind of session and the project; the key stays in the worker.
+  await expect(editingSwitchInput(popup)).toBeChecked();
   expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
   expect(await sessionItem(page, '__tolgee_session')).toBe('apiKey');
   expect(await sessionItem(page, '__tolgee_projectId')).toBe(
@@ -70,7 +68,6 @@ test('connects with an API key, edits in context through the worker and removes 
   }
   await page.keyboard.press('Escape');
 
-  // A popup opened now must not take the connection for a key from the site's code.
   await popup.reload();
   await expect(popup.getByTestId('connection-summary')).toHaveText(
     `You're connected with a project API key. Edits you make on this page are saved to ${app.projectName} in Tolgee.`
@@ -87,6 +84,5 @@ test('connects with an API key, edits in context through the worker and removes 
     timeout: 30_000,
   });
   expect(await sessionItem(page, '__tolgee_session')).toBeNull();
-  // A page without a key of its own has nothing to edit with once the extension's key is gone.
   expect(await dialogAsksToSignIn(page)).toBe(true);
 });

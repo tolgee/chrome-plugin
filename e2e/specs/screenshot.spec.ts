@@ -3,6 +3,8 @@ import { apiAs } from '../fixtures/api';
 import { expect, type Page, test, type Worker } from '../fixtures/extension';
 import { collectWorkerRequests, signInThroughPopup } from '../fixtures/oauth';
 import {
+  connectWithApiKey,
+  DEV_TOOLS,
   IN_CONTEXT_DIALOG_TEXT,
   openInContextDialog,
   openTestapp,
@@ -21,7 +23,6 @@ const TWO_BY_TWO_PNG = Buffer.from(
 
 // The key behind the testapp's title (see importKeys in setup/seed.ts); the dialog opened by alt+clicking it.
 const KEY_NAME = 'app-title';
-const DEV_TOOLS = '#__tolgee_dev_tools';
 const SCOPES_WITHOUT_UPLOAD = API_KEY_SCOPES.filter(
   (scope) => scope !== 'screenshots.upload' && scope !== 'screenshots.delete'
 );
@@ -139,32 +140,20 @@ const collectUploads = (page: Page): Request[] => {
   return uploads;
 };
 
-// The MUI modal marks the dev-tools root aria-hidden, which hides its content from role queries; attribute selectors
-// are used instead.
 const takeScreenshotButton = (page: Page) =>
-  page.locator(DEV_TOOLS).locator('button[aria-label="Take screenshot"]');
+  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-take"]');
 
 const addImageButton = (page: Page) =>
-  page.locator(DEV_TOOLS).locator('button[aria-label="Add image"]');
+  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-add"]');
 
 const galleryThumbnails = (page: Page) =>
-  page.locator(DEV_TOOLS).locator('[aria-label="Screenshot"]');
+  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-thumbnail"]');
 
 const saveButton = (page: Page) =>
   page.locator(DEV_TOOLS).locator('[data-cy="key-form-submit"]');
 
 const dialogAlert = (page: Page) =>
   page.locator(DEV_TOOLS).locator('[role="alert"]');
-
-const connectWithApiKey = async (popup: Page, page: Page, apiKey: string) => {
-  await popup.getByTestId('use-api-key').click();
-  await popup.getByTestId('api-key-input').fill(apiKey);
-  await expect(popup.getByTestId('connect-with-api-key')).toBeEnabled();
-  const reloaded = page.waitForEvent('load');
-  await popup.getByTestId('connect-with-api-key').click();
-  await reloaded;
-  await expect(popup.getByTestId('connected-panel')).toBeVisible();
-};
 
 type Credential = 'api-key' | 'oauth';
 
@@ -196,7 +185,6 @@ const takeScreenshotAndCheckHops = async (
   expect(captured[0].dataUrl).toMatch(/^data:image\/(jpeg|png);base64,/);
 
   const messages = await screenshotMessages(page);
-  // The image never crosses to the page: it only hears that the capture is done.
   expect(messages.taken).toEqual([]);
   expect(messages.captured).toHaveLength(1);
   expect(JSON.parse(messages.captured[0])).toEqual({
@@ -358,7 +346,6 @@ test('reports the same image size and key positions with an API key and with an 
   await popup.getByTestId('sign-out').click();
   await reloaded;
   await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
-  // Removing a key leaves the popup on the API-key screen; the OAuth sign-in lives behind its back link.
   await popup.getByTestId('all-connection-options').click();
   await signInThroughPopup({
     popup,
@@ -450,7 +437,7 @@ test('offers no screenshot capture on a key without the upload scope', async ({
 
   const gallery = page
     .locator(DEV_TOOLS)
-    .getByText('There are no screenshots.');
+    .locator('[data-cy="screenshot-empty"]');
   await expect(gallery).toBeVisible();
   await expect(gallery).not.toContainText('camera icon');
   await expect(takeScreenshotButton(page)).toHaveCount(0);

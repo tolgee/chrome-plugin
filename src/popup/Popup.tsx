@@ -10,16 +10,13 @@ import { httpDisplayUrl, isHttpUrl } from '../oauth/url';
 import { sdkTooOldFor } from './delivery';
 import { serverGearToggled, serverPanelOpen } from './apiKeyScreen';
 import { ConnectedPanel } from './ConnectedPanel';
-import { LoginTab } from './LoginTab';
+import { SignInScreen } from './SignInScreen';
 import { useOAuthConnect } from './useOAuthConnect';
 import { useApiKeyConnect } from './useApiKeyConnect';
 import { useDisconnect } from './useDisconnect';
 import { connectedPanelProps } from './connectedPanelProps';
-import { ApiKeyTab } from './ApiKeyTab';
-import { PopupFrame } from './PopupFrame';
-import { ServerPanel } from './ServerPanel';
-import { statusScreen } from './statusScreen';
-import { API_KEY_TITLE, PLUGIN_TITLE } from './connectionSummary';
+import { StatusScreen } from './StatusScreen';
+import { statusFor } from './status';
 import { keyProjectPending } from './popupState';
 
 const DEFAULT_SERVER = 'https://app.tolgee.io';
@@ -100,9 +97,9 @@ export const Popup = () => {
     dispatch({ type: 'APPLY_VALUES' });
   };
 
-  const status = statusScreen({ error, tolgeePresent, appliedValues });
+  const status = statusFor({ error, tolgeePresent, appliedValues });
   if (status) {
-    return status;
+    return <StatusScreen status={status} error={error} />;
   }
 
   const sdkTooOld = sdkTooOldFor({
@@ -130,11 +127,11 @@ export const Popup = () => {
           libConfig,
         })}
         serverHost={serverHost}
-        credentialRejected={credentialsCheck === 'invalid'}
+        credentialsCheckInvalid={credentialsCheck === 'invalid'}
         projectInaccessible={declaredProjectInaccessible}
         declaredProjectId={declaredId}
         sdkTooOld={sdkTooOld}
-        checkingKey={keyProjectPending(activeValues, credentialsCheck)}
+        keyProjectPending={keyProjectPending(activeValues, credentialsCheck)}
         editingOn={Boolean(appliedValues)}
         onToggleEditing={handleToggleEditing}
         onChangeBranch={handleChangeBranch}
@@ -142,60 +139,40 @@ export const Popup = () => {
         onSignInAgain={() =>
           signInAgain(activeValues?.apiUrl || DEFAULT_SERVER, declaredId)
         }
-        onUseAnotherKey={apiKeyConnect.useAnotherKey}
+        onUseAnotherKey={apiKeyConnect.switchToAnotherKey}
       />
     );
   }
   return (
-    <PopupFrame
-      title={tab === 'apiKey' ? API_KEY_TITLE : PLUGIN_TITLE}
-      testId="sign-in-screen"
-      serverSettings={{
-        open: serverOpen,
-        onToggle: () =>
-          setServerToggled(serverGearToggled(serverOpen, serverInvalid)),
-        panel: (
-          <ServerPanel
-            value={values?.apiUrl ?? ''}
-            placeholder={DEFAULT_SERVER}
-            invalid={serverInvalid}
-            onChange={(apiUrl) =>
-              dispatch({ type: 'CHANGE_VALUES', payload: { apiUrl } })
-            }
-            onKeyDown={handleKeyDown}
-          />
-        ),
-      }}
-    >
-      {tab === 'login' && (
-        <LoginTab
-          projectDetected={declaredId !== undefined}
-          sdkTooOld={sdkTooOld}
-          serverHost={serverHost}
-          serverLink={serverLink}
-          serverInvalid={serverInvalid}
-          connecting={connecting}
-          connectError={connectError ?? connectRefusal}
-          onDismissRefusal={dismissRefusal}
-          onConnect={() => connect(server, declaredId)}
-          onUseApiKey={() => setTab('apiKey')}
-        />
-      )}
-      {tab === 'apiKey' && (
-        <ApiKeyTab
-          serverHost={serverHost}
-          serverLink={serverLink}
-          apiKey={values?.apiKey || ''}
-          onChangeApiKey={(apiKey) =>
-            dispatch({ type: 'CHANGE_VALUES', payload: { apiKey } })
-          }
-          onKeyDown={handleKeyDown}
-          apiKeyCheck={apiKeyCheck}
-          canApply={canApplyApiKey}
-          onApply={apiKeyConnect.applyApiKey}
-          onBack={() => setTab('login')}
-        />
-      )}
-    </PopupFrame>
+    <SignInScreen
+      tab={tab}
+      onChangeTab={setTab}
+      serverOpen={serverOpen}
+      onToggleServer={() =>
+        setServerToggled(serverGearToggled(serverOpen, serverInvalid))
+      }
+      serverInvalid={serverInvalid}
+      serverValue={values?.apiUrl ?? ''}
+      defaultServer={DEFAULT_SERVER}
+      onChangeServer={(apiUrl) =>
+        dispatch({ type: 'CHANGE_VALUES', payload: { apiUrl } })
+      }
+      onKeyDown={handleKeyDown}
+      declaredId={declaredId}
+      sdkTooOld={sdkTooOld}
+      serverHost={serverHost}
+      serverLink={serverLink}
+      connecting={connecting}
+      connectError={connectError ?? connectRefusal}
+      onDismissRefusal={dismissRefusal}
+      onConnect={() => connect(server, declaredId)}
+      apiKey={values?.apiKey || ''}
+      onChangeApiKey={(apiKey) =>
+        dispatch({ type: 'CHANGE_VALUES', payload: { apiKey } })
+      }
+      apiKeyCheck={apiKeyCheck}
+      canApplyApiKey={canApplyApiKey}
+      onApplyApiKey={apiKeyConnect.applyApiKey}
+    />
   );
 };

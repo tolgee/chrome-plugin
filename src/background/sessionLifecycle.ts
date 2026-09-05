@@ -59,7 +59,6 @@ const loginVerified = async (
 
 type ProbeVerdict = 'not_rejected' | 'token_unusable' | 'project_inaccessible';
 
-// 'not_rejected' covers a reachable project as well as an inconclusive answer (5xx, network failure, timeout).
 const probeProject = async (
   apiUrl: string,
   projectId: number,
@@ -89,8 +88,6 @@ const probeProject = async (
   }
 };
 
-// A session can be shared by more than one origin on the same backend, so it is only cleared, and only then
-// revoked server-side, once no origin's connection still references it.
 export const endSessionIfUnreferenced = async (
   apiUrl: string,
   projectKey: string

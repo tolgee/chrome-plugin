@@ -30,7 +30,7 @@ vi.mock('webextension-polyfill', () => ({
   },
 }));
 
-import { syncToStorageAndPage } from './deliverValues';
+import { redeliverToPage, syncToStorageAndPage } from './deliverValues';
 
 const ORIGIN = 'https://site.example';
 const session = {
@@ -126,5 +126,38 @@ describe('syncToStorageAndPage', () => {
     for (const { message } of sent) {
       expect(message.data).toEqual({ editing: null, pageOrigin: ORIGIN });
     }
+  });
+});
+
+describe('redeliverToPage', () => {
+  beforeEach(() => {
+    store.clear();
+    sent.length = 0;
+  });
+
+  it('leaves the editing slot alone', async () => {
+    await redeliverToPage(session, {
+      ...sdk,
+      config: { apiUrl: session.apiUrl, apiKey: '' },
+    });
+
+    expect(sent).toEqual([
+      {
+        tabId: 1,
+        message: {
+          type: 'SET_CREDENTIALS',
+          data: {
+            apiKey: undefined,
+            apiUrl: session.apiUrl,
+            branch: undefined,
+            session: 'apiKey',
+            projectId: 7,
+            projectKey: '7',
+            pageOrigin: ORIGIN,
+          },
+        },
+      },
+    ]);
+    expect(sent[0].message.data).not.toHaveProperty('editing');
   });
 });

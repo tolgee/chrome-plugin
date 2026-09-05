@@ -24,7 +24,7 @@ vi.mock('webextension-polyfill', () => ({
 import {
   clearConnection,
   isSessionReferencedByAnyOrigin,
-  loadOAuthConnection,
+  loadConnectionForTeardown,
   loadOriginConnection,
   storeOAuthConnection,
   updateConnectionHints,
@@ -39,7 +39,7 @@ describe('OAuth connection', () => {
       projectId: 2,
       projectKey: '2',
     });
-    expect(await loadOAuthConnection('https://site.example')).toEqual({
+    expect(await loadConnectionForTeardown('https://site.example')).toEqual({
       apiUrl: 'https://api',
       projectId: 2,
       projectKey: '2',
@@ -47,12 +47,12 @@ describe('OAuth connection', () => {
   });
 
   it('returns null when no connection exists for the origin', async () => {
-    expect(await loadOAuthConnection('https://none.example')).toBeNull();
+    expect(await loadConnectionForTeardown('https://none.example')).toBeNull();
   });
 
   it('returns null for a non-oauth record (e.g. an api-key entry)', async () => {
     store.set('https://k.example', { apiUrl: 'https://api', apiKey: 'x' });
-    expect(await loadOAuthConnection('https://k.example')).toBeNull();
+    expect(await loadConnectionForTeardown('https://k.example')).toBeNull();
   });
 
   it('updateConnectionHints updates only projectId and branch, leaving projectKey (the session identity) untouched', async () => {
@@ -67,7 +67,7 @@ describe('OAuth connection', () => {
       branch: 'feature',
     });
 
-    expect(await loadOAuthConnection('https://site.example')).toEqual({
+    expect(await loadConnectionForTeardown('https://site.example')).toEqual({
       apiUrl: 'https://api',
       projectId: 7,
       projectKey: '5',
@@ -81,7 +81,7 @@ describe('OAuth connection', () => {
     });
 
     expect(
-      await loadOAuthConnection('https://never-connected.example')
+      await loadConnectionForTeardown('https://never-connected.example')
     ).toBeNull();
   });
 
@@ -94,7 +94,7 @@ describe('OAuth connection', () => {
 
     await clearConnection('https://site.example');
 
-    expect(await loadOAuthConnection('https://site.example')).toBeNull();
+    expect(await loadConnectionForTeardown('https://site.example')).toBeNull();
   });
 });
 

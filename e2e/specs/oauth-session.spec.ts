@@ -12,8 +12,10 @@ import {
 import {
   collectProjectRequests,
   declareProject,
+  DEV_TOOLS,
   dialogAsksToSignIn,
   dialogSaysEditingOff,
+  editingSwitchInput,
   IN_CONTEXT_DIALOG_TEXT,
   openTestapp,
   responseStatuses,
@@ -23,8 +25,6 @@ import {
 } from '../fixtures/testapp';
 
 requireOAuthServer();
-
-const DEV_TOOLS = '#__tolgee_dev_tools';
 
 test('offers to sign in again once the session was revoked on the server', async ({
   page,
@@ -96,9 +96,7 @@ test('offers to sign in again once the session was revoked on the server', async
     await expect(popup.getByTestId('connected-panel')).toBeVisible();
     await expect(popup.getByTestId('session-ended')).toHaveCount(0);
     await expect(popup.getByTestId('project-link')).toHaveText(app.projectName);
-    await expect(
-      popup.getByTestId('editing-switch').locator('input')
-    ).toBeChecked();
+    await expect(editingSwitchInput(popup)).toBeChecked();
     const [renewed] = await storedOAuthSessions(worker);
     expect(renewed.accessToken).not.toBe(session.accessToken);
     await expect
@@ -199,14 +197,11 @@ test('ends the session in every tab of the origin on sign out', async ({
     await expect(secondPopup.getByTestId('project-link')).toHaveText(
       app.projectName
     );
-    const secondSwitch = secondPopup
-      .getByTestId('editing-switch')
-      .locator('input');
+    const secondSwitch = editingSwitchInput(secondPopup);
     await expect(secondSwitch).not.toBeChecked();
     await expect(secondPopup.getByTestId('editing-hint')).toHaveText(
       'You stay signed in. Turn it on to edit here.'
     );
-    // Nobody switched editing off here: the popup restoring the session must not mark the page as such.
     await expect(secondPopup.getByTestId('project-link')).toHaveText(
       app.projectName
     );
@@ -263,7 +258,7 @@ test('tells the dialog editing is switched off, and asks to sign in again once s
   await expect(popup.getByTestId('project-link')).toHaveText(app.projectName);
 
   await test.step('switching editing off keeps alt+click working, with the dialog explaining the switch', async () => {
-    const editingSwitch = popup.getByTestId('editing-switch').locator('input');
+    const editingSwitch = editingSwitchInput(popup);
     const reloaded = page.waitForEvent('load');
     await editingSwitch.click();
     await reloaded;
@@ -278,9 +273,7 @@ test('tells the dialog editing is switched off, and asks to sign in again once s
     popup = await openPopup(page);
     await expect(popup.getByTestId('connected-panel')).toBeVisible();
     await expect(popup.getByTestId('project-link')).toHaveText(app.projectName);
-    await expect(
-      popup.getByTestId('editing-switch').locator('input')
-    ).not.toBeChecked();
+    await expect(editingSwitchInput(popup)).not.toBeChecked();
     expect(await sessionItem(page, '__tolgee_editing')).toBe('off');
     expect(await dialogSaysEditingOff(page)).toBe(true);
   });
@@ -461,7 +454,5 @@ test('shows the sdk-too-old alert and disables editing for an existing session o
   await expect(popup.getByTestId('sdk-too-old')).toContainText(
     'Sign-in needs a newer Tolgee SDK'
   );
-  await expect(
-    popup.getByTestId('editing-switch').locator('input')
-  ).toBeDisabled();
+  await expect(editingSwitchInput(popup)).toBeDisabled();
 });

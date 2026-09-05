@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { normalizeUrl } from '../oauth/url';
-import { ApiKeyCheck } from './apiKeyCheck';
+import { CredentialsCheck } from './popupState';
 import { checkApiKey } from './credentialsCheck';
 import { isInconclusiveSessionCheckError } from './proxyFetch';
 
@@ -10,8 +10,8 @@ export const useApiKeyCheck = (
   apiUrl: string | undefined,
   apiKey: string | undefined,
   enabled: boolean
-): ApiKeyCheck => {
-  const [check, setCheck] = useState<ApiKeyCheck>(null);
+): CredentialsCheck => {
+  const [check, setCheck] = useState<CredentialsCheck>(null);
 
   useEffect(() => {
     const url = normalizeUrl(apiUrl || '');
@@ -24,9 +24,9 @@ export const useApiKeyCheck = (
     setCheck('loading');
     const timer = setTimeout(() => {
       checkApiKey({ apiUrl: url, apiKey })
-        .then(({ projectName, projectId, scopes }) => {
+        .then((result) => {
           if (!cancelled) {
-            setCheck({ projectName, projectId, scopes });
+            setCheck(result);
           }
         })
         .catch((e) => {

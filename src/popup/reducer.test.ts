@@ -4,6 +4,7 @@ import { createReducer, initialState } from './reducer';
 import {
   Action,
   branchableProjectId,
+  keyProjectId,
   keyProjectPending,
   ProjectInfo,
   State,
@@ -293,8 +294,6 @@ describe('detector reducer', () => {
     });
   });
 
-  // The worker answers a page's request by the project its origin record pins, so a session that reaches the page
-  // without one leaves the in-context tools dead while the popup says editing is on.
   describe('pinning an api-key session to a project', () => {
     const check: ProjectInfo = {
       projectName: 'Demo',
@@ -399,6 +398,19 @@ describe('detector reducer', () => {
           null
         )
       ).toBe(false);
+    });
+
+    it('keyProjectId takes the project encoded in the key over the one the check reported', () => {
+      expect(keyProjectId(KEY_FOR_PROJECT_1, check)).toBe(1);
+    });
+
+    it('keyProjectId falls back to the check for a key that encodes none', () => {
+      expect(keyProjectId(LEGACY_KEY, check)).toBe(9);
+    });
+
+    it('keyProjectId knows no project while the key is unverified', () => {
+      expect(keyProjectId(LEGACY_KEY, 'loading')).toBeUndefined();
+      expect(keyProjectId(undefined, null)).toBeUndefined();
     });
   });
 
@@ -762,6 +774,27 @@ describe('detector reducer', () => {
       expect(next.declaredProjectInaccessible).toBe(true);
       expect(next.values?.projectId).toBeUndefined();
       expect(next.appliedValues).toEqual(applied.appliedValues);
+      expect(apply).not.toHaveBeenCalled();
+    });
+
+    it('never binds a resolved project into values that are no longer an OAuth session by the time it dispatches', () => {
+      // The RESOLVE_PROJECT check ran against an earlier checkableValues snapshot; state.values has since become a
+      // page-config fallback (no oauth flag, no projectKey), which must not pass the projectKey-mismatch check.
+      const pageConfigState: State = {
+        ...connected,
+        values: { apiUrl: 'https://app.tolgee.io', projectId: 3 },
+      };
+      const next = reduce(pageConfigState, {
+        type: 'RESOLVE_PROJECT',
+        payload: {
+          project: { id: 3, name: 'Demo', branchingEnabled: false },
+          inaccessible: false,
+        },
+      });
+      expect(next.declaredProject).toBeNull();
+      expect(next.declaredProjectInaccessible).toBe(false);
+      expect(next.values).toEqual(pageConfigState.values);
+      expect(next.storedValues).toEqual(pageConfigState.storedValues);
       expect(apply).not.toHaveBeenCalled();
     });
   });

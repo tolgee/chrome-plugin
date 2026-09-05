@@ -1,17 +1,17 @@
-import { CredentialDelivery, LibConfig } from '../types';
+import { LibConfig } from '../types';
 import {
+  appliedValuesFrom,
+  credentialDelivery,
+  isConnectedSession,
   PageAppliedCredentials,
   pageCredentials,
   sdkSupportsProxy,
   Values,
 } from './tools';
 
-export const credentialDelivery = (
-  libConfig: LibConfig | null | undefined
-): CredentialDelivery => (sdkSupportsProxy(libConfig) ? 'proxy' : 'page');
+export { credentialDelivery };
 
-// Signing in routes the page's requests through the worker, so the sign-in screen is gated on that protocol whatever
-// the form holds; a key already in effect is handed to an older SDK instead, which uses it directly.
+// See CredentialDelivery in types.ts for the protocol-2 requirement this gates on.
 export const sdkTooOldFor = ({
   libConfig,
   hasSession,
@@ -27,11 +27,25 @@ export const sdkTooOldFor = ({
   !siteKeyScreen &&
   !(hasSession && activeValues?.apiKey);
 
-// The page keeps using whatever its slots hold, so a session applied to an SDK that has since been upgraded past the
-// proxy protocol (or downgraded below it) has to be written again to reach the page the way this SDK expects it.
 export const deliveryChanged = (
   page: PageAppliedCredentials | null | undefined,
   applied: Values | null,
   libConfig: LibConfig | null | undefined
 ): boolean =>
   Boolean(page?.apiKey) !== Boolean(pageCredentials(applied, libConfig).apiKey);
+
+export type ResolvedAppliedValues = { applied: Values; redeliver: boolean };
+
+// Null when the page's slots don't add up to a session the worker will actually serve (see isConnectedSession) -
+// the caller must leave the page's existing delivery alone rather than redeliver on an unverifiable record.
+export const resolveAppliedValues = (
+  page: PageAppliedCredentials | null | undefined,
+  storedForApiKey: Values | null,
+  libConfig: LibConfig | null | undefined
+): ResolvedAppliedValues | null => {
+  const applied = appliedValuesFrom(page, storedForApiKey);
+  if (!isConnectedSession(applied)) {
+    return null;
+  }
+  return { applied, redeliver: deliveryChanged(page, applied, libConfig) };
+};

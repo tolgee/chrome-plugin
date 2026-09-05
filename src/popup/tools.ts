@@ -1,7 +1,8 @@
-import { LibConfig } from '../types';
+import { CredentialDelivery, LibConfig } from '../types';
 import { sameOrigin } from '../oauth/url';
 import { SessionKind, supportsProxy } from '../protocol';
 import { PageCredentials } from '../content/credentialSink';
+import { isApiKeyRecord } from '../oauth/originRecord';
 import { siteKeyFromCode } from './apiKeyScreen';
 
 export type Values = {
@@ -16,7 +17,6 @@ export type Values = {
   siteKey?: string;
 };
 
-// Whether the SDK on the page can send its Tolgee API requests through the worker.
 export const sdkSupportsProxy = (libConfig?: LibConfig | null): boolean =>
   supportsProxy(libConfig?.protocolVersion);
 
@@ -24,6 +24,13 @@ export const sessionKindOfValues = (
   values?: Values | null
 ): SessionKind | undefined =>
   isOAuth(values) ? 'oauth' : values?.apiKey ? 'apiKey' : undefined;
+
+// The one formula for where an api key ends up: the worker if the SDK can be proxied, the page's own slot otherwise.
+export const credentialDelivery = (
+  libConfig: LibConfig | null | undefined,
+  hasApiKey: boolean
+): CredentialDelivery =>
+  hasApiKey && !sdkSupportsProxy(libConfig) ? 'page' : 'proxy';
 
 export const pageCredentials = (
   values: Values | null | undefined,
@@ -33,7 +40,8 @@ export const pageCredentials = (
   if (!valid) {
     return {};
   }
-  const toPage = Boolean(valid.apiKey) && !sdkSupportsProxy(libConfig);
+  const toPage =
+    credentialDelivery(libConfig, Boolean(valid.apiKey)) === 'page';
   return {
     apiKey: toPage ? valid.apiKey : undefined,
     apiUrl: valid.apiUrl,
@@ -98,6 +106,14 @@ export const validateValues = (values?: Values | null) => {
   return null;
 };
 
+// An api-key record also needs a projectKey to count as a connected session: the worker refuses to proxy for one
+// without a project pin (see oauth/connection.ts isApiKeyRecord), so restoring it here would show "connected" for a
+// session nothing will actually serve. A record written before projectKey existed (pre-1.9.0) falls through this.
+export const isConnectedSession = (values?: Values | null): boolean =>
+  values?.oauth
+    ? Boolean(validateValues(values))
+    : isApiKeyRecord(values ?? undefined);
+
 export const isOAuth = (values?: Values | null) =>
   Boolean(values?.oauth && !values?.apiKey);
 
@@ -158,8 +174,6 @@ export const pageEditing = ({
       ? 'off'
       : undefined;
 
-// With a session, the site key is whatever the record remembers (the stored copy first: the page's own copy of the
-// applied values never carries it); without one it is the key the page's own code ships.
 export const siteKeyOf = (
   slots: SessionSlots,
   libConfig: LibConfig | null | undefined

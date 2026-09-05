@@ -3,6 +3,7 @@ import { expect, type Page, test, type Worker } from '../fixtures/extension';
 import {
   dialogAsksToSignIn,
   dialogSaysEditingOff,
+  editingSwitchInput,
   openTestapp,
   sessionItem,
 } from '../fixtures/testapp';
@@ -53,7 +54,7 @@ test('shows the connection and turns in-context editing off and on', async ({
     'target',
     '_blank'
   );
-  const editingSwitch = popup.getByTestId('editing-switch').locator('input');
+  const editingSwitch = editingSwitchInput(popup);
   await expect(editingSwitch).toBeChecked();
   await expect(popup.getByTestId('editing-title')).toHaveText(
     'In-context editing on this page'
@@ -117,7 +118,7 @@ test('removes the key while editing is off', async ({
     projectKey: String(app.projectId),
   });
 
-  const editingSwitch = popup.getByTestId('editing-switch').locator('input');
+  const editingSwitch = editingSwitchInput(popup);
   const reloaded = page.waitForEvent('load');
   await editingSwitch.click();
   await reloaded;

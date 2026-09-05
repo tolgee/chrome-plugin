@@ -1,10 +1,11 @@
 import React from 'react';
 import { Box, Button, FormControl, Link, Typography } from '@mui/material';
 
-import { ApiKeyCheck, isApiKeyValid } from './apiKeyCheck';
 import { connectButtonLabel } from './apiKeyScreen';
 import { ApiKeyField } from './ApiKeyField';
-import { ApiKeyCheckAlerts, ApiKeyHelper } from './ApiKeyCheckAlerts';
+import { ApiKeyCheckAlerts } from './ApiKeyCheckAlerts';
+import { ApiKeyHelper } from './ApiKeyHelper';
+import { CredentialsCheck, isProjectInfo } from './popupState';
 
 type Props = {
   serverHost: string;
@@ -12,7 +13,7 @@ type Props = {
   apiKey: string;
   onChangeApiKey: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
-  apiKeyCheck: ApiKeyCheck;
+  apiKeyCheck: CredentialsCheck;
   canApply: boolean;
   onApply: () => void;
   onBack: () => void;
@@ -46,7 +47,7 @@ export const ApiKeyTab = ({
     <FormControl fullWidth>
       <ApiKeyField
         apiKey={apiKey}
-        verified={isApiKeyValid(apiKeyCheck)}
+        verified={isProjectInfo(apiKeyCheck)}
         invalid={apiKeyCheck === 'invalid'}
         onChange={onChangeApiKey}
         onKeyDown={onKeyDown}

@@ -72,7 +72,6 @@ test('disables Connect while the server field holds no usable URL', async ({
   await expect(popup.getByTestId('server-host')).toHaveText('not a url');
   await expect(popup.getByTestId('connect-oauth')).toBeDisabled();
 
-  // The panel cannot be closed on a value the extension could not connect to.
   await popup.getByTestId('server-settings').click();
   await expect(popup.getByTestId('server-input')).toBeVisible();
   await expect(popup.getByTestId('server-settings')).toHaveAttribute(

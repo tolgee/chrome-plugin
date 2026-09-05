@@ -4,12 +4,13 @@ import { isWebPageSender, MessageSender } from './sender';
 import {
   locateSession,
   performWithRefresh,
-  refreshGate,
+  authorizeSession,
 } from './proxyCredential';
-import { PROXY_BUDGET_MS } from '../protocol';
+import { PROXY_BUDGET_MS, TOLGEE_SCREENSHOT_CAPTURED } from '../protocol';
 import { failure, ProxyResult, ScreenshotUploadData } from './proxyTypes';
+import { rememberUploadIfSuccessful } from './uploadedImages';
 
-export const handleScreenshotUpload = async (
+export const captureAndUploadScreenshot = async (
   data: ScreenshotUploadData,
   sender: MessageSender
 ): Promise<ProxyResult & { width?: number; height?: number }> => {
@@ -26,7 +27,7 @@ export const handleScreenshotUpload = async (
   if ('error' in located) {
     return located;
   }
-  const gate = await refreshGate(located);
+  const gate = await authorizeSession(located);
   if ('error' in gate) {
     return gate;
   }
@@ -49,7 +50,11 @@ export const handleScreenshotUpload = async (
     { method: 'POST', headers: {}, body },
     deadline
   );
-  return 'response' in result ? { ...result, ...captured.size } : result;
+  if ('response' in result) {
+    rememberUploadIfSuccessful(gate.connection, result.response);
+    return { ...result, ...captured.size };
+  }
+  return result;
 };
 
 const notActiveTab = () =>
@@ -81,7 +86,7 @@ const notifyCaptured = (
   browser.tabs
     .sendMessage(
       sender.tab.id!,
-      { type: 'TOLGEE_SCREENSHOT_CAPTURED', data: { id } },
+      { type: TOLGEE_SCREENSHOT_CAPTURED, data: { id } },
       { frameId: sender.frameId }
     )
     .catch(() => undefined);

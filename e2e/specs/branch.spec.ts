@@ -1,5 +1,9 @@
 import { expect, test } from '../fixtures/extension';
-import { openTestapp, sessionItem } from '../fixtures/testapp';
+import {
+  editingSwitchInput,
+  openTestapp,
+  sessionItem,
+} from '../fixtures/testapp';
 import { readState, type RunState } from '../setup/state';
 
 // The platform gates branching behind an enterprise feature. Its own e2e suite enables features through this debug
@@ -147,7 +151,7 @@ test('changes the branch from the compact selector in the branch row', async ({
   await expect(popup.getByTestId('branch-value')).toHaveText(DEFAULT_BRANCH);
 
   // The pencil follows the editing switch: nothing to change while the page holds no credentials.
-  const editingSwitch = popup.getByTestId('editing-switch').locator('input');
+  const editingSwitch = editingSwitchInput(popup);
   const editingOff = page.waitForEvent('load');
   await editingSwitch.click();
   await editingOff;
