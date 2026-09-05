@@ -54,7 +54,7 @@ export const ApiKeyCheckAlerts = ({
       ) : (
         <Alert severity="warning" data-testid="api-key-view-only">
           <AlertTitle>This key can only view strings</AlertTitle>
-          You can look up strings on this page but not change them.
+          You can look up strings on this page but not edit them.
         </Alert>
       ))}
   </>

@@ -3,11 +3,12 @@ import { ScreenshotMaker } from './ScreenshotMaker';
 import { isWebPageSender, MessageSender } from './sender';
 import {
   locateSession,
-  performWithRefresh,
+  sendAuthorizedRequest,
   authorizeSession,
 } from './proxyCredential';
 import { PROXY_BUDGET_MS, TOLGEE_SCREENSHOT_CAPTURED } from '../protocol';
 import { failure, ProxyResult, ScreenshotUploadData } from './proxyTypes';
+import { IMAGE_UPLOAD_PATH } from './proxyRequest';
 import { rememberUploadIfSuccessful } from './uploadedImages';
 
 export const captureAndUploadScreenshot = async (
@@ -27,9 +28,9 @@ export const captureAndUploadScreenshot = async (
   if ('error' in located) {
     return located;
   }
-  const gate = await authorizeSession(located);
-  if ('error' in gate) {
-    return gate;
+  const authorized = await authorizeSession(located);
+  if ('error' in authorized) {
+    return authorized;
   }
   // Checked again here: the refresh above can take seconds, long enough for the user to switch tabs.
   if (!(await isActiveTab(sender.tab.id))) {
@@ -44,14 +45,14 @@ export const captureAndUploadScreenshot = async (
   notifyCaptured(sender, data.id);
   const body = new FormData();
   body.append('image', captured.image);
-  const result = await performWithRefresh(
-    gate,
-    '/v2/image-upload',
+  const result = await sendAuthorizedRequest(
+    authorized,
+    IMAGE_UPLOAD_PATH,
     { method: 'POST', headers: {}, body },
     deadline
   );
   if ('response' in result) {
-    await rememberUploadIfSuccessful(gate.connection, result.response);
+    await rememberUploadIfSuccessful(authorized.connection, result.response);
     return { ...result, ...captured.size };
   }
   return result;

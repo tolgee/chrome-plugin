@@ -39,7 +39,7 @@ export type LocatedSession = { connection: Connection } & (
   | { kind: 'apiKey'; apiKey: string }
 );
 
-export type Gate = LocatedSession & { credential: Credential };
+export type AuthorizedSession = LocatedSession & { credential: Credential };
 
 export type AuthorizedRequest = {
   method: string;

@@ -10,7 +10,7 @@ import {
   isProjectInfo,
   ProjectOption,
 } from './popupState';
-import { Session } from './connectionSummary';
+import { Session } from './sessionCopy';
 
 type Args = {
   isOauthSession: boolean;
@@ -34,9 +34,12 @@ export const connectedPanelProps = ({
   libConfig,
 }: Args) => {
   const oauthUser = isOAuthUser(credentialsCheck) ? credentialsCheck : null;
-  const viewOnly =
-    isProjectInfo(credentialsCheck) &&
-    !scopesAllowEditing(credentialsCheck.scopes);
+  const projectCheck = isProjectInfo(credentialsCheck)
+    ? credentialsCheck
+    : null;
+  const viewOnly = Boolean(
+    projectCheck && !scopesAllowEditing(projectCheck.scopes)
+  );
   const session: Session = isOauthSession
     ? { kind: 'oauth', userFullName: oauthUser?.userFullName ?? null }
     : siteKeyScreen
@@ -59,14 +62,10 @@ export const connectedPanelProps = ({
         };
   const projectName = isOauthSession
     ? declaredProject?.name ?? null
-    : isProjectInfo(credentialsCheck)
-      ? credentialsCheck.projectName
-      : null;
+    : projectCheck?.projectName ?? null;
   const projectId = isOauthSession
     ? declaredProject?.id
-    : isProjectInfo(credentialsCheck)
-      ? credentialsCheck.projectId
-      : undefined;
+    : projectCheck?.projectId;
   const branch =
     branchableProjectId(credentialsCheck, declaredProject) === null ||
     branches?.length === 0

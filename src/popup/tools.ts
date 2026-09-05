@@ -53,10 +53,8 @@ export const pageCredentials = (
   };
 };
 
-export type PageAppliedCredentials = PageCredentials;
-
 export const appliedValuesFrom = (
-  page: PageAppliedCredentials | null | undefined,
+  page: PageCredentials | null | undefined,
   stored: Values | null | undefined
 ): Values => {
   const projectId =

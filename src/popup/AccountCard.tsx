@@ -1,6 +1,6 @@
 import { Box, Paper, Typography } from '@mui/material';
 import { abbreviateApiKey } from './branch';
-import { accountName, Session } from './connectionSummary';
+import { accountName, Session } from './sessionCopy';
 
 export const AccountCard = ({
   session,

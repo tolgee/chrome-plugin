@@ -106,7 +106,6 @@ describe('checkApiKey', () => {
       projectName: 'Demo',
       projectId: 7,
       scopes: ['keys.view'],
-      userFullName: 'Jo',
       branchingEnabled: false,
     });
   });

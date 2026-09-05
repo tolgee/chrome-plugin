@@ -1,5 +1,5 @@
 import { Typography } from '@mui/material';
-import { connectionHow, isViewOnly, Session } from './connectionSummary';
+import { connectionHow, isViewOnly, Session } from './sessionCopy';
 
 export const ConnectionSummary = ({
   session,

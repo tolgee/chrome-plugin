@@ -1,7 +1,7 @@
 import { isExtensionPage, MessageSender } from './sender';
 import {
   locateSession,
-  performWithRefresh,
+  sendAuthorizedRequest,
   authorizeSession,
 } from './proxyCredential';
 import { PROXY_BUDGET_MS } from '../protocol';
@@ -60,9 +60,9 @@ const proxyApiRequest = async (
   if ('error' in target) {
     return target;
   }
-  const gate = await authorizeSession(located);
-  if ('error' in gate) {
-    return gate;
+  const authorized = await authorizeSession(located);
+  if ('error' in authorized) {
+    return authorized;
   }
   let body: BodyInit | undefined;
   try {
@@ -75,16 +75,18 @@ const proxyApiRequest = async (
     headers: allowedHeaders(data.headers),
     body,
   };
-  const result = await performWithRefresh(
-    gate,
+  const result = await sendAuthorizedRequest(
+    authorized,
     target.pathWithQuery,
     request,
     deadline
   );
-  if (target.method === 'POST' && target.apiPath === IMAGE_UPLOAD_PATH) {
-    if ('response' in result) {
-      await rememberUploadIfSuccessful(located.connection, result.response);
-    }
+  if (
+    target.method === 'POST' &&
+    target.apiPath === IMAGE_UPLOAD_PATH &&
+    'response' in result
+  ) {
+    await rememberUploadIfSuccessful(located.connection, result.response);
   }
   return result;
 };

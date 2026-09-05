@@ -299,7 +299,6 @@ describe('detector reducer', () => {
       projectName: 'Demo',
       projectId: 9,
       scopes: [],
-      userFullName: 'U',
       branchingEnabled: false,
     };
     const stateWith = (
@@ -635,7 +634,6 @@ describe('detector reducer', () => {
         projectName: 'Demo',
         projectId: 9,
         scopes: [],
-        userFullName: 'U',
         branchingEnabled: false,
       };
       const next = reduce(
@@ -652,7 +650,6 @@ describe('detector reducer', () => {
         projectName: 'Demo',
         projectId: 9,
         scopes: [],
-        userFullName: 'U',
         branchingEnabled: false,
       };
       const stored = { ...unpinned, projectId: 3, projectKey: '3' };
@@ -802,7 +799,6 @@ describe('detector reducer', () => {
       projectName: 'Demo',
       projectId: 2,
       scopes: [],
-      userFullName: 'Jo',
       branchingEnabled,
     });
 

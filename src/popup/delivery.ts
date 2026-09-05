@@ -1,9 +1,9 @@
 import { LibConfig } from '../types';
+import { PageCredentials } from '../content/credentialSink';
 import {
   appliedValuesFrom,
   credentialDelivery,
   isConnectedSession,
-  PageAppliedCredentials,
   pageCredentials,
   sdkSupportsProxy,
   Values,
@@ -28,7 +28,7 @@ export const sdkTooOldFor = ({
   !(hasSession && activeValues?.apiKey);
 
 export const deliveryChanged = (
-  page: PageAppliedCredentials | null | undefined,
+  page: PageCredentials | null | undefined,
   applied: Values | null,
   libConfig: LibConfig | null | undefined
 ): boolean =>
@@ -39,7 +39,7 @@ export type ResolvedAppliedValues = { applied: Values; redeliver: boolean };
 // Null when applied isn't a connected session (see isConnectedSession) - the caller must leave the page's existing
 // delivery alone rather than redeliver on it.
 export const resolveAppliedValues = (
-  page: PageAppliedCredentials | null | undefined,
+  page: PageCredentials | null | undefined,
   storedForApiKey: Values | null,
   libConfig: LibConfig | null | undefined
 ): ResolvedAppliedValues | null => {

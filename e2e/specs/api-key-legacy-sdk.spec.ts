@@ -3,16 +3,17 @@ import type { Request } from '@playwright/test';
 import { expect, test } from '../fixtures/extension';
 import { collectPageRequests, collectWorkerRequests } from '../fixtures/oauth';
 import {
-  DEV_TOOLS,
+  dialogAlert,
   dialogAsksToSignIn,
   dialogSaysEditingOff,
   editingSwitchInput,
-  IN_CONTEXT_DIALOG_TEXT,
+  keyFormSubmit,
   openInContextDialog,
   openTestapp,
   pretendOldSdk,
   sessionItem,
   TITLE,
+  typeAndSubmitDialog,
 } from '../fixtures/testapp';
 
 // The key behind the testapp's title (see importKeys in setup/seed.ts) and its seeded translation.
@@ -78,13 +79,8 @@ test('connects an SDK without proxy support with an API key the page uses direct
 
     await test.step("the page's own requests carry the key and the worker sends none", async () => {
       await openInContextDialog(page);
-      const submit = page
-        .locator(DEV_TOOLS)
-        .locator('[data-cy="key-form-submit"]');
-      await expect(submit).toBeEnabled();
-      await expect(
-        page.locator(DEV_TOOLS).locator('[role="alert"]')
-      ).toHaveCount(0);
+      await expect(keyFormSubmit(page)).toBeEnabled();
+      await expect(dialogAlert(page)).toHaveCount(0);
       const fromPage = projectRequests(pageRequests);
       expect(fromPage.length).toBeGreaterThan(0);
       for (const request of fromPage) {
@@ -94,18 +90,7 @@ test('connects an SDK without proxy support with an API key the page uses direct
       }
       expect(projectRequests(workerRequests)).toEqual([]);
 
-      await page
-        .locator(DEV_TOOLS)
-        .locator(
-          '[data-cy="translation-editor"][data-cy-language="en"] .cm-content'
-        )
-        .click();
-      await page.keyboard.press('ControlOrMeta+a');
-      await page.keyboard.type(EDITED_TITLE);
-      await submit.click();
-      await expect(
-        page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT)
-      ).toBeHidden();
+      await typeAndSubmitDialog(page, EDITED_TITLE);
       expect(
         (await api.findKey(app.projectId, KEY_NAME))?.translations.en.text
       ).toBe(EDITED_TITLE);
@@ -181,7 +166,6 @@ test('turns editing off and on again for a key the page uses directly', async ({
   await expect(popup.getByTestId('sdk-too-old')).toHaveCount(0);
   expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
   expect(await sessionItem(page, '__tolgee_apiUrl')).toBeNull();
-  // The switch is marked in the page either way.
   expect(await sessionItem(page, '__tolgee_editing')).toBe('off');
   expect(await dialogSaysEditingOff(page)).toBe(true);
 

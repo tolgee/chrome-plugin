@@ -4,7 +4,7 @@ import { AccountCard } from './AccountCard';
 import { ApiKeyRejectedAlert } from './ApiKeyRejectedAlert';
 import { ConnectedFooter } from './ConnectedFooter';
 import { PopupFrame } from './PopupFrame';
-import { connectionTitle, Session } from './connectionSummary';
+import { connectionTitle, Session } from './sessionCopy';
 
 const Frame = ({
   session,

@@ -5,7 +5,7 @@ import { PopupFrame } from './PopupFrame';
 import { ServerPanel } from './ServerPanel';
 import { ConnectError } from './useOAuthConnect';
 import { CredentialsCheck } from './popupState';
-import { API_KEY_TITLE, PLUGIN_TITLE } from './connectionSummary';
+import { API_KEY_TITLE, PLUGIN_TITLE } from './sessionCopy';
 
 type Props = {
   tab: 'login' | 'apiKey';

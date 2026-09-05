@@ -1,5 +1,5 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
-import { PLUGIN_TITLE } from './connectionSummary';
+import { PLUGIN_TITLE } from './sessionCopy';
 import { PopupFrame } from './PopupFrame';
 import { Status } from './status';
 

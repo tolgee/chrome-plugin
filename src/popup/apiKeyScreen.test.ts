@@ -13,7 +13,6 @@ const valid = {
   projectName: 'Acme Web',
   projectId: 3,
   scopes: ['translations.edit'],
-  userFullName: 'U',
   branchingEnabled: false,
 };
 

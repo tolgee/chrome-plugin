@@ -7,7 +7,7 @@ import {
   isViewOnly,
   PAGE_DELIVERY_NOTE,
   Session,
-} from './connectionSummary';
+} from './sessionCopy';
 
 const oauth: Session = { kind: 'oauth', userFullName: 'Jan Cizmar' };
 const own: Session = {

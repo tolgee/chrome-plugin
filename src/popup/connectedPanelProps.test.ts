@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { connectedPanelProps } from './connectedPanelProps';
-import { connectionHow } from './connectionSummary';
+import { connectionHow } from './sessionCopy';
 import { BranchOption, CredentialsCheck, ProjectOption } from './popupState';
 import { LibConfig } from '../types';
 import { Values } from './tools';
@@ -16,7 +16,6 @@ const projectCheck: CredentialsCheck = {
   projectName: 'Demo',
   projectId: 9,
   scopes: ['translations.edit'],
-  userFullName: 'Jo',
   branchingEnabled: false,
 };
 

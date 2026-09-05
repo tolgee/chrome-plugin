@@ -3,42 +3,57 @@ import {
   confirmsTokenUnusable,
 } from '../oauth/sessionRules';
 import { OAuthUser, ProjectInfo } from './popupState';
-import { credentialFetch, InconclusiveHttpStatus } from './proxyFetch';
+import {
+  credentialFetch,
+  InconclusiveHttpStatus,
+  ProxyFetchResponse,
+} from './proxyFetch';
 import { Values } from './tools';
 
 const USER_PATH = '/v2/user';
 const CURRENT_KEY_PATH = '/v2/api-keys/current';
 
-export const checkOAuthSession = async (values: Values): Promise<OAuthUser> => {
-  const r = await credentialFetch(values, USER_PATH);
+// Shared shape for both checks: fetch, confirm a rejection or throw inconclusive, parse the JSON body or throw
+// inconclusive if it isn't one.
+const checkCredential = async (
+  values: Values,
+  path: string,
+  confirmsUnusable: (status: number) => boolean,
+  rejectedMessage: string
+): Promise<Record<string, unknown>> => {
+  const r: ProxyFetchResponse = await credentialFetch(values, path);
   if (!r.ok) {
-    if (confirmsTokenUnusable(r.status)) {
-      throw new Error('Invalid session');
+    if (confirmsUnusable(r.status)) {
+      throw new Error(rejectedMessage);
     }
-    throw new InconclusiveHttpStatus(r.status, USER_PATH);
+    throw new InconclusiveHttpStatus(r.status, path);
   }
-  const user = await r.json().catch(() => {
-    throw new InconclusiveHttpStatus(r.status, USER_PATH);
+  return r.json().catch(() => {
+    throw new InconclusiveHttpStatus(r.status, path);
   });
-  return { oauth: true, userFullName: user.name };
+};
+
+export const checkOAuthSession = async (values: Values): Promise<OAuthUser> => {
+  const user = await checkCredential(
+    values,
+    USER_PATH,
+    confirmsTokenUnusable,
+    'Invalid session'
+  );
+  return { oauth: true, userFullName: user.name as string };
 };
 
 export const checkApiKey = async (values: Values): Promise<ProjectInfo> => {
-  const r = await credentialFetch(values, CURRENT_KEY_PATH);
-  if (!r.ok) {
-    if (confirmsKeyUnusable(r.status)) {
-      throw new Error('Invalid API key');
-    }
-    throw new InconclusiveHttpStatus(r.status, CURRENT_KEY_PATH);
-  }
-  const data = await r.json().catch(() => {
-    throw new InconclusiveHttpStatus(r.status, CURRENT_KEY_PATH);
-  });
+  const data = await checkCredential(
+    values,
+    CURRENT_KEY_PATH,
+    confirmsKeyUnusable,
+    'Invalid API key'
+  );
   return {
-    projectName: data.projectName,
-    projectId: data.projectId,
-    scopes: data.scopes ?? [],
-    userFullName: data.userFullName,
-    branchingEnabled: data.branchingEnabled ?? false,
+    projectName: data.projectName as string,
+    projectId: data.projectId as number,
+    scopes: (data.scopes as string[]) ?? [],
+    branchingEnabled: (data.branchingEnabled as boolean) ?? false,
   };
 };

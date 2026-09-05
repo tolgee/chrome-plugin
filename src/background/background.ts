@@ -138,6 +138,6 @@ const refreshAndCheckSession = async (
   if ('error' in located) {
     return false;
   }
-  const gate = await authorizeSession(located);
-  return !('error' in gate) || gate.error.kind !== 'no_session';
+  const authorized = await authorizeSession(located);
+  return !('error' in authorized) || authorized.error.kind !== 'no_session';
 };

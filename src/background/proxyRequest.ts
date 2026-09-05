@@ -134,9 +134,6 @@ const deletesOnlyOwnUploads = async (
   connection: Connection
 ): Promise<boolean> => {
   const ids = pathname.slice(`${IMAGE_UPLOAD_PATH}/`.length).split(',');
-  if (ids.length === 0) {
-    return false;
-  }
   const owned = await Promise.all(
     ids.map((id) => Boolean(id) && wasUploadedThroughSession(connection, id))
   );

@@ -36,3 +36,7 @@ This project also bundles the following third-party dependencies:
     Licensed under MIT.
   - @emotion/react and @emotion/styled (https://emotion.sh). Copyright (c)
     Emotion team and other contributors. Licensed under MIT.
+  - react-transition-group (https://github.com/reactjs/react-transition-group),
+    a dependency of @mui/material. Copyright (c) 2018, React Community.
+    Forked from React (https://github.com/facebook/react), Copyright
+    2013-present, Facebook, Inc. Licensed under the BSD 3-Clause License.

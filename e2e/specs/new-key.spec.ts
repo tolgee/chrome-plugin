@@ -3,9 +3,11 @@ import { expect, type Page, test } from '../fixtures/extension';
 import { signInThroughPopup } from '../fixtures/oauth';
 import {
   connectWithApiKey,
-  DEV_TOOLS,
-  IN_CONTEXT_DIALOG_TEXT,
+  dialogAlert,
+  keyFormSubmit,
+  openInContextDialog,
   openTestapp,
+  typeAndSubmitDialog,
 } from '../fixtures/testapp';
 import type { TolgeeApi } from '../setup/seed';
 import type { RunState } from '../setup/state';
@@ -14,30 +16,11 @@ import type { RunState } from '../setup/state';
 const MISSING_KEY = 'share-button';
 const MISSING_KEY_ELEMENT = '.items__buttons button:first-child';
 
-const dialogTitle = (page: Page) =>
-  page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT);
-
-/** Alt+clicks the missing key's element, types an English translation and saves; the dialog closes on success. */
 const createKeyFromDialog = async (page: Page, text: string) => {
-  await page.locator(MISSING_KEY_ELEMENT).click({ modifiers: ['Alt'] });
-  await expect(dialogTitle(page)).toBeVisible({ timeout: 30_000 });
-
-  const submit = page.locator(DEV_TOOLS).locator('[data-cy="key-form-submit"]');
-  await expect(submit).toBeEnabled();
-  await expect(page.locator(DEV_TOOLS).locator('[role="alert"]')).toHaveCount(
-    0
-  );
-  await page
-    .locator(DEV_TOOLS)
-    .locator(
-      '[data-cy="translation-editor"][data-cy-language="en"] .cm-content'
-    )
-    .click();
-  // The editor is prefilled with the element's default text.
-  await page.keyboard.press('ControlOrMeta+a');
-  await page.keyboard.type(text);
-  await submit.click();
-  await expect(dialogTitle(page)).toBeHidden();
+  await openInContextDialog(page, page.locator(MISSING_KEY_ELEMENT));
+  await expect(keyFormSubmit(page)).toBeEnabled();
+  await expect(dialogAlert(page)).toHaveCount(0);
+  await typeAndSubmitDialog(page, text);
 };
 
 let api: TolgeeApi;

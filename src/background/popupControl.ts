@@ -28,7 +28,7 @@ export const openPopup = async (tabId: number | undefined) => {
 };
 
 const openOrFocusPopupWindow = async (tabId: number) => {
-  if (!(await coolDownElapsed(tabId))) {
+  if (!(await claimCooldown(tabId))) {
     return;
   }
   const existing = await rememberedWindow(tabId);
@@ -51,7 +51,8 @@ const openOrFocusPopupWindow = async (tabId: number) => {
   await sessionArea().set({ [keyFor(tabId)]: created.id });
 };
 
-const coolDownElapsed = async (tabId: number): Promise<boolean> => {
+// Claims a fresh cooldown window for this tab, unless one is already running.
+const claimCooldown = async (tabId: number): Promise<boolean> => {
   const key = focusKeyFor(tabId);
   const last = (await sessionArea().get(key))[key];
   const now = Date.now();

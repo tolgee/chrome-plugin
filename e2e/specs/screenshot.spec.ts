@@ -3,11 +3,15 @@ import { apiAs } from '../fixtures/api';
 import { expect, type Page, test, type Worker } from '../fixtures/extension';
 import { collectWorkerRequests, signInThroughPopup } from '../fixtures/oauth';
 import {
+  addImageButton,
   connectWithApiKey,
   DEV_TOOLS,
-  IN_CONTEXT_DIALOG_TEXT,
+  dialogAlert,
+  galleryThumbnails,
+  keyFormSubmit,
   openInContextDialog,
   openTestapp,
+  takeScreenshotButton,
 } from '../fixtures/testapp';
 import {
   API_KEY_SCOPES,
@@ -138,21 +142,6 @@ const collectUploads = (page: Page): Request[] => {
   return uploads;
 };
 
-const takeScreenshotButton = (page: Page) =>
-  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-take"]');
-
-const addImageButton = (page: Page) =>
-  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-add"]');
-
-const galleryThumbnails = (page: Page) =>
-  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-thumbnail"]');
-
-const saveButton = (page: Page) =>
-  page.locator(DEV_TOOLS).locator('[data-cy="key-form-submit"]');
-
-const dialogAlert = (page: Page) =>
-  page.locator(DEV_TOOLS).locator('[role="alert"]');
-
 type Credential = 'api-key' | 'oauth';
 
 const takeScreenshotAndCheckHops = async (
@@ -199,18 +188,15 @@ const takeScreenshotAndCheckHops = async (
   expect((await upload.response())?.status()).toBe(201);
 };
 
-const dialogTitle = (page: Page) =>
-  page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT);
-
 /** Saves the dialog and returns the key's screenshots as the server lists them once the save went through. */
 const saveAndReadScreenshots = async (
   page: Page,
   api: TolgeeApi,
   projectId: number
 ) => {
-  await saveButton(page).click();
+  await keyFormSubmit(page).click();
   // A successful save closes the dialog by itself; a failed one keeps it open with an alert.
-  await expect(dialogTitle(page)).toBeHidden();
+  await expect(keyFormSubmit(page)).toBeHidden();
   const keyId = await api.findKeyId(projectId, KEY_NAME);
   expect(keyId, `key ${KEY_NAME} exists after the save`).not.toBeNull();
   return {
@@ -457,12 +443,12 @@ test('reports the missing upload scope instead of silently dropping the screensh
 
   // Revoked only after the upload succeeds, as a live key edit would.
   await api.updateApiKeyScopes(key.id, SCOPES_WITHOUT_UPLOAD);
-  await saveButton(page).click();
+  await keyFormSubmit(page).click();
   await expect(dialogAlert(page)).toContainText('Operation not permitted');
   await expect(dialogAlert(page)).toContainText(
     'Missing scopes: screenshots.upload'
   );
-  await expect(dialogTitle(page)).toBeVisible();
+  await expect(keyFormSubmit(page)).toBeVisible();
   const keyId = await api.findKeyId(app.projectId, KEY_NAME);
   if (keyId !== null) {
     expect(await api.keyScreenshots(app.projectId, keyId)).toEqual([]);

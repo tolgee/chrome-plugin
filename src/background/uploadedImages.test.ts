@@ -15,6 +15,9 @@ vi.mock('webextension-polyfill', () => ({
         set: async (obj: Record<string, unknown>) => {
           Object.entries(obj).forEach(([k, v]) => store.set(k, v));
         },
+        remove: async (key: string) => {
+          store.delete(key);
+        },
       },
       local: {
         get: async () => ({}),
@@ -61,6 +64,57 @@ describe('uploadedImages', () => {
 
     for (const id of ids) {
       expect(await wasUploadedThroughSession(connection, id)).toBe(true);
+    }
+  });
+
+  it('rememberUploadIfSuccessful only remembers a 2xx response whose body is JSON with an id', async () => {
+    const { rememberUploadIfSuccessful, wasUploadedThroughSession } =
+      await import('./uploadedImages');
+
+    await rememberUploadIfSuccessful(connection, {
+      status: 403,
+      statusText: '',
+      headers: {},
+      body: JSON.stringify({ code: 'permission_denied', id: 999 }),
+    });
+    await rememberUploadIfSuccessful(connection, {
+      status: 200,
+      statusText: '',
+      headers: {},
+      body: '<html>not json</html>',
+    });
+    await rememberUploadIfSuccessful(connection, {
+      status: 201,
+      statusText: '',
+      headers: {},
+      body: JSON.stringify({ filename: 'no-id-here' }),
+    });
+    await rememberUploadIfSuccessful(connection, {
+      status: 201,
+      statusText: '',
+      headers: {},
+      body: JSON.stringify({ id: 7 }),
+    });
+
+    expect(await wasUploadedThroughSession(connection, '999')).toBe(false);
+    expect(await wasUploadedThroughSession(connection, '7')).toBe(true);
+  });
+
+  it('prunes and refuses an id remembered more than an hour ago', async () => {
+    vi.useFakeTimers();
+    try {
+      const { rememberUploadedImage, wasUploadedThroughSession } = await import(
+        './uploadedImages'
+      );
+      await rememberUploadedImage(connection, '42');
+
+      vi.advanceTimersByTime(61 * 60 * 1000);
+
+      expect(await wasUploadedThroughSession(connection, '42')).toBe(false);
+      const key = [...store.keys()].find((k) => k.endsWith(':42'));
+      expect(store.has(key!)).toBe(false);
+    } finally {
+      vi.useRealTimers();
     }
   });
 

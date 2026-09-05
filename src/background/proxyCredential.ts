@@ -14,7 +14,7 @@ import {
   AuthorizedRequest,
   Credential,
   failure,
-  Gate,
+  AuthorizedSession,
   LocatedSession,
   ProxyFailure,
   ProxyResponse,
@@ -71,7 +71,7 @@ const loadConnectedSession = async (
 
 export const authorizeSession = async (
   located: LocatedSession
-): Promise<Gate | ProxyFailure> => {
+): Promise<AuthorizedSession | ProxyFailure> => {
   if (located.kind === 'apiKey') {
     return { ...located, credential: { apiKey: located.apiKey } };
   }
@@ -88,8 +88,8 @@ const refreshLostFailure = (
     ? failure('no_session', 'the Tolgee session has ended')
     : failure('unavailable', 'the session could not be refreshed, try again');
 
-export const performWithRefresh = async (
-  gate: Gate,
+export const sendAuthorizedRequest = async (
+  authorized: AuthorizedSession,
   pathWithQuery: string,
   request: AuthorizedRequest,
   deadline: number
@@ -99,25 +99,30 @@ export const performWithRefresh = async (
     if (remaining <= 0) {
       return Promise.reject(new DOMException('budget spent', 'TimeoutError'));
     }
-    return authorizedFetch(gate.connection.apiUrl, pathWithQuery, credential, {
-      ...request,
-      signal: AbortSignal.timeout(
-        Math.min(PROXY_REQUEST_TIMEOUT_MS, remaining)
-      ),
-    });
+    return authorizedFetch(
+      authorized.connection.apiUrl,
+      pathWithQuery,
+      credential,
+      {
+        ...request,
+        signal: AbortSignal.timeout(
+          Math.min(PROXY_REQUEST_TIMEOUT_MS, remaining)
+        ),
+      }
+    );
   };
   try {
-    let res = await attempt(gate.credential);
+    let res = await attempt(authorized.credential);
     if (
       res.status === 401 &&
-      gate.kind === 'oauth' &&
-      'bearer' in gate.credential &&
+      authorized.kind === 'oauth' &&
+      'bearer' in authorized.credential &&
       deadline - Date.now() >=
         OAUTH_REQUEST_TIMEOUT_MS + REFRESH_RETRY_MARGIN_MS
     ) {
       const rotated = await refreshAfterRejection(
-        gate.session,
-        gate.credential.bearer
+        authorized.session,
+        authorized.credential.bearer
       );
       if ('failure' in rotated) {
         return refreshLostFailure(rotated);
@@ -125,11 +130,10 @@ export const performWithRefresh = async (
       res = await attempt({ bearer: rotated.accessToken });
     }
     if (isBlockedRedirect(res)) {
-      // Says nothing about whether the session/credential is valid, so this must stay inconclusive
-      // (isInconclusiveProxyErrorKind), the same bucket a network error already falls into.
+      // 'unavailable' keeps this in oauth/sessionRules.ts's inconclusive bucket.
       return failure(
         'unavailable',
-        `${gate.connection.apiUrl} redirected this request instead of answering it`
+        `${authorized.connection.apiUrl} redirected this request instead of answering it`
       );
     }
     return { response: await toReply(res) };

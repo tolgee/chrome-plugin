@@ -3,12 +3,13 @@ import { expect, test } from '../fixtures/extension';
 import { collectWorkerRequests } from '../fixtures/oauth';
 import {
   connectWithApiKey,
-  DEV_TOOLS,
-  IN_CONTEXT_DIALOG_TEXT,
+  dialogAlert,
+  keyFormSubmit,
   openInContextDialog,
   openTestapp,
   sessionItem,
   TITLE,
+  typeAndSubmitDialog,
 } from '../fixtures/testapp';
 
 // The key behind the testapp's title (see importKeys in setup/seed.ts) and its seeded translation.
@@ -53,13 +54,8 @@ test("a key for another project than the page declares connects to, and edits in
 
     const workerRequests = collectWorkerRequests(context);
     await openInContextDialog(page);
-    const submit = page
-      .locator(DEV_TOOLS)
-      .locator('[data-cy="key-form-submit"]');
-    await expect(submit).toBeEnabled();
-    await expect(page.locator(DEV_TOOLS).locator('[role="alert"]')).toHaveCount(
-      0
-    );
+    await expect(keyFormSubmit(page)).toBeEnabled();
+    await expect(dialogAlert(page)).toHaveCount(0);
     await Promise.all(workerRequests.map((request) => request.response()));
     expect(workerRequests.length).toBeGreaterThan(0);
     // The declared project's id appears in no request, and none is refused as unknown (the 404 a request to the
@@ -80,18 +76,7 @@ test("a key for another project than the page declares connects to, and edits in
     );
     expect((await translations!.response())?.status()).toBe(200);
 
-    await page
-      .locator(DEV_TOOLS)
-      .locator(
-        '[data-cy="translation-editor"][data-cy-language="en"] .cm-content'
-      )
-      .click();
-    await page.keyboard.press('ControlOrMeta+a');
-    await page.keyboard.type('Packed for the other project');
-    await submit.click();
-    await expect(
-      page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT)
-    ).toBeHidden();
+    await typeAndSubmitDialog(page, 'Packed for the other project');
 
     const saved = await api.findKey(other.projectId, KEY_NAME);
     expect(saved?.translations.en.text).toBe('Packed for the other project');

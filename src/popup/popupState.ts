@@ -7,7 +7,6 @@ export type ProjectInfo = {
   projectName: string;
   projectId: number;
   scopes: string[];
-  userFullName: string;
   branchingEnabled: boolean;
 };
 

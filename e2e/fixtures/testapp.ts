@@ -2,7 +2,6 @@ import type { BrowserContext, Frame, Page, Request } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 export const TITLE = '.header__title';
-export const IN_CONTEXT_DIALOG_TEXT = 'Quick translation';
 
 export const openTestapp = async (page: Page, url: string) => {
   await page.goto(url);
@@ -58,11 +57,36 @@ export const DEV_TOOLS = '#__tolgee_dev_tools';
 // The dialog's alert for a page holding no credential (the SDK's api_key_not_specified).
 export const SIGN_IN_ALERT_TEXT = 'Sign in to make changes';
 
-export const openInContextDialog = async (page: Page) => {
-  await page.locator(TITLE).click({ modifiers: ['Alt'] });
-  await expect(
-    page.locator(DEV_TOOLS).locator('[data-cy="key-form-submit"]')
-  ).toBeVisible({ timeout: 30_000 });
+export const keyFormSubmit = (page: Page) =>
+  page.locator(DEV_TOOLS).locator('[data-cy="key-form-submit"]');
+
+export const dialogAlert = (page: Page) =>
+  page.locator(DEV_TOOLS).locator('[role="alert"]');
+
+export const translationEditor = (page: Page, language = 'en') =>
+  page
+    .locator(DEV_TOOLS)
+    .locator(
+      `[data-cy="translation-editor"][data-cy-language="${language}"] .cm-content`
+    );
+
+// Alt+clicks the given element (the testapp's title by default) and waits for the dialog to render.
+export const openInContextDialog = async (
+  page: Page,
+  trigger = page.locator(TITLE)
+) => {
+  await trigger.click({ modifiers: ['Alt'] });
+  await expect(keyFormSubmit(page)).toBeVisible({ timeout: 30_000 });
+};
+
+// Types into the dialog's English editor and saves, waiting for the dialog to close on success. Selects all first:
+// the editor opens prefilled with the key's current text.
+export const typeAndSubmitDialog = async (page: Page, text: string) => {
+  await translationEditor(page).click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type(text);
+  await keyFormSubmit(page).click();
+  await expect(keyFormSubmit(page)).toBeHidden();
 };
 
 // The dialog's alert while the user has switched editing off for the page in the popup (the SDK's
@@ -121,6 +145,15 @@ export const dialogSaysEditingOff = async (page: Page): Promise<boolean> => {
 
 export const editingSwitchInput = (popup: Page) =>
   popup.getByTestId('editing-switch-input');
+
+export const takeScreenshotButton = (page: Page) =>
+  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-take"]');
+
+export const addImageButton = (page: Page) =>
+  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-add"]');
+
+export const galleryThumbnails = (page: Page) =>
+  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-thumbnail"]');
 
 export const sessionItem = (page: Page, key: string) =>
   page.evaluate((k) => sessionStorage.getItem(k), key);

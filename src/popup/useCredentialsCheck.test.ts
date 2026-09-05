@@ -21,7 +21,6 @@ const PROJECT: import('./popupState').ProjectInfo = {
   projectName: 'Demo',
   projectId: 1,
   scopes: [],
-  userFullName: 'Demo User',
   branchingEnabled: false,
 };
 
@@ -30,7 +29,7 @@ describe('runCredentialsCheck', () => {
     checkApiKey.mockResolvedValue(PROJECT);
     const set = vi.fn();
 
-    await runCredentialsCheck(KEY, null, set);
+    await runCredentialsCheck(KEY, set);
 
     expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', PROJECT]);
   });
@@ -39,51 +38,40 @@ describe('runCredentialsCheck', () => {
     checkApiKey.mockRejectedValue(new Error('Invalid API key'));
     const set = vi.fn();
 
-    await runCredentialsCheck(KEY, PROJECT, set);
+    await runCredentialsCheck(KEY, set);
 
     expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', 'invalid']);
   });
 
-  it('a connected session on a 5xx (InconclusiveHttpStatus) is restored to what it held before this check ran, not left at loading', async () => {
+  it('a 5xx (InconclusiveHttpStatus) clears to null rather than reporting invalid', async () => {
     checkApiKey.mockRejectedValue(
       new InconclusiveHttpStatus(500, '/v2/api-keys/current')
     );
     const set = vi.fn();
 
-    await runCredentialsCheck(KEY, PROJECT, set);
+    await runCredentialsCheck(KEY, set);
 
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', PROJECT]);
+    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', null]);
   });
 
-  it('a connected session on a network/timeout/unavailable proxy failure is restored, not left at loading', async () => {
+  it('a network/timeout/unavailable proxy failure clears to null rather than reporting invalid', async () => {
     checkOAuthSession.mockRejectedValue(
       new ProxyFetchError('unavailable', 'the extension did not answer')
     );
     const set = vi.fn();
 
-    await runCredentialsCheck(OAUTH, PROJECT, set);
+    await runCredentialsCheck(OAUTH, set);
 
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', PROJECT]);
+    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', null]);
 
     checkOAuthSession.mockRejectedValue(new ProxyFetchError('network', 'x'));
     set.mockClear();
-    await runCredentialsCheck(OAUTH, PROJECT, set);
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', PROJECT]);
+    await runCredentialsCheck(OAUTH, set);
+    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', null]);
 
     checkOAuthSession.mockRejectedValue(new ProxyFetchError('timeout', 'x'));
     set.mockClear();
-    await runCredentialsCheck(OAUTH, PROJECT, set);
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', PROJECT]);
-  });
-
-  it('an inconclusive answer with nothing held before it just clears the loading state back to null', async () => {
-    checkApiKey.mockRejectedValue(
-      new InconclusiveHttpStatus(500, '/v2/api-keys/current')
-    );
-    const set = vi.fn();
-
-    await runCredentialsCheck(KEY, null, set);
-
+    await runCredentialsCheck(OAUTH, set);
     expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', null]);
   });
 });

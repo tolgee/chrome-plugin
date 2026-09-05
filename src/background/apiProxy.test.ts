@@ -781,8 +781,6 @@ describe('handleApiRequest with an api key held by the worker', () => {
 
     const result = await handleApiRequest(request(), PAGE_TAB);
 
-    // 'unavailable' (not 'not_allowed'): sessionRules.isInconclusiveProxyErrorKind must treat this as inconclusive,
-    // or a redirecting Tolgee host reads to the popup as a rejected/ended session instead of an unverifiable one.
     expect(result).toEqual({
       error: { kind: 'unavailable', message: expect.any(String) },
     });

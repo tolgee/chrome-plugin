@@ -12,12 +12,14 @@ import {
 
 export { initialState };
 
+// `apply` is useApplier's apply: it flips a ref and forces a render, and the real storage/page write runs
+// afterwards in useSessionRestore's effect, against the next state - not synchronously here.
 export const createReducer =
-  (syncToStorageAndPage: () => void) =>
+  (apply: () => void) =>
   (state: State, action: Action): State => {
     const synced = (transition: Transition): State => {
       if (transition.applied) {
-        syncToStorageAndPage();
+        apply();
       }
       return transition.state;
     };
@@ -49,15 +51,15 @@ export const createReducer =
       case 'APPLY_VALUES':
         return synced(applyValues(state));
       case 'CLEAR_ALL':
-        syncToStorageAndPage();
+        apply();
         return clearAll(state);
       case 'OAUTH_APPLY':
-        syncToStorageAndPage();
+        apply();
         return oauthApply(state, action.payload);
       case 'RESOLVE_PROJECT':
         return synced(resolveProject(state, action.payload));
       case 'SWITCH_EDITING_OFF':
-        syncToStorageAndPage();
+        apply();
         return switchEditingOff(state);
       case 'SWITCH_EDITING_ON':
         return synced(switchEditingOn(state));

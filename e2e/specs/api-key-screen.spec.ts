@@ -179,7 +179,7 @@ test('warns about a view-only key and connects with it', async ({
       'This key can only view strings'
     );
     await expect(popup.getByTestId('api-key-view-only')).toContainText(
-      'You can look up strings on this page but not change them.'
+      'You can look up strings on this page but not edit them.'
     );
     await expect(popup.getByTestId('api-key-valid')).toHaveCount(0);
     await expect(popup.getByTestId('api-key-input')).toHaveValue(

@@ -16,7 +16,7 @@ import {
   dialogAsksToSignIn,
   dialogSaysEditingOff,
   editingSwitchInput,
-  IN_CONTEXT_DIALOG_TEXT,
+  openInContextDialog,
   openTestapp,
   responseStatuses,
   serveOldSdkPage,
@@ -353,10 +353,7 @@ test('refreshes an expired token before sending for the page', async ({
 
   const pageRequests = collectProjectRequests(page);
   const workerRequests = collectWorkerRequests(context);
-  await page.locator(TITLE).click({ modifiers: ['Alt'] });
-  await expect(
-    page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT)
-  ).toBeVisible({ timeout: 30_000 });
+  await openInContextDialog(page);
 
   await test.step('the worker rotates the expired token on the first dialog request and sends the new one', async () => {
     await expect

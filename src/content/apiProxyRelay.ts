@@ -21,9 +21,6 @@ const RELAYED: Record<string, string> = Object.assign(Object.create(null), {
   [TOLGEE_API_REQUEST]: TOLGEE_API_RESPONSE,
   [TOLGEE_SCREENSHOT_UPLOAD]: TOLGEE_SCREENSHOT_UPLOADED,
 });
-const CAPTURED = TOLGEE_SCREENSHOT_CAPTURED;
-const PING = TOLGEE_PROXY_PING;
-const PONG = TOLGEE_PROXY_PONG;
 const TOO_LARGE = {
   error: { kind: 'too_large', message: 'request body is too large' },
 };
@@ -50,9 +47,9 @@ export const createApiProxyRelay = (deps: RelayDeps, self: unknown) => {
       return;
     }
     const type = event.data?.type;
-    if (type === PING) {
+    if (type === TOLGEE_PROXY_PING) {
       deps.postToPage({
-        type: PONG,
+        type: TOLGEE_PROXY_PONG,
         data: { protocolVersion: PROTOCOL_VERSION },
       });
       return;
@@ -99,8 +96,8 @@ export const createApiProxyRelay = (deps: RelayDeps, self: unknown) => {
 
   const onWorkerMessage = (message: unknown) => {
     const { type, data } = (message ?? {}) as { type?: string; data?: unknown };
-    if (type === CAPTURED) {
-      deps.postToPage({ type: CAPTURED, data });
+    if (type === TOLGEE_SCREENSHOT_CAPTURED) {
+      deps.postToPage({ type: TOLGEE_SCREENSHOT_CAPTURED, data });
     }
   };
 

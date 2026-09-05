@@ -5,18 +5,14 @@ import { BranchRow, BranchState } from './BranchRow';
 import { EditingSwitch } from './EditingSwitch';
 import { PopupFrame } from './PopupFrame';
 import { AccountCard } from './AccountCard';
-import { ConnectionSummary } from './ConnectionSummaryView';
+import { ConnectionSummary } from './ConnectionSummary';
 import { ConnectedFooter } from './ConnectedFooter';
 import {
   KeyRejected,
   ProjectInaccessible,
   SessionEnded,
 } from './ConnectedErrors';
-import {
-  connectionTitle,
-  hasEditingSwitch,
-  Session,
-} from './connectionSummary';
+import { connectionTitle, hasEditingSwitch, Session } from './sessionCopy';
 import { Label, Value } from './fields';
 
 type Props = {

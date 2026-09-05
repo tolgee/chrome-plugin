@@ -1,22 +1,13 @@
 import { apiAs, apiKeyStatus } from '../fixtures/api';
-import { expect, type Page, test, type Worker } from '../fixtures/extension';
+import { expect, test, type Worker } from '../fixtures/extension';
 import {
+  connectWithApiKey,
   dialogAsksToSignIn,
   dialogSaysEditingOff,
   editingSwitchInput,
   openTestapp,
   sessionItem,
 } from '../fixtures/testapp';
-
-const connectWithApiKey = async (popup: Page, page: Page, apiKey: string) => {
-  await popup.getByTestId('use-api-key').click();
-  await popup.getByTestId('api-key-input').fill(apiKey);
-  await expect(popup.getByTestId('connect-with-api-key')).toBeEnabled();
-  const reloaded = page.waitForEvent('load');
-  await popup.getByTestId('connect-with-api-key').click();
-  await reloaded;
-  await expect(popup.getByTestId('connected-panel')).toBeVisible();
-};
 
 const originRecord = (worker: Worker, origin: string) =>
   worker.evaluate(
