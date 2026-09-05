@@ -137,6 +137,17 @@ describe('checkApiKey', () => {
     );
   });
 
+  it('rejects as inconclusive (not KeyRejected) when the server redirects instead of answering', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ type: 'opaqueredirect', ok: false, status: 0 }))
+    );
+
+    await expect(checkApiKey(KEY)).rejects.toBeInstanceOf(
+      InconclusiveHttpStatus
+    );
+  });
+
   it('rejects as inconclusive (not KeyRejected) when the server cannot be reached', async () => {
     vi.stubGlobal(
       'fetch',

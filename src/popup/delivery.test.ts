@@ -128,10 +128,7 @@ describe('deliveryChanged', () => {
 });
 
 describe('resolveAppliedValues', () => {
-  // A pre-1.9.0 stored record has no projectKey (git show 5f6502d:src/popup/storage.ts). The worker refuses to
-  // proxy such a record (oauth/connection.ts isApiKeyRecord), so restoring it here must not report a connected
-  // session, and must not redeliver over the page's still-working legacy apiKey slot.
-  it('a legacy stored record with no projectKey is not a connected session, and is never redelivered', () => {
+  it('a legacy stored record with no projectKey and an undecodable key is not a connected session, and is never redelivered', () => {
     const legacyStored = {
       apiUrl: 'https://app.tolgee.io',
       apiKey: 'tgpak_legacy',

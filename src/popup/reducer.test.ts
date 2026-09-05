@@ -778,8 +778,6 @@ describe('detector reducer', () => {
     });
 
     it('never binds a resolved project into values that are no longer an OAuth session by the time it dispatches', () => {
-      // The RESOLVE_PROJECT check ran against an earlier checkableValues snapshot; state.values has since become a
-      // page-config fallback (no oauth flag, no projectKey), which must not pass the projectKey-mismatch check.
       const pageConfigState: State = {
         ...connected,
         values: { apiUrl: 'https://app.tolgee.io', projectId: 3 },

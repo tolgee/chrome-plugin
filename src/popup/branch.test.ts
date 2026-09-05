@@ -71,7 +71,11 @@ describe('fetchBranches', () => {
     expect(result).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api/v2/projects/7/branches?size=100',
-      { headers: { 'X-API-Key': 'tgpak_x' } }
+      {
+        headers: { 'X-API-Key': 'tgpak_x' },
+        credentials: 'omit',
+        redirect: 'manual',
+      }
     );
     expect(sendToBackground).not.toHaveBeenCalled();
   });

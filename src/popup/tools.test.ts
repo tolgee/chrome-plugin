@@ -9,6 +9,7 @@ import {
   declaredProjectId,
   isConnectedSession,
   isOAuth,
+  migrateLegacyApiKeyRecord,
   pageCredentials,
   pageEditing,
   sdkSupportsProxy,
@@ -97,6 +98,56 @@ describe('isConnectedSession', () => {
   it('rejects null/undefined', () => {
     expect(isConnectedSession(null)).toBe(false);
     expect(isConnectedSession(undefined)).toBe(false);
+  });
+});
+
+describe('migrateLegacyApiKeyRecord', () => {
+  const PAK_FOR_PROJECT_1 =
+    'tgpak_gfpxm4lin4zdazleoq4gm2rumfxgi2lfom2gw4dpguzxc';
+
+  it('pins a pre-1.9.0 record by decoding the project id straight out of the key', () => {
+    const migrated = migrateLegacyApiKeyRecord({
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: PAK_FOR_PROJECT_1,
+      branch: 'main',
+    });
+    expect(migrated).toEqual({
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: PAK_FOR_PROJECT_1,
+      branch: 'main',
+      projectId: 1,
+      projectKey: '1',
+    });
+  });
+
+  it('gives up on a key it cannot decode a project id out of', () => {
+    expect(
+      migrateLegacyApiKeyRecord({
+        apiUrl: 'https://app.tolgee.io',
+        apiKey: 'tgpak_legacy',
+      })
+    ).toBeNull();
+  });
+
+  it('is a no-op for a record that already has a projectKey', () => {
+    const already = {
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: PAK_FOR_PROJECT_1,
+      projectKey: '1',
+    };
+    expect(migrateLegacyApiKeyRecord(already)).toBeNull();
+  });
+
+  it('does not migrate an OAuth record or one with no key at all', () => {
+    expect(
+      migrateLegacyApiKeyRecord({
+        apiUrl: 'https://app.tolgee.io',
+        oauth: true,
+      })
+    ).toBeNull();
+    expect(
+      migrateLegacyApiKeyRecord({ apiUrl: 'https://app.tolgee.io' })
+    ).toBeNull();
   });
 });
 

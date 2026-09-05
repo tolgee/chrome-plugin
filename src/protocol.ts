@@ -17,8 +17,6 @@ export const supportsProxy = (protocolVersion: number | undefined): boolean =>
 // reply.
 export const PROXY_BUDGET_MS = 30_000;
 
-// Message type names carried between the page/content-script and the worker, and mirrored in extensionProtocol.ts
-// on the tolgee-js side: a rename here compiles clean on both sides and only surfaces as a message nobody answers.
 export const TOLGEE_API_REQUEST = 'TOLGEE_API_REQUEST';
 export const TOLGEE_API_RESPONSE = 'TOLGEE_API_RESPONSE';
 export const TOLGEE_SCREENSHOT_UPLOAD = 'TOLGEE_SCREENSHOT_UPLOAD';

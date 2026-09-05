@@ -164,7 +164,7 @@ describe('handleApiRequest', () => {
     expect(calls[0].url).toBe(`${API}/v2/projects/7/keys?size=10`);
     expect(bearerOf(calls[0])).toBe('Bearer tok');
     expect(calls[0].init.credentials).toBe('omit');
-    expect(calls[0].init.redirect).toBe('error');
+    expect(calls[0].init.redirect).toBe('manual');
     expect(result).toEqual({
       response: {
         status: 200,
@@ -767,6 +767,23 @@ describe('handleApiRequest with an api key held by the worker', () => {
     expect(result).toMatchObject({ response: { status: 401 } });
     expect(calls).toHaveLength(1);
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('refuses a redirect from the Tolgee server instead of forwarding the reply as a fake HTTP 0', async () => {
+    answer = () =>
+      ({
+        type: 'opaqueredirect',
+        status: 0,
+        statusText: '',
+        headers: new Headers(),
+        text: async () => '',
+      }) as unknown as Response;
+
+    const result = await handleApiRequest(request(), PAGE_TAB);
+
+    expect(result).toEqual({
+      error: { kind: 'not_allowed', message: expect.any(String) },
+    });
   });
 
   it('uploads a screenshot with the key, captured in the worker', async () => {

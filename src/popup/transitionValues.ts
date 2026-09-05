@@ -22,8 +22,7 @@ export const pageValues = (libData: LibConfig | null): Values => ({
   branch: libData?.config?.branch,
 });
 
-// An api-key session the worker cannot serve is not applied at all: it answers a page's request by the project the
-// origin record pins, so a session slot without one leaves the page's in-context tools dead.
+// See isApiKeyRecord (oauth/originRecord.ts) for why a session without a projectKey isn't applied.
 export const withKeyProject = (
   values: Values | null,
   check: CredentialsCheck

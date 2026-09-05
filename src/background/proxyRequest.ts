@@ -13,20 +13,28 @@ const ALLOWED_HEADERS = [
 const PERMISSIONS_PATH = '/v2/api-keys/current-permissions';
 export const IMAGE_UPLOAD_PATH = '/v2/image-upload';
 
-export type ResolvedTarget = { method: string; pathWithQuery: string };
+export type ResolvedTarget = {
+  method: string;
+  apiPath: string;
+  pathWithQuery: string;
+};
 
 export type TargetResolver = (
   method: string,
   path: string,
   connection: Connection
-) => ResolvedTarget | ProxyFailure;
+) => Promise<ResolvedTarget | ProxyFailure>;
 
-export const resolveTabTarget: TargetResolver = (method, path, connection) => {
+export const resolveTabTarget: TargetResolver = async (
+  method,
+  path,
+  connection
+) => {
   const resolved = resolveWithinServer(method, path, connection);
   if ('error' in resolved) {
     return resolved;
   }
-  if (!isAllowedPath(resolved.apiPath, resolved.method, connection)) {
+  if (!(await isAllowedPath(resolved.apiPath, resolved.method, connection))) {
     return failure('not_allowed', `${resolved.apiPath} is not proxied`);
   }
   if (resolved.apiPath === PERMISSIONS_PATH) {
@@ -41,7 +49,7 @@ export const resolveTabTarget: TargetResolver = (method, path, connection) => {
   return withQuery(resolved);
 };
 
-export const resolvePopupTarget: TargetResolver = (
+export const resolvePopupTarget: TargetResolver = async (
   method,
   path,
   connection
@@ -73,6 +81,7 @@ const withQuery = (resolved: {
   search: string;
 }): ResolvedTarget => ({
   method: resolved.method,
+  apiPath: resolved.apiPath,
   pathWithQuery: resolved.apiPath + resolved.search,
 });
 
@@ -101,11 +110,11 @@ const resolveWithinServer = (
   return { method: upper, apiPath, search: url.search };
 };
 
-const isAllowedPath = (
+const isAllowedPath = async (
   pathname: string,
   method: string,
   connection: Connection
-): boolean => {
+): Promise<boolean> => {
   if (pathname === IMAGE_UPLOAD_PATH) {
     return true;
   }
@@ -119,16 +128,19 @@ const isAllowedPath = (
 };
 
 // Image uploads aren't project-scoped on the platform (see uploadedImages.ts), so a proxied DELETE is pinned here
-// instead to ids this same worker session uploaded through the screenshot capture path.
-const deletesOnlyOwnUploads = (
+// instead to ids this same worker session uploaded.
+const deletesOnlyOwnUploads = async (
   pathname: string,
   connection: Connection
-): boolean => {
+): Promise<boolean> => {
   const ids = pathname.slice(`${IMAGE_UPLOAD_PATH}/`.length).split(',');
-  return (
-    ids.length > 0 &&
-    ids.every((id) => id && wasUploadedThroughSession(connection, id))
+  if (ids.length === 0) {
+    return false;
+  }
+  const owned = await Promise.all(
+    ids.map((id) => Boolean(id) && wasUploadedThroughSession(connection, id))
   );
+  return owned.every(Boolean);
 };
 
 export const allowedHeaders = (

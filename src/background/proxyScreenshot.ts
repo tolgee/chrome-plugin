@@ -51,7 +51,7 @@ export const captureAndUploadScreenshot = async (
     deadline
   );
   if ('response' in result) {
-    rememberUploadIfSuccessful(gate.connection, result.response);
+    await rememberUploadIfSuccessful(gate.connection, result.response);
     return { ...result, ...captured.size };
   }
   return result;

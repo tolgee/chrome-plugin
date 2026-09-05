@@ -90,7 +90,6 @@ const expectOverrideScreen = async (
   await expect(popup.getByTestId('sign-out')).toHaveText("Back to site's key");
 };
 
-/** The key the page's next in-context request carries: a site key is used by the page itself. */
 const keyUsedByPage = async (page: Page): Promise<string | undefined> => {
   const requests = collectProjectRequests(page);
   await openInContextDialog(page);
@@ -99,7 +98,6 @@ const keyUsedByPage = async (page: Page): Promise<string | undefined> => {
   return requests[0].headers()['x-api-key'];
 };
 
-/** The key the worker sends the next in-context request with, the page itself sending none: an override. */
 const keyUsedByWorker = async (
   context: BrowserContext,
   page: Page
@@ -143,7 +141,6 @@ test('shows the key from the site code as a connection it can only override', as
   expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
   expect(await keyUsedByPage(page)).toBe(state.apiKey);
 
-  // The override starts on an empty API-key screen with the page's server.
   await popup.getByTestId('override-site-key').click();
   await expect(popup.getByTestId('sign-in-screen')).toContainText(
     'API key connection'
@@ -170,7 +167,6 @@ test('overrides the site key, keeps the override on a fresh popup and goes back 
     expect(await sessionItem(page, '__tolgee_session')).toBe('apiKey');
     expect(await keyUsedByWorker(context, page)).toBe(ownKey.key);
 
-    // The reloaded page now reports the override as its own key; a popup opened later still knows the difference.
     await popup.close();
     popup = await openPopup(page);
     await expectOverrideScreen(popup, state, app.projectName, ownKey.key);
@@ -184,7 +180,6 @@ test('overrides the site key, keeps the override on a fresh popup and goes back 
     await popup.close();
     popup = await openPopup(page);
     await expectSiteKeyScreen(popup, state, app.projectName);
-    // The page is back on its own key: the dialog opens with it instead of asking to sign in.
     expect(await dialogAsksToSignIn(page)).toBe(false);
     expect(await keyUsedByPage(page)).toBe(state.apiKey);
   } finally {

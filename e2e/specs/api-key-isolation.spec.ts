@@ -1,103 +1,15 @@
-import { expect, type Page, test } from '../fixtures/extension';
+import { expect, test } from '../fixtures/extension';
 import { collectPageRequests, collectWorkerRequests } from '../fixtures/oauth';
 import {
+  askExtension,
   connectWithApiKey,
   declareApiKey,
+  findInPage,
   openInContextDialog,
   openTestapp,
   sessionItem,
   TITLE,
 } from '../fixtures/testapp';
-
-type ProxyReply = {
-  id: string;
-  response?: { status: number };
-  error?: { kind: string; message: string };
-};
-
-/** What a script on the page gets back when it posts TOLGEE_API_REQUEST itself, as an XSS payload would. */
-const askExtension = (page: Page, path: string): Promise<ProxyReply> =>
-  page.evaluate(
-    (path) =>
-      new Promise<ProxyReply>((resolve, reject) => {
-        const id = `probe-${Math.random()}`;
-        const timer = setTimeout(
-          () => reject(new Error(`no answer for ${path}`)),
-          15_000
-        );
-        window.addEventListener('message', function onMessage(event) {
-          if (
-            event.data?.type === 'TOLGEE_API_RESPONSE' &&
-            event.data.data?.id === id
-          ) {
-            window.removeEventListener('message', onMessage);
-            clearTimeout(timer);
-            resolve(event.data.data);
-          }
-        });
-        window.postMessage(
-          {
-            type: 'TOLGEE_API_REQUEST',
-            data: {
-              id,
-              path,
-              method: 'GET',
-              headers: {},
-              body: { kind: 'none' },
-            },
-          },
-          window.origin
-        );
-      }),
-    path
-  );
-
-/**
- * Every place a page script could read the key from, if it were there: web storage, cookies, the DOM, and every
- * object reachable from window (the SDK instance and its options included), a few levels deep.
- */
-const findInPage = (page: Page, needle: string): Promise<string[]> =>
-  page.evaluate((needle) => {
-    const hits: string[] = [];
-    const seen = new WeakSet<object>();
-    const scan = (label: string, value: unknown, depth: number) => {
-      if (typeof value === 'string') {
-        if (value.includes(needle)) {
-          hits.push(label);
-        }
-        return;
-      }
-      if (
-        depth === 0 ||
-        value === null ||
-        (typeof value !== 'object' && typeof value !== 'function') ||
-        seen.has(value as object) ||
-        value instanceof Node
-      ) {
-        return;
-      }
-      seen.add(value as object);
-      for (const name of Object.getOwnPropertyNames(value)) {
-        try {
-          scan(`${label}.${name}`, (value as any)[name], depth - 1);
-        } catch {
-          // restricted accessor
-        }
-      }
-    };
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i)!;
-      scan(`sessionStorage.${key}`, sessionStorage.getItem(key), 1);
-    }
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)!;
-      scan(`localStorage.${key}`, localStorage.getItem(key), 1);
-    }
-    scan('document.cookie', document.cookie, 1);
-    scan('document', document.documentElement.outerHTML, 1);
-    scan('window', window, 4);
-    return hits;
-  }, needle);
 
 test('keeps a key entered in the popup out of the page and sends its requests from the worker', async ({
   page,
@@ -116,7 +28,6 @@ test('keeps a key entered in the popup out of the page and sends its requests fr
   await test.step('nothing a page script can reach holds the key', async () => {
     expect(await sessionItem(page, '__tolgee_session')).toBe('apiKey');
     expect(await findInPage(page, state.apiKey)).toEqual([]);
-    // The scan does see the page: the project id the worker pinned the session to is there.
     expect(await findInPage(page, String(app.projectId))).toContain(
       'sessionStorage.__tolgee_projectId'
     );

@@ -63,7 +63,6 @@ type UploadEntry = {
   size?: number;
 };
 
-/** Wraps `fetch` in the worker, recording the multipart entries of every upload it sends. */
 const spyOnUploads = (worker: Worker) =>
   worker.evaluate(() => {
     const original = globalThis.fetch;
@@ -101,7 +100,6 @@ const captures = (worker: Worker): Promise<Capture[]> =>
     }))
   );
 
-/** Records what the content scripts hand the SDK about a screenshot: only the capture notice, never the image. */
 const listenForScreenshotMessages = (page: Page) =>
   page.evaluate(() => {
     const taken: string[] = [];
@@ -157,10 +155,6 @@ const dialogAlert = (page: Page) =>
 
 type Credential = 'api-key' | 'oauth';
 
-/**
- * Takes one screenshot from the open dialog and checks every hop: worker capture, what the SDK is told, the worker
- * uploading with the credential it holds (the api key or the session token), gallery.
- */
 const takeScreenshotAndCheckHops = async (
   page: Page,
   context: BrowserContext,
@@ -461,8 +455,7 @@ test('reports the missing upload scope instead of silently dropping the screensh
   await openInContextDialog(page);
   await takeScreenshotAndCheckHops(page, context, worker, 'api-key', key.key);
 
-  // The dialog computed its permissions, and the screenshot upload above went through, before the scope goes away
-  // underneath it, as a key edit on the server would; only the save is refused.
+  // Revoked only after the upload succeeds, as a live key edit would.
   await api.updateApiKeyScopes(key.id, SCOPES_WITHOUT_UPLOAD);
   await saveButton(page).click();
   await expect(dialogAlert(page)).toContainText('Operation not permitted');

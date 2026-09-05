@@ -5,10 +5,11 @@ import { Action, CredentialsCheck } from './popupState';
 import { isInconclusiveSessionCheckError } from './proxyFetch';
 import { checkApiKey, checkOAuthSession } from './credentialsCheck';
 
-// A 5xx/network/timeout/unavailable answer is inconclusive, not a rejection: it leaves whatever credentialsCheck
-// already held alone rather than flipping a connected session to 'invalid' on a transient server outage.
+// A 5xx/network/timeout/unavailable answer is inconclusive, not a rejection: it restores `previous` rather than
+// flipping a connected session to 'invalid' on a transient server outage.
 export const runCredentialsCheck = async (
   checkableValues: Values,
+  previous: CredentialsCheck,
   setCredentialsCheck: (val: CredentialsCheck) => void
 ): Promise<void> => {
   setCredentialsCheck('loading');
@@ -19,6 +20,7 @@ export const runCredentialsCheck = async (
     setCredentialsCheck(await check);
   } catch (e) {
     if (isInconclusiveSessionCheckError(e)) {
+      setCredentialsCheck(previous);
       return;
     }
     setCredentialsCheck('invalid');
@@ -27,6 +29,7 @@ export const runCredentialsCheck = async (
 
 export const useCredentialsCheck = (
   checkableValues: Values | null,
+  credentialsCheck: CredentialsCheck,
   dispatch: Dispatch<Action>
 ) => {
   const setCredentialsCheck = (val: CredentialsCheck) => {
@@ -39,7 +42,7 @@ export const useCredentialsCheck = (
       setCredentialsCheck(null);
       return undefined;
     }
-    runCredentialsCheck(checkableValues, (val) => {
+    runCredentialsCheck(checkableValues, credentialsCheck, (val) => {
       if (!cancelled) {
         setCredentialsCheck(val);
       }

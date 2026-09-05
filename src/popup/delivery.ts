@@ -36,8 +36,8 @@ export const deliveryChanged = (
 
 export type ResolvedAppliedValues = { applied: Values; redeliver: boolean };
 
-// Null when the page's slots don't add up to a session the worker will actually serve (see isConnectedSession) -
-// the caller must leave the page's existing delivery alone rather than redeliver on an unverifiable record.
+// Null when applied isn't a connected session (see isConnectedSession) - the caller must leave the page's existing
+// delivery alone rather than redeliver on it.
 export const resolveAppliedValues = (
   page: PageAppliedCredentials | null | undefined,
   storedForApiKey: Values | null,

@@ -166,9 +166,28 @@ describe('credentialFetch', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://app.tolgee.io/v2/api-keys/current',
-      { headers: { 'X-API-Key': 'tgpak_x' } }
+      {
+        headers: { 'X-API-Key': 'tgpak_x' },
+        credentials: 'omit',
+        redirect: 'manual',
+      }
     );
     expect(sendToBackground).not.toHaveBeenCalled();
+  });
+
+  it('never follows a redirect for a key session: the response comes back not-ok rather than the key travelling to another host', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ type: 'opaqueredirect', ok: false, status: 0 }))
+    );
+
+    const r = await credentialFetch(
+      { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' },
+      '/v2/api-keys/current'
+    );
+
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(0);
   });
 
   it('wraps a network failure for a key session as a recognized inconclusive kind, not a plain TypeError', async () => {

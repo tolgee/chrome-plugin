@@ -16,7 +16,7 @@ export const useDetectorForm = () => {
   useTolgeeDetection(state.libConfig, dispatch);
   useSessionRestore(state, dispatch, applyRequired);
   const checkableValues = checkableValuesOf(state);
-  useCredentialsCheck(checkableValues, dispatch);
+  useCredentialsCheck(checkableValues, state.credentialsCheck, dispatch);
   useBranchOptions(state, dispatch, checkableValues);
   useDeclaredProject(state, dispatch, checkableValues);
 

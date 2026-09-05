@@ -6,6 +6,7 @@ import {
 } from '../constants';
 import { challengeFromVerifier, randomUrlSafe } from './pkce';
 import { normalizeUrl } from './url';
+import { hardenedFetch, isBlockedRedirect } from './hardenedFetch';
 
 export type OAuthTokens = {
   accessToken: string;
@@ -114,12 +115,18 @@ export const wasCancelledByUser = (message: string) =>
 // RFC 7009: revoking either token ends the whole grant server-side. Best-effort — a failure here must not block
 // Disconnect from clearing the local session, so callers swallow the rejection.
 export const revoke = async (apiUrl: string, token: string): Promise<void> => {
-  const res = await fetch(`${normalizeUrl(apiUrl)}/oauth2/revoke`, {
+  const res = await hardenedFetch(`${normalizeUrl(apiUrl)}/oauth2/revoke`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ token, client_id: OAUTH_CLIENT_ID }),
     signal: AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS),
   });
+  if (isBlockedRedirect(res)) {
+    throw new OAuthTokenEndpointError(
+      0,
+      'the server redirected this request instead of answering it'
+    );
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new OAuthTokenEndpointError(res.status, body);
@@ -134,12 +141,18 @@ const postToken = async (
   params: Record<string, string>,
   previousRefreshToken?: string
 ): Promise<OAuthTokens> => {
-  const res = await fetch(`${base}/oauth2/token`, {
+  const res = await hardenedFetch(`${base}/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
     signal: AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS),
   });
+  if (isBlockedRedirect(res)) {
+    throw new OAuthTokenEndpointError(
+      0,
+      'the server redirected this request instead of answering it'
+    );
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new OAuthTokenEndpointError(res.status, body);

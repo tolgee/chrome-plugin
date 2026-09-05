@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Request } from '@playwright/test';
+import type { BrowserContext, Frame, Page, Request } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 export const TITLE = '.header__title';
@@ -243,3 +243,94 @@ export const serveOldSdkPage = async (
     { apiUrl, projectId }
   );
 };
+
+export type ProxyReply = {
+  id: string;
+  response?: { status: number };
+  error?: { kind: string; message: string };
+};
+
+// What a script on the page gets back when it posts TOLGEE_API_REQUEST itself, as an XSS payload would.
+export const askExtension = (
+  target: Page | Frame,
+  path: string
+): Promise<ProxyReply> =>
+  target.evaluate(
+    (path) =>
+      new Promise<ProxyReply>((resolve, reject) => {
+        const id = `probe-${Math.random()}`;
+        const timer = setTimeout(
+          () => reject(new Error(`no answer for ${path}`)),
+          15_000
+        );
+        window.addEventListener('message', function onMessage(event) {
+          if (
+            event.data?.type === 'TOLGEE_API_RESPONSE' &&
+            event.data.data?.id === id
+          ) {
+            window.removeEventListener('message', onMessage);
+            clearTimeout(timer);
+            resolve(event.data.data);
+          }
+        });
+        window.postMessage(
+          {
+            type: 'TOLGEE_API_REQUEST',
+            data: {
+              id,
+              path,
+              method: 'GET',
+              headers: {},
+              body: { kind: 'none' },
+            },
+          },
+          window.origin
+        );
+      }),
+    path
+  );
+
+// Every place a page script could read a secret from, if it were there: web storage, cookies, the DOM, and every
+// object reachable from window (the SDK instance and its options included), a few levels deep.
+export const findInPage = (page: Page, needle: string): Promise<string[]> =>
+  page.evaluate((needle) => {
+    const hits: string[] = [];
+    const seen = new WeakSet<object>();
+    const scan = (label: string, value: unknown, depth: number) => {
+      if (typeof value === 'string') {
+        if (value.includes(needle)) {
+          hits.push(label);
+        }
+        return;
+      }
+      if (
+        depth === 0 ||
+        value === null ||
+        (typeof value !== 'object' && typeof value !== 'function') ||
+        seen.has(value as object) ||
+        value instanceof Node
+      ) {
+        return;
+      }
+      seen.add(value as object);
+      for (const name of Object.getOwnPropertyNames(value)) {
+        try {
+          scan(`${label}.${name}`, (value as any)[name], depth - 1);
+        } catch {
+          // restricted or cross-origin accessor
+        }
+      }
+    };
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i)!;
+      scan(`sessionStorage.${key}`, sessionStorage.getItem(key), 1);
+    }
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)!;
+      scan(`localStorage.${key}`, localStorage.getItem(key), 1);
+    }
+    scan('document.cookie', document.cookie, 1);
+    scan('document', document.documentElement.outerHTML, 1);
+    scan('window', window, 4);
+    return hits;
+  }, needle);

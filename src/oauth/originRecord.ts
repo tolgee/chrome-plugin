@@ -13,6 +13,8 @@ export const isOAuthConnection = (
 ): record is OriginRecord & { apiUrl: string } =>
   Boolean(record?.oauth && record.apiUrl);
 
+// The worker answers a page's request by the project this record pins, so an api-key record without one leaves
+// the in-context tools dead - the record is refused rather than served unpinned.
 export const isApiKeyRecord = (
   record: OriginRecord | undefined
 ): record is OriginRecord & {

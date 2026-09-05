@@ -52,7 +52,7 @@ const proxyApiRequest = async (
   if ('error' in located) {
     return located;
   }
-  const target = resolveRequestTarget(
+  const target = await resolveRequestTarget(
     data.method,
     data.path,
     located.connection
@@ -81,11 +81,9 @@ const proxyApiRequest = async (
     request,
     deadline
   );
-  // A plain (non-screenshot) image upload also has to be remembered here, or a same-session delete of it would be
-  // refused by uploadedImages.ts's session-scoped ownership check the same way a stranger's would be.
-  if (target.method === 'POST' && target.pathWithQuery === IMAGE_UPLOAD_PATH) {
+  if (target.method === 'POST' && target.apiPath === IMAGE_UPLOAD_PATH) {
     if ('response' in result) {
-      rememberUploadIfSuccessful(located.connection, result.response);
+      await rememberUploadIfSuccessful(located.connection, result.response);
     }
   }
   return result;

@@ -3,11 +3,11 @@ import { Dispatch, useEffect } from 'react';
 import { getActiveTabOrigin } from './activeTab';
 import { loadAppliedValues } from './loadConfig';
 import { sendToBackground } from './sendToBackground';
-import { loadValues } from './storage';
+import { loadValues, storeValues } from './storage';
 import { loadConnectRefusal } from '../oauth/connectRefusalStore';
 import { resolveAppliedValues } from './delivery';
 import { redeliverToPage, syncToStorageAndPage } from './deliverValues';
-import { isConnectedSession } from './tools';
+import { isConnectedSession, migrateLegacyApiKeyRecord } from './tools';
 import { Action, State } from './popupState';
 
 export const useSessionRestore = (
@@ -85,6 +85,12 @@ export const useSessionRestore = (
       }
     } else if (isConnectedSession(storedData)) {
       dispatch({ type: 'LOAD_STORED_VALUES', payload: storedData });
+    } else {
+      const migrated = migrateLegacyApiKeyRecord(storedData);
+      if (migrated) {
+        await storeValues(migrated);
+        dispatch({ type: 'LOAD_STORED_VALUES', payload: migrated });
+      }
     }
   };
 };

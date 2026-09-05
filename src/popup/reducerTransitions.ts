@@ -111,9 +111,8 @@ export const resolveProject = (
   payload: { project: ProjectOption | null; inaccessible: boolean }
 ): Transition => {
   const { project, inaccessible } = payload;
-  // The check that decided to resolve a project ran against checkableValues (see useDeclaredProject.ts), which can
-  // differ from state.values by the time this dispatches; require an actual OAuth session here too, or a page-config
-  // fallback with no projectKey would otherwise pass the projectKey-mismatch check below and get a project bound in.
+  // state.values can drift from the checkableValues snapshot useDeclaredProject.ts resolved against (see its
+  // isOauthCheck gate) by the time this dispatches.
   const isOAuthSession = Boolean(state.values?.oauth);
   const outsideSession =
     project !== null &&

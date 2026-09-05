@@ -3,6 +3,8 @@ import { sameOrigin } from '../oauth/url';
 import { SessionKind, supportsProxy } from '../protocol';
 import { PageCredentials } from '../content/credentialSink';
 import { isApiKeyRecord } from '../oauth/originRecord';
+import { projectIdOfApiKey } from '../oauth/apiKeyProject';
+import { projectKeyFor } from '../oauth/sessionRules';
 import { siteKeyFromCode } from './apiKeyScreen';
 
 export type Values = {
@@ -25,7 +27,6 @@ export const sessionKindOfValues = (
 ): SessionKind | undefined =>
   isOAuth(values) ? 'oauth' : values?.apiKey ? 'apiKey' : undefined;
 
-// The one formula for where an api key ends up: the worker if the SDK can be proxied, the page's own slot otherwise.
 export const credentialDelivery = (
   libConfig: LibConfig | null | undefined,
   hasApiKey: boolean
@@ -106,9 +107,7 @@ export const validateValues = (values?: Values | null) => {
   return null;
 };
 
-// An api-key record also needs a projectKey to count as a connected session: the worker refuses to proxy for one
-// without a project pin (see oauth/connection.ts isApiKeyRecord), so restoring it here would show "connected" for a
-// session nothing will actually serve. A record written before projectKey existed (pre-1.9.0) falls through this.
+// See isApiKeyRecord (oauth/originRecord.ts) for why an api-key record needs a projectKey.
 export const isConnectedSession = (values?: Values | null): boolean =>
   values?.oauth
     ? Boolean(validateValues(values))
@@ -116,6 +115,18 @@ export const isConnectedSession = (values?: Values | null): boolean =>
 
 export const isOAuth = (values?: Values | null) =>
   Boolean(values?.oauth && !values?.apiKey);
+
+// A project API key encodes its own project id (see projectIdOfApiKey), so a pre-1.9.0 record missing projectKey
+// can be pinned without a network round-trip instead of being left as an unrecognisable, unremovable credential.
+export const migrateLegacyApiKeyRecord = (values: Values): Values | null => {
+  if (values.oauth || values.projectKey || !values.apiKey || !values.apiUrl) {
+    return null;
+  }
+  const projectId = projectIdOfApiKey(values.apiKey);
+  return projectId === undefined
+    ? null
+    : { ...values, projectId, projectKey: projectKeyFor(projectId) };
+};
 
 export const canApplyOnEnter = (
   hasSession: boolean,

@@ -137,7 +137,6 @@ test('connects an SDK without proxy support with an API key the page uses direct
       await expect(popup.getByTestId('sign-in-screen')).toBeVisible({
         timeout: 30_000,
       });
-      // The popup stays on the API-key screen it was connected from, with an empty field.
       await expect(popup.getByTestId('api-key-input')).toHaveValue('');
       await expect(popup.getByTestId('sdk-too-old')).toHaveCount(0);
       await popup.getByTestId('all-connection-options').click();
@@ -154,7 +153,6 @@ test('connects an SDK without proxy support with an API key the page uses direct
   }
 });
 
-// The editing switch takes the key out of the page and puts it back, the way it does for a proxied session.
 test('turns editing off and on again for a key the page uses directly', async ({
   page,
   state,

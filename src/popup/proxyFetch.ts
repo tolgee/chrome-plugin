@@ -1,6 +1,7 @@
 import { isInconclusiveProxyErrorKind } from '../oauth/sessionRules';
 import { ProxyErrorKind } from '../protocol';
 import { normalizeUrl } from '../oauth/url';
+import { hardenedFetch } from '../oauth/hardenedFetch';
 import { getActiveTabOrigin } from './activeTab';
 import { sendToBackground } from './sendToBackground';
 import { isOAuth, Values } from './tools';
@@ -56,7 +57,7 @@ const directFetch = async (
   path: string
 ): Promise<ProxyFetchResponse> => {
   try {
-    return await fetch(`${normalizeUrl(values.apiUrl ?? '')}${path}`, {
+    return await hardenedFetch(`${normalizeUrl(values.apiUrl ?? '')}${path}`, {
       headers: { 'X-API-Key': values.apiKey ?? '' },
     });
   } catch (e) {

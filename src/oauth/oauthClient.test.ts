@@ -23,6 +23,7 @@ import {
   OAuthTokenEndpointError,
   parseTokenResponse,
   refresh,
+  revoke,
   wasCancelledByUser,
 } from './oauthClient';
 
@@ -143,6 +144,60 @@ describe('postToken error contract', () => {
     const err = await refresh('https://api', 'rt').catch((e) => e);
     expect(err).toBeInstanceOf(OAuthTokenEndpointError);
     expect(err.status).toBe(400);
+  });
+
+  it('never follows a redirect, and reports one distinctly rather than as a bare non-OK status', async () => {
+    const fetchMock = vi.fn(async () => ({
+      type: 'opaqueredirect',
+      ok: false,
+      status: 0,
+      text: async () => '',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const err = await refresh('https://api', 'rt').catch((e) => e);
+
+    expect(err).toBeInstanceOf(OAuthTokenEndpointError);
+    expect(String(err.message)).toMatch(/redirected/);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { credentials: string; redirect: string },
+    ];
+    expect(init.credentials).toBe('omit');
+    expect(init.redirect).toBe('manual');
+  });
+});
+
+describe('revoke', () => {
+  it('never sends ambient cookies or follows a redirect for the token it is revoking', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await revoke('https://api', 'rt');
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { credentials: string; redirect: string },
+    ];
+    expect(init.credentials).toBe('omit');
+    expect(init.redirect).toBe('manual');
+  });
+
+  it('reports a redirect distinctly rather than swallowing it as success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        type: 'opaqueredirect',
+        ok: false,
+        status: 0,
+        text: async () => '',
+      }))
+    );
+
+    const err = await revoke('https://api', 'rt').catch((e) => e);
+
+    expect(err).toBeInstanceOf(OAuthTokenEndpointError);
+    expect(String(err.message)).toMatch(/redirected/);
   });
 });
 

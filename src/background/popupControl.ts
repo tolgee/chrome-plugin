@@ -6,11 +6,9 @@ export type IconState = 'present' | 'active' | 'inactive';
 const POPUP_WINDOW = { type: 'popup', width: 420, height: 640 } as const;
 
 // Keyed by the requesting tab, so a page looping OPEN_POPUP cannot spawn more than one fallback window for itself.
-// In storage rather than in memory: the worker is terminated between two such requests as a matter of course.
 const KEY_PREFIX = 'popupWindow:';
 const FOCUS_KEY_PREFIX = 'popupFocus:';
-// A page can otherwise re-post TOLGEE_OPEN_PLUGIN in a loop and steal window focus repeatedly; this bounds it to
-// once per cooldown without breaking a user's single legitimate click.
+// Bounds a page re-posting TOLGEE_OPEN_PLUGIN in a loop to one focus-steal per cooldown.
 const FOCUS_COOLDOWN_MS = 2000;
 
 const keyFor = (tabId: number) => `${KEY_PREFIX}${tabId}`;
