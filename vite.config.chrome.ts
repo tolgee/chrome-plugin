@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import manifest from './manifest.json';
+import { licenseFiles } from './vite.licenseFiles';
 
 function myPlugin(): Plugin {
   function updateManifest() {
@@ -51,6 +52,7 @@ export default defineConfig({
     react(),
     crx({ manifest: manifest as any }),
     myPlugin(),
+    licenseFiles('dist-chrome'),
     zipPack({ inDir: 'dist-chrome', outFileName: 'chrome.zip' }),
   ],
 });
