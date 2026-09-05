@@ -1,17 +1,10 @@
 import { useEffect, useState } from 'react';
 import { normalizeUrl } from '../oauth/url';
+import { ApiKeyCheck } from './apiKeyCheck';
+import { checkApiKey } from './credentialsCheck';
+import { isInconclusiveSessionCheckError } from './proxyFetch';
 
-export type ApiKeyCheck =
-  | null
-  | 'loading'
-  | 'invalid'
-  | 'unreachable'
-  | { projectName: string };
-
-export const isApiKeyValid = (
-  check: ApiKeyCheck
-): check is { projectName: string } =>
-  check !== null && typeof check === 'object' && 'projectName' in check;
+const TYPING_DEBOUNCE_MS = 400;
 
 export const useApiKeyCheck = (
   apiUrl: string | undefined,
@@ -30,23 +23,20 @@ export const useApiKeyCheck = (
     let cancelled = false;
     setCheck('loading');
     const timer = setTimeout(() => {
-      fetch(`${url}/v2/api-keys/current`, { headers: { 'X-API-Key': apiKey } })
-        .then((r) => {
-          if (r.ok) {
-            return r.json().then((data) => {
-              if (!cancelled) setCheck({ projectName: data.projectName });
-            });
-          }
+      checkApiKey({ apiUrl: url, apiKey })
+        .then(({ projectName, projectId, scopes }) => {
           if (!cancelled) {
-            setCheck(
-              [400, 401, 403].includes(r.status) ? 'invalid' : 'unreachable'
-            );
+            setCheck({ projectName, projectId, scopes });
           }
         })
-        .catch(() => {
-          if (!cancelled) setCheck('unreachable');
+        .catch((e) => {
+          if (!cancelled) {
+            setCheck(
+              isInconclusiveSessionCheckError(e) ? 'unreachable' : 'invalid'
+            );
+          }
         });
-    }, 400);
+    }, TYPING_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;

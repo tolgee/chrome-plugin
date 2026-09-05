@@ -1,21 +1,84 @@
 import { LibConfig } from '../types';
-import { normalizeUrl } from '../oauth/url';
-import { PROTOCOL_VERSION } from '../constants';
+import { sameOrigin } from '../oauth/url';
+import { SessionKind, supportsProxy } from '../protocol';
+import { PageCredentials } from '../content/credentialSink';
+import { siteKeyFromCode } from './apiKeyScreen';
 
-// See oauth/sessionRules.ts for the projectId-vs-projectKey distinction these two fields carry.
 export type Values = {
   apiUrl?: string;
   apiKey?: string;
   branch?: string;
-  // Signed in through the extension; the session itself lives in the service worker, never here.
   oauth?: boolean;
   projectId?: number;
   projectKey?: string;
+  // The key the page's own code carries, remembered while apiKey overrides it: once the override is injected, the
+  // page reports the override as its config key, so the site's own key is only known from here.
+  siteKey?: string;
 };
 
-// The SDK must speak the proxied-request protocol (PROTOCOL_VERSION 2) for an OAuth session to be of any use to it.
-export const sdkSupportsOAuth = (libConfig?: LibConfig | null): boolean =>
-  (libConfig?.protocolVersion ?? 1) >= PROTOCOL_VERSION;
+// Whether the SDK on the page can send its Tolgee API requests through the worker.
+export const sdkSupportsProxy = (libConfig?: LibConfig | null): boolean =>
+  supportsProxy(libConfig?.protocolVersion);
+
+export const sessionKindOfValues = (
+  values?: Values | null
+): SessionKind | undefined =>
+  isOAuth(values) ? 'oauth' : values?.apiKey ? 'apiKey' : undefined;
+
+export const pageCredentials = (
+  values: Values | null | undefined,
+  libConfig: LibConfig | null | undefined
+): PageCredentials => {
+  const valid = validateValues(values);
+  if (!valid) {
+    return {};
+  }
+  const toPage = Boolean(valid.apiKey) && !sdkSupportsProxy(libConfig);
+  return {
+    apiKey: toPage ? valid.apiKey : undefined,
+    apiUrl: valid.apiUrl,
+    branch: valid.branch,
+    session: toPage ? undefined : sessionKindOfValues(valid),
+    projectId: valid.projectId,
+    projectKey: valid.projectKey,
+  };
+};
+
+export type PageAppliedCredentials = PageCredentials;
+
+export const appliedValuesFrom = (
+  page: PageAppliedCredentials | null | undefined,
+  stored: Values | null | undefined
+): Values => {
+  const projectId =
+    page?.projectId === undefined ||
+    page.projectId === null ||
+    page.projectId === ''
+      ? undefined
+      : Number(page.projectId);
+  const base: Values = {
+    apiUrl: page?.apiUrl || undefined,
+    branch: page?.branch || undefined,
+    projectId: Number.isNaN(projectId) ? undefined : projectId,
+    projectKey: page?.projectKey || undefined,
+  };
+  if (page?.apiKey) {
+    return { ...base, apiKey: page.apiKey };
+  }
+  if (page?.session === 'oauth') {
+    return { ...base, oauth: true };
+  }
+  if (
+    page?.session === 'apiKey' &&
+    stored?.apiKey &&
+    !stored.oauth &&
+    sameOrigin(stored.apiUrl, page.apiUrl) &&
+    stored.projectKey === page.projectKey
+  ) {
+    return { ...base, apiKey: stored.apiKey };
+  }
+  return base;
+};
 
 export const declaredProjectId = (
   libConfig?: LibConfig | null
@@ -65,52 +128,42 @@ export const compareValues = (
   );
 };
 
-// The server field is free text; only an http(s) URL can be signed in to (or fetched from) at all.
-export const isHttpUrl = (raw: string | undefined): boolean => {
-  if (!raw) {
-    return false;
-  }
-  try {
-    const { protocol } = new URL(raw);
-    return protocol === 'http:' || protocol === 'https:';
-  } catch {
-    return false;
-  }
+type SessionSlots = {
+  values: Values | null;
+  storedValues: Values | null;
+  appliedValues: Values | null;
 };
 
-// Same http(s) restriction as httpDisplayUrl below: the server URL is user-editable and ends up in an `<a href>`.
-export const projectUrl = (
-  apiUrl: string | undefined,
-  projectId: number | undefined
-): string | null => {
-  if (!apiUrl || projectId === undefined) {
-    return null;
-  }
-  try {
-    const { protocol } = new URL(apiUrl);
-    if (protocol !== 'http:' && protocol !== 'https:') {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-  return `${normalizeUrl(apiUrl)}/projects/${projectId}`;
-};
+export const activeValuesOf = ({
+  values,
+  storedValues,
+  appliedValues,
+}: SessionSlots): Values | null => appliedValues || storedValues || values;
 
-// A display host and a link target for a user-editable server URL. Restricted to http(s): the raw value could be
-// `javascript:...`, which a plain `<a href>` would execute with extension privileges, so anything else falls back.
-export const httpDisplayUrl = (
-  raw: string,
-  fallback: string
-): { host: string; link: string } => {
-  try {
-    const parsed = new URL(raw);
-    const link =
-      parsed.protocol === 'http:' || parsed.protocol === 'https:'
-        ? parsed.toString()
-        : fallback;
-    return { host: parsed.host, link };
-  } catch {
-    return { host: raw, link: fallback };
-  }
-};
+export const hasSessionOf = ({ storedValues, appliedValues }: SessionSlots) =>
+  Boolean(storedValues || appliedValues);
+
+// A stored session that was not applied on this page leaves the slot alone: a fresh tab of the origin and a page
+// switched off earlier look the same to the popup, only the page knows which it is.
+export const pageEditing = ({
+  storedValues,
+  appliedValues,
+  editingSwitchedOff,
+}: Pick<SessionSlots, 'storedValues' | 'appliedValues'> & {
+  editingSwitchedOff: boolean;
+}): PageCredentials['editing'] =>
+  appliedValues || !storedValues
+    ? null
+    : editingSwitchedOff
+      ? 'off'
+      : undefined;
+
+// With a session, the site key is whatever the record remembers (the stored copy first: the page's own copy of the
+// applied values never carries it); without one it is the key the page's own code ships.
+export const siteKeyOf = (
+  slots: SessionSlots,
+  libConfig: LibConfig | null | undefined
+): string | undefined =>
+  hasSessionOf(slots)
+    ? (slots.storedValues || slots.appliedValues)?.siteKey
+    : (siteKeyFromCode(libConfig) && slots.values?.apiKey) || undefined;

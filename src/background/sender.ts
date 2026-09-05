@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import { safeOrigin } from '../oauth/url';
+import { safeOrigin, sameOrigin } from '../oauth/url';
 
 export type MessageSender = {
   url?: string;
@@ -7,19 +7,21 @@ export type MessageSender = {
   tab?: { id?: number; url?: string; windowId?: number };
 };
 
-// A tab can only ever act for its own origin; a claimed pageOrigin is honoured solely for the extension's own pages
-// (the popup). Those are told apart by their URL, not by a missing sender.tab: the action popup has none, but the
-// same page opened in a tab does.
 export const requesterOrigin = (
   sender: MessageSender,
   claimed?: string
 ): string | undefined =>
-  isTabSender(sender) ? safeOrigin(sender.tab.url) : claimed;
+  isWebPageSender(sender) ? safeOrigin(sender.tab.url) : claimed;
 
-export const isTabSender = (
+// An extension page opened in a tab has a sender.tab too, so the URL check is what tells it from a web page.
+export const isWebPageSender = (
   sender: MessageSender
 ): sender is MessageSender & { tab: { url?: string } } =>
   Boolean(sender.tab) && !isExtensionPage(sender.url);
 
 export const isExtensionPage = (url?: string): boolean =>
   Boolean(url?.startsWith(browser.runtime.getURL('')));
+
+// Same-origin frames may act for their page; a cross-origin iframe inside a connected tab may not.
+export const isCrossOriginFrame = (sender: MessageSender): boolean =>
+  isWebPageSender(sender) && !sameOrigin(sender.url, sender.tab.url);

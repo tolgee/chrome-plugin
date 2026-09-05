@@ -2,15 +2,14 @@ import {
   API_KEY_SESSION_STORAGE,
   API_URL_SESSION_STORAGE,
   BRANCH_SESSION_STORAGE,
-  OAUTH_SESSION_STORAGE,
+  EXTENSION_SESSION_STORAGE,
   PROJECT_ID_SESSION_STORAGE,
   PROJECT_KEY_SESSION_STORAGE,
-  PROTOCOL_VERSION,
-} from '../constants';
+} from '../sessionStorageKeys';
+import { PROTOCOL_VERSION, sessionKindOf } from '../protocol';
 import { LibConfig } from '../types';
 import { acceptsCredentialDelivery } from './acceptsCredentialDelivery';
 import { writeCredentialsIfChanged } from './credentialSink';
-import { injectUiLib } from './injectUiLib';
 import { Messages } from './Messages';
 import { updateState } from './updateState';
 
@@ -24,7 +23,7 @@ const getAppliedCredentials = () => {
     apiKey: sessionStorage.getItem(API_KEY_SESSION_STORAGE),
     apiUrl: sessionStorage.getItem(API_URL_SESSION_STORAGE),
     branch: sessionStorage.getItem(BRANCH_SESSION_STORAGE),
-    oauth: sessionStorage.getItem(OAUTH_SESSION_STORAGE) === '1',
+    session: sessionKindOf(sessionStorage.getItem(EXTENSION_SESSION_STORAGE)),
     projectId: sessionStorage.getItem(PROJECT_ID_SESSION_STORAGE),
     projectKey: sessionStorage.getItem(PROJECT_KEY_SESSION_STORAGE),
   };
@@ -34,14 +33,6 @@ const getAppliedCredentials = () => {
 messages.listenWindow('TOLGEE_READY', (c: LibConfig) => {
   const firstHandshake = !configuration;
   configuration = c;
-  const appliedCredentials = getAppliedCredentials();
-  if (
-    appliedCredentials.apiKey &&
-    c.uiPresent === false &&
-    (c.mode || c.config?.mode) === 'development'
-  ) {
-    injectUiLib(c.uiVersion);
-  }
   updateState(configuration, messages);
   if (firstHandshake) {
     messages.sendToLib('TOLGEE_PLUGIN_READY');

@@ -46,6 +46,12 @@ test('signs in with OAuth, edits in context through the extension and signs out'
   await expect(popup.getByTestId('account-detail')).toHaveText(
     `Signed in on ${host}`
   );
+  await expect(popup.getByTestId('connection-summary')).toContainText(
+    "You're signed in"
+  );
+  await expect(popup.getByTestId('connection-summary')).toContainText(
+    `Edits you make on this page are saved to ${app.projectName} in Tolgee.`
+  );
   await expect(popup.getByTestId('project-link')).toHaveText(app.projectName);
   await expect(popup.getByTestId('project-link')).toHaveAttribute(
     'href',
@@ -59,42 +65,45 @@ test('signs in with OAuth, edits in context through the extension and signs out'
   expect(await sessionItem(page, '__tolgee_projectId')).toBe(
     String(app.projectId)
   );
-  expect(await sessionItem(page, '__tolgee_oauth')).toBe('1');
+  expect(await sessionItem(page, '__tolgee_session')).toBe('oauth');
 
-  // The page itself never talks to the project API; the worker does, with the session token.
-  const pageRequests = collectProjectRequests(page);
-  const workerRequests = collectWorkerRequests(context);
-  await openInContextDialog(page);
-  // The dialog title renders before its queries go out; wait for the worker to have sent them for this project.
-  await expect
-    .poll(
-      () =>
-        workerRequests.some((request) =>
-          request.url().includes(`/v2/projects/${app.projectId}/`)
-        ),
-      { message: 'the worker to send the dialog requests' }
-    )
-    .toBe(true);
-  await Promise.all(workerRequests.map((request) => request.response()));
-  expect(pageRequests).toEqual([]);
-  for (const request of workerRequests) {
-    const headers = await request.allHeaders();
-    expect(headers['authorization'], request.url()).toMatch(/^Bearer /);
-    expect(headers['x-api-key'], request.url()).toBeUndefined();
-  }
+  await test.step('the page itself never talks to the project API; the worker does, with the session token', async () => {
+    const pageRequests = collectProjectRequests(page);
+    const workerRequests = collectWorkerRequests(context);
+    await openInContextDialog(page);
+    // The dialog title renders before its queries go out; wait for the worker to have sent them for this project.
+    await expect
+      .poll(
+        () =>
+          workerRequests.some((request) =>
+            request.url().includes(`/v2/projects/${app.projectId}/`)
+          ),
+        { message: 'the worker to send the dialog requests' }
+      )
+      .toBe(true);
+    await Promise.all(workerRequests.map((request) => request.response()));
+    expect(pageRequests).toEqual([]);
+    for (const request of workerRequests) {
+      const headers = await request.allHeaders();
+      expect(headers['authorization'], request.url()).toMatch(/^Bearer /);
+      expect(headers['x-api-key'], request.url()).toBeUndefined();
+    }
+  });
 
-  // A hard reload renders through the worker right away, not after the page's 35 s "extension unavailable" fallback.
-  const afterReload = collectWorkerRequests(context, (request) =>
-    request.url().includes(`/v2/projects/${app.projectId}/translations/`)
-  );
-  await page.reload();
-  await expect(page.locator(TITLE)).toBeVisible();
-  await expect
-    .poll(async () => (await afterReload[0]?.response())?.status(), {
-      timeout: 10_000,
-      message: 'the worker to load the in-context translations after a reload',
-    })
-    .toBe(200);
+  await test.step("a hard reload renders through the worker right away, not after the page's extension-unavailable fallback", async () => {
+    const afterReload = collectWorkerRequests(context, (request) =>
+      request.url().includes(`/v2/projects/${app.projectId}/translations/`)
+    );
+    await page.reload();
+    await expect(page.locator(TITLE)).toBeVisible();
+    await expect
+      .poll(async () => (await afterReload[0]?.response())?.status(), {
+        timeout: 10_000,
+        message:
+          'the worker to load the in-context translations after a reload',
+      })
+      .toBe(200);
+  });
 
   const revokeCalls: string[] = [];
   context.on('request', (request) => {
@@ -113,18 +122,19 @@ test('signs in with OAuth, edits in context through the extension and signs out'
     timeout: 30_000,
   });
   expect(await storedOAuthSessions(worker)).toHaveLength(0);
-  expect(await sessionItem(page, '__tolgee_oauth')).toBeNull();
-  // Revocation is the worker's fire-and-forget last step; the token being dead server-side is what proves it ran.
-  await expect
-    .poll(
-      async () =>
-        (
-          await page.request.get(`${state.tolgeeUrl}/v2/user`, {
-            headers: { Authorization: `Bearer ${session.accessToken}` },
-          })
-        ).status(),
-      { message: 'the revoked access token is rejected' }
-    )
-    .toBe(401);
-  expect(revokeCalls).toEqual([`${state.tolgeeUrl}/oauth2/revoke`]);
+  expect(await sessionItem(page, '__tolgee_session')).toBeNull();
+  await test.step("sign out revokes the token server-side, as the worker's fire-and-forget last step", async () => {
+    await expect
+      .poll(
+        async () =>
+          (
+            await page.request.get(`${state.tolgeeUrl}/v2/user`, {
+              headers: { Authorization: `Bearer ${session.accessToken}` },
+            })
+          ).status(),
+        { message: 'the revoked access token is rejected' }
+      )
+      .toBe(401);
+    expect(revokeCalls).toEqual([`${state.tolgeeUrl}/oauth2/revoke`]);
+  });
 });

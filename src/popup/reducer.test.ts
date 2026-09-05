@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { LibConfig } from '../types';
+import { createReducer, initialState } from './reducer';
 import {
   Action,
   branchableProjectId,
-  createReducer,
-  initialState,
+  keyProjectPending,
   ProjectInfo,
   State,
-} from './reducer';
+} from './popupState';
+
+// A project API key carrying its own project id (1), the same key oauth/apiKeyProject.test.ts decodes.
+const KEY_FOR_PROJECT_1 = 'tgpak_gfpxm4lin4zdazleoq4gm2rumfxgi2lfom2gw4dpguzxc';
+// A key from before project ids were embedded: only the credentials check can say which project it opens.
+const LEGACY_KEY = 'legacykey';
 
 const lib = (
   overrides: Partial<Omit<LibConfig, 'config'>> & {
@@ -183,7 +188,7 @@ describe('detector reducer', () => {
       ...initialState,
       values: {
         apiUrl: 'https://app.tolgee.io',
-        apiKey: 'tgpak_x',
+        apiKey: KEY_FOR_PROJECT_1,
         branch: 'feature',
       },
     };
@@ -288,6 +293,115 @@ describe('detector reducer', () => {
     });
   });
 
+  // The worker answers a page's request by the project its origin record pins, so a session that reaches the page
+  // without one leaves the in-context tools dead while the popup says editing is on.
+  describe('pinning an api-key session to a project', () => {
+    const check: ProjectInfo = {
+      projectName: 'Demo',
+      projectId: 9,
+      scopes: [],
+      userFullName: 'U',
+      branchingEnabled: false,
+    };
+    const stateWith = (
+      apiKey: string,
+      credentialsCheck: State['credentialsCheck']
+    ): State => ({
+      ...initialState,
+      values: { apiUrl: 'https://app.tolgee.io', apiKey },
+      credentialsCheck,
+    });
+
+    it("APPLY_VALUES pins to the key's own project without waiting for the check", () => {
+      const next = reduce(stateWith(KEY_FOR_PROJECT_1, 'loading'), {
+        type: 'APPLY_VALUES',
+      });
+      expect(next.appliedValues).toMatchObject({
+        projectId: 1,
+        projectKey: '1',
+      });
+      expect(next.storedValues).toMatchObject({
+        projectId: 1,
+        projectKey: '1',
+      });
+      expect(apply).toHaveBeenCalledOnce();
+    });
+
+    it('APPLY_VALUES pins a legacy key to the project the settled check reported', () => {
+      const next = reduce(stateWith(LEGACY_KEY, check), {
+        type: 'APPLY_VALUES',
+      });
+      expect(next.appliedValues).toMatchObject({
+        projectId: 9,
+        projectKey: '9',
+      });
+      expect(next.storedValues).toMatchObject({
+        projectId: 9,
+        projectKey: '9',
+      });
+    });
+
+    it('APPLY_VALUES applies nothing while a legacy key has no project yet', () => {
+      const next = reduce(stateWith(LEGACY_KEY, 'loading'), {
+        type: 'APPLY_VALUES',
+      });
+      expect(next.appliedValues).toBeNull();
+      expect(next.storedValues).toBeNull();
+      expect(apply).not.toHaveBeenCalled();
+    });
+
+    it("SWITCH_EDITING_ON pins to the key's own project without waiting for the check", () => {
+      const stored = {
+        apiUrl: 'https://app.tolgee.io',
+        apiKey: KEY_FOR_PROJECT_1,
+      };
+      const next = reduce(
+        { ...initialState, storedValues: stored, credentialsCheck: 'loading' },
+        { type: 'SWITCH_EDITING_ON' }
+      );
+      expect(next.appliedValues).toEqual({
+        ...stored,
+        projectId: 1,
+        projectKey: '1',
+      });
+      expect(apply).toHaveBeenCalledOnce();
+    });
+
+    it('SWITCH_EDITING_ON keeps editing off while a legacy key has no project yet', () => {
+      const next = reduce(
+        {
+          ...initialState,
+          storedValues: { apiUrl: 'https://app.tolgee.io', apiKey: LEGACY_KEY },
+          credentialsCheck: 'loading',
+        },
+        { type: 'SWITCH_EDITING_ON' }
+      );
+      expect(next.appliedValues).toBeNull();
+      expect(apply).not.toHaveBeenCalled();
+    });
+
+    it('keyProjectPending says so only while the project is still unknown', () => {
+      const legacy = { apiUrl: 'https://app.tolgee.io', apiKey: LEGACY_KEY };
+      expect(keyProjectPending(legacy, 'loading')).toBe(true);
+      expect(keyProjectPending(legacy, check)).toBe(false);
+      expect(keyProjectPending({ ...legacy, projectKey: '3' }, 'loading')).toBe(
+        false
+      );
+      expect(
+        keyProjectPending(
+          { apiUrl: 'https://app.tolgee.io', apiKey: KEY_FOR_PROJECT_1 },
+          'loading'
+        )
+      ).toBe(false);
+      expect(
+        keyProjectPending(
+          { apiUrl: 'https://app.tolgee.io', oauth: true },
+          null
+        )
+      ).toBe(false);
+    });
+  });
+
   describe('CLEAR_ALL', () => {
     const page = lib({
       config: { apiUrl: 'https://my.tolgee.io', apiKey: '' },
@@ -307,7 +421,7 @@ describe('detector reducer', () => {
     it('wipes the credentials and the resolved project', () => {
       const next = reduce(dirty, { type: 'CLEAR_ALL' });
       expect(next.storedValues).toBeNull();
-      expect(next.appliedValues).toBeUndefined();
+      expect(next.appliedValues).toBeNull();
       expect(next.declaredProject).toBeNull();
       expect(next.declaredProjectInaccessible).toBe(false);
       expect(apply).toHaveBeenCalledOnce();
@@ -328,13 +442,110 @@ describe('detector reducer', () => {
     });
   });
 
-  describe('STORE_VALUES / LOAD_VALUES restore roundtrip', () => {
-    const applied = { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_x' };
+  describe('overriding a key the page ships in its own code', () => {
+    const devPage = lib({
+      mode: 'development',
+      config: { apiUrl: 'https://my.tolgee.io', apiKey: 'tgpak_site' },
+    });
 
-    it('STORE_VALUES promotes appliedValues to stored and clears applied', () => {
+    it('starts from the site key, stores the typed key on apply and falls back to the site key when cleared', () => {
+      const detected = reduce(initialState, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: { libData: devPage, frameId: 0 },
+      });
+      expect(detected.values?.apiKey).toBe('tgpak_site');
+      expect(detected.storedValues).toBeNull();
+
+      const emptied = reduce(detected, {
+        type: 'CHANGE_VALUES',
+        payload: { apiKey: '', siteKey: 'tgpak_site' },
+      });
+      expect(emptied.values?.apiUrl).toBe('https://my.tolgee.io');
+
+      const typed = reduce(emptied, {
+        type: 'CHANGE_VALUES',
+        payload: { apiKey: KEY_FOR_PROJECT_1 },
+      });
+      const applied = reduce(typed, { type: 'APPLY_VALUES' });
+      expect(applied.storedValues).toMatchObject({
+        apiUrl: 'https://my.tolgee.io',
+        apiKey: KEY_FOR_PROJECT_1,
+        siteKey: 'tgpak_site',
+      });
+      expect(applied.appliedValues).toEqual(applied.storedValues);
+
+      // The reloaded page reports the injected key as its own; the site key is restored from the stored record.
+      const reloaded = reduce(applied, {
+        type: 'CHANGE_LIB_CONFIG',
+        payload: {
+          libData: lib({
+            mode: 'development',
+            config: {
+              apiUrl: 'https://my.tolgee.io',
+              apiKey: KEY_FOR_PROJECT_1,
+            },
+          }),
+          frameId: 0,
+        },
+      });
+      const cleared = reduce(reloaded, { type: 'CLEAR_ALL' });
+      expect(cleared.storedValues).toBeNull();
+      expect(cleared.appliedValues).toBeNull();
+      expect(cleared.values).toEqual({
+        apiUrl: 'https://my.tolgee.io',
+        apiKey: 'tgpak_site',
+        branch: undefined,
+      });
+    });
+
+    it('does not mistake the key it injected, still reported by the page, for a site key after Remove key', () => {
+      const connected: State = {
+        ...initialState,
+        libConfig: lib({
+          mode: 'development',
+          config: { apiUrl: 'https://my.tolgee.io', apiKey: 'tgpak_own' },
+        }),
+        values: { apiUrl: 'https://my.tolgee.io', apiKey: 'tgpak_own' },
+        appliedValues: { apiUrl: 'https://my.tolgee.io', apiKey: 'tgpak_own' },
+        storedValues: { apiUrl: 'https://my.tolgee.io', apiKey: 'tgpak_own' },
+      };
+      const cleared = reduce(connected, { type: 'CLEAR_ALL' });
+      expect(cleared.values).toEqual({
+        apiUrl: 'https://my.tolgee.io',
+        apiKey: '',
+        branch: undefined,
+      });
+    });
+  });
+
+  describe('SWITCH_EDITING_OFF / SWITCH_EDITING_ON roundtrip', () => {
+    const applied = {
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: 'tgpak_x',
+      projectId: 7,
+      projectKey: '7',
+    };
+    // A record from before api-key sessions were pinned to a project.
+    const unpinned = { apiUrl: 'https://app.tolgee.io', apiKey: LEGACY_KEY };
+
+    it('SWITCH_EDITING_OFF keeps the site key the stored record remembers when the page-reported applied values lack it', () => {
+      const next = reduce(
+        {
+          ...initialState,
+          appliedValues: applied,
+          storedValues: { ...applied, siteKey: 'tgpak_site' },
+        },
+        { type: 'SWITCH_EDITING_OFF' }
+      );
+      expect(next.storedValues).toEqual({ ...applied, siteKey: 'tgpak_site' });
+      expect(next.values).toEqual({ ...applied, siteKey: 'tgpak_site' });
+      expect(next.appliedValues).toBeNull();
+    });
+
+    it('SWITCH_EDITING_OFF promotes appliedValues to stored and clears applied', () => {
       const next = reduce(
         { ...initialState, appliedValues: applied },
-        { type: 'STORE_VALUES' }
+        { type: 'SWITCH_EDITING_OFF' }
       );
       expect(next.storedValues).toEqual(applied);
       expect(next.values).toEqual(applied);
@@ -342,16 +553,126 @@ describe('detector reducer', () => {
       expect(apply).toHaveBeenCalledOnce();
     });
 
-    it('LOAD_VALUES restores the stored session into values and applied', () => {
+    it('SWITCH_EDITING_OFF remembers that the user switched editing off here, and every apply or removal forgets it', () => {
+      const off = reduce(
+        { ...initialState, appliedValues: applied, storedValues: applied },
+        { type: 'SWITCH_EDITING_OFF' }
+      );
+      expect(off.editingSwitchedOff).toBe(true);
+
+      expect(
+        reduce(off, { type: 'SWITCH_EDITING_ON' }).editingSwitchedOff
+      ).toBe(false);
+      expect(reduce(off, { type: 'CLEAR_ALL' }).editingSwitchedOff).toBe(false);
+      expect(
+        reduce({ ...off, values: applied }, { type: 'APPLY_VALUES' })
+          .editingSwitchedOff
+      ).toBe(false);
+      expect(
+        reduce(off, {
+          type: 'OAUTH_APPLY',
+          payload: {
+            apiUrl: 'https://app.tolgee.io',
+            projectId: 3,
+            projectKey: '3',
+          },
+        }).editingSwitchedOff
+      ).toBe(false);
+    });
+
+    it('restoring a stored session or resolving its project does not touch the switched-off memory', () => {
+      const oauth = {
+        apiUrl: 'https://app.tolgee.io',
+        oauth: true,
+        projectId: 3,
+        projectKey: '3',
+      };
+      const off = reduce(
+        { ...initialState, appliedValues: oauth, storedValues: oauth },
+        { type: 'SWITCH_EDITING_OFF' }
+      );
+      const restored = reduce(off, {
+        type: 'LOAD_STORED_VALUES',
+        payload: oauth,
+      });
+      expect(restored.editingSwitchedOff).toBe(true);
+      const resolved = reduce(restored, {
+        type: 'RESOLVE_PROJECT',
+        payload: {
+          project: { id: 3, name: 'Demo', branchingEnabled: false },
+          inaccessible: false,
+        },
+      });
+      expect(resolved.editingSwitchedOff).toBe(true);
+      expect(resolved.appliedValues).toBeNull();
+    });
+
+    it('SWITCH_EDITING_ON restores the stored session into values and applied', () => {
       const next = reduce(
         { ...initialState, storedValues: applied },
-        { type: 'LOAD_VALUES' }
+        { type: 'SWITCH_EDITING_ON' }
       );
       expect(next.appliedValues).toEqual(applied);
       expect(next.values).toEqual(applied);
       expect(next.storedValues).toEqual(applied);
       expect(apply).toHaveBeenCalledOnce();
     });
+
+    it("SWITCH_EDITING_ON pins an unpinned api-key record to the key's project as the check reported it", () => {
+      const check: ProjectInfo = {
+        projectName: 'Demo',
+        projectId: 9,
+        scopes: [],
+        userFullName: 'U',
+        branchingEnabled: false,
+      };
+      const next = reduce(
+        { ...initialState, storedValues: unpinned, credentialsCheck: check },
+        { type: 'SWITCH_EDITING_ON' }
+      );
+      const pinned = { ...unpinned, projectId: 9, projectKey: '9' };
+      expect(next.appliedValues).toEqual(pinned);
+      expect(next.storedValues).toEqual(pinned);
+    });
+
+    it('SWITCH_EDITING_ON keeps the pin an api-key record already carries', () => {
+      const check: ProjectInfo = {
+        projectName: 'Demo',
+        projectId: 9,
+        scopes: [],
+        userFullName: 'U',
+        branchingEnabled: false,
+      };
+      const stored = { ...unpinned, projectId: 3, projectKey: '3' };
+      const next = reduce(
+        { ...initialState, storedValues: stored, credentialsCheck: check },
+        { type: 'SWITCH_EDITING_ON' }
+      );
+      expect(next.appliedValues).toEqual(stored);
+    });
+  });
+
+  it('SET_CONNECT_REFUSAL stores the parked refusal and OAUTH_APPLY drops it', () => {
+    const refusal = {
+      code: 'project_inaccessible' as const,
+      projectId: 5,
+      apiUrl: 'https://app.tolgee.io',
+      at: 1,
+    };
+    const withRefusal = reduce(initialState, {
+      type: 'SET_CONNECT_REFUSAL',
+      payload: refusal,
+    });
+    expect(withRefusal.connectRefusal).toEqual(refusal);
+    const connected = reduce(withRefusal, {
+      type: 'OAUTH_APPLY',
+      payload: {
+        apiUrl: 'https://app.tolgee.io',
+        projectId: 5,
+        projectKey: '5',
+      },
+    });
+    expect(connected.connectRefusal).toBeNull();
   });
 
   it('CHANGE_VALUES merges a partial patch', () => {
@@ -421,8 +742,6 @@ describe('detector reducer', () => {
       expect(apply).not.toHaveBeenCalled();
     });
 
-    // An all-projects grant can resolve a project the session is not keyed to; the worker only proxies the connected
-    // project, so applying it would leave the popup Connected while every request failed.
     it('treats a resolved project outside the connected session as inaccessible rather than applying it', () => {
       const applied: State = {
         ...connected,
@@ -484,6 +803,22 @@ describe('detector reducer', () => {
       expect(branchableProjectId(null, null)).toBeNull();
       expect(branchableProjectId('loading', null)).toBeNull();
       expect(branchableProjectId('invalid', null)).toBeNull();
+    });
+  });
+
+  describe('api-key delivery', () => {
+    const keyValues = {
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: KEY_FOR_PROJECT_1,
+    };
+
+    it('APPLY_VALUES records the key without a delivery: how it reaches the page is decided from the SDK each time', () => {
+      const next = reduce(
+        { ...initialState, libConfig: lib({}), values: keyValues },
+        { type: 'APPLY_VALUES' }
+      );
+      expect(next.appliedValues).not.toHaveProperty('delivery');
+      expect(next.storedValues).not.toHaveProperty('delivery');
     });
   });
 

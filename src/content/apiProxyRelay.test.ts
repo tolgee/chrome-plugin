@@ -7,7 +7,7 @@ import {
 import {
   API_URL_SESSION_STORAGE,
   PROJECT_KEY_SESSION_STORAGE,
-} from '../constants';
+} from '../sessionStorageKeys';
 
 const SELF = {};
 const ORIGIN = 'https://page.example';
@@ -143,6 +143,34 @@ describe('api proxy relay', () => {
     ]);
   });
 
+  it('measures the cap in UTF-8 bytes, not UTF-16 code units: a multi-byte payload under the cap in length but over it in bytes is rejected', async () => {
+    // '€' is one UTF-16 code unit but three UTF-8 bytes.
+    const oversizedInBytesOnly = '€'.repeat(MAX_PROXY_PAYLOAD_BYTES / 2.5);
+    expect(oversizedInBytesOnly.length).toBeLessThan(MAX_PROXY_PAYLOAD_BYTES);
+    expect(
+      new TextEncoder().encode(oversizedInBytesOnly).length
+    ).toBeGreaterThan(MAX_PROXY_PAYLOAD_BYTES);
+    const { deps, posted, fromPage } = setup();
+    fromPage('TOLGEE_API_REQUEST', {
+      id: 'multibyte',
+      path: '/v2/projects/7/keys',
+      method: 'POST',
+      body: { kind: 'json', text: oversizedInBytesOnly },
+    });
+    await flush();
+
+    expect(deps.sendToWorker).not.toHaveBeenCalled();
+    expect(posted).toEqual([
+      {
+        type: 'TOLGEE_API_RESPONSE',
+        data: {
+          id: 'multibyte',
+          error: expect.objectContaining({ kind: 'too_large' }),
+        },
+      },
+    ]);
+  });
+
   it('answers unavailable right away when the worker cannot be reached', async () => {
     const { deps, posted, fromPage } = setup();
     (deps.sendToWorker as any).mockRejectedValue(
@@ -229,6 +257,28 @@ describe('api proxy relay', () => {
 
     expect(deps.sendToWorker).not.toHaveBeenCalled();
   });
+
+  it.each(['TOLGEE_POPUP_API_REQUEST', 'OAUTH_LOGIN', 'OAUTH_LOGOUT'])(
+    'never relays the privileged %s from a page',
+    async (type) => {
+      const { deps, fromPage } = setup();
+      fromPage(type, { id: 'r1', path: '/v2/user' });
+      await flush();
+
+      expect(deps.sendToWorker).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['constructor', '__proto__', 'hasOwnProperty', 'toString'])(
+    'ignores a page message claiming an inherited Object property as its type (%s)',
+    async (type) => {
+      const { deps, fromPage } = setup();
+      fromPage(type, { id: 'r1', path: '/x' });
+      await flush();
+
+      expect(deps.sendToWorker).not.toHaveBeenCalled();
+    }
+  );
 
   it('forwards the worker TOLGEE_SCREENSHOT_CAPTURED notice to the page and nothing else', () => {
     const { relay, posted } = setup();

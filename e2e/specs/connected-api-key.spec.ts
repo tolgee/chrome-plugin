@@ -1,6 +1,11 @@
 import { apiAs, apiKeyStatus } from '../fixtures/api';
 import { expect, type Page, test, type Worker } from '../fixtures/extension';
-import { openTestapp, sessionItem } from '../fixtures/testapp';
+import {
+  dialogAsksToSignIn,
+  dialogSaysEditingOff,
+  openTestapp,
+  sessionItem,
+} from '../fixtures/testapp';
 
 const connectWithApiKey = async (popup: Page, page: Page, apiKey: string) => {
   await popup.getByTestId('use-api-key').click();
@@ -32,6 +37,9 @@ test('shows the connection and turns in-context editing off and on', async ({
   await expect(popup.getByTestId('connected-panel')).toContainText(
     'API key connection'
   );
+  await expect(popup.getByTestId('connection-summary')).toHaveText(
+    `You're connected with a project API key. Edits you make on this page are saved to ${app.projectName} in Tolgee.`
+  );
   await expect(popup.getByTestId('account-name')).toHaveText('Project API key');
   await expect(popup.getByTestId('account-detail')).toHaveText(
     `${state.apiKey.slice(0, 10)}…${state.apiKey.slice(-5)} on ${host}`
@@ -54,7 +62,8 @@ test('shows the connection and turns in-context editing off and on', async ({
     'Alt+click any text on the page to edit it.'
   );
   await expect(popup.getByTestId('sign-out')).toHaveText('Remove key');
-  expect(await sessionItem(page, '__tolgee_apiKey')).toBe(state.apiKey);
+  expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
+  expect(await sessionItem(page, '__tolgee_session')).toBe('apiKey');
   expect(await sessionItem(page, '__tolgee_apiUrl')).toBe(state.tolgeeUrl);
 
   const reloadedOff = page.waitForEvent('load');
@@ -68,8 +77,13 @@ test('shows the connection and turns in-context editing off and on', async ({
     'You stay signed in. Turn it on to edit here.'
   );
   await expect(popup.getByTestId('project-link')).toHaveText(app.projectName);
-  expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
+  expect(await sessionItem(page, '__tolgee_session')).toBeNull();
   expect(await sessionItem(page, '__tolgee_apiUrl')).toBeNull();
+  await test.step('alt+click still opens the dialog, which says editing is off rather than asking to sign in', async () => {
+    expect(await sessionItem(page, '__tolgee_editing')).toBe('off');
+    expect(await dialogSaysEditingOff(page)).toBe(true);
+    expect(await dialogAsksToSignIn(page)).toBe(false);
+  });
 
   const reloadedOn = page.waitForEvent('load');
   await editingSwitch.click();
@@ -78,7 +92,11 @@ test('shows the connection and turns in-context editing off and on', async ({
   await expect(popup.getByTestId('editing-hint')).toHaveText(
     'Alt+click any text on the page to edit it.'
   );
-  expect(await sessionItem(page, '__tolgee_apiKey')).toBe(state.apiKey);
+  expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
+  expect(await sessionItem(page, '__tolgee_session')).toBe('apiKey');
+  expect(await sessionItem(page, '__tolgee_editing')).toBeNull();
+  expect(await dialogAsksToSignIn(page)).toBe(false);
+  expect(await dialogSaysEditingOff(page)).toBe(false);
 });
 
 // Regression: with editing already off there is no page reload to re-detect Tolgee, and the popup used to fall
@@ -96,6 +114,7 @@ test('removes the key while editing is off', async ({
   expect(await originRecord(worker, app.url)).toMatchObject({
     apiKey: state.apiKey,
     apiUrl: state.tolgeeUrl,
+    projectKey: String(app.projectId),
   });
 
   const editingSwitch = popup.getByTestId('editing-switch').locator('input');
@@ -103,16 +122,22 @@ test('removes the key while editing is off', async ({
   await editingSwitch.click();
   await reloaded;
   await expect(editingSwitch).not.toBeChecked();
+  expect(await sessionItem(page, '__tolgee_editing')).toBe('off');
 
   await popup.getByTestId('sign-out').click();
   await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
   await expect(popup.getByTestId('popup-not-present')).toHaveCount(0);
   await expect(popup.getByTestId('api-key-input')).toHaveValue('');
+  await popup.getByTestId('server-settings').click();
   await expect(popup.getByTestId('server-input')).toHaveValue(state.tolgeeUrl);
   await expect.poll(() => originRecord(worker, app.url)).toBeNull();
 
   // Nothing else leaked through: the page still runs without credentials.
   expect(await sessionItem(page, '__tolgee_apiKey')).toBeNull();
+  await test.step('with the key gone the dialog asks to sign in again, not that editing is off', async () => {
+    await expect.poll(() => sessionItem(page, '__tolgee_editing')).toBeNull();
+    expect(await dialogAsksToSignIn(page)).toBe(true);
+  });
   await popup.getByTestId('all-connection-options').click();
   await expect(popup.getByTestId('server-host')).toHaveText(
     new URL(state.tolgeeUrl).host
@@ -151,6 +176,7 @@ test('shows the rejected-key state once the key is revoked on the server', async
     await expect(popup.getByTestId('account-name')).toHaveText(
       'Project API key'
     );
+    await expect(popup.getByTestId('connection-summary')).toHaveCount(0);
     await expect(popup.getByTestId('project-link')).toHaveCount(0);
     await expect(popup.getByTestId('editing-switch')).toHaveCount(0);
 

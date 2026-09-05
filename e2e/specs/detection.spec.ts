@@ -6,6 +6,7 @@ import {
   openTestapp,
   PLAIN_PAGE_HTML,
   servePage,
+  serveOldSdkPage,
   TITLE,
   waitForContentScript,
 } from '../fixtures/testapp';
@@ -152,46 +153,39 @@ test('reports an old SDK without the in-context UI as legacy', async ({
   );
 });
 
-// An SDK from before the proxied-request protocol would hold no session after a sign-in: the popup says so instead
-// of connecting, and leaves the api key path open.
-test('refuses OAuth sign-in on an SDK without proxy support', async ({
+// An SDK from before the proxied-request protocol cannot send its requests through the extension, which is what
+// signing in needs: the popup says so and offers the API key instead, which such an SDK uses directly (see
+// api-key-legacy-sdk.spec.ts for that path).
+test('refuses to sign in on an SDK without proxy support and offers an API key instead', async ({
   page,
   state,
   openPopup,
 }) => {
   const app = state.apps[0];
-  const url = `${app.url}/__e2e_old-sdk.html`;
-  await servePage(page, url, PLAIN_PAGE_HTML);
-  await page.goto(url);
-  await waitForContentScript(page);
-
-  // What a current in-context SDK without the proxy protocol sends: uiPresent, but no protocolVersion.
-  await page.evaluate(
-    ({ apiUrl, projectId }) =>
-      window.postMessage(
-        {
-          type: 'TOLGEE_READY',
-          data: {
-            uiPresent: true,
-            mode: 'production',
-            config: { apiUrl, apiKey: '', projectId },
-          },
-        },
-        '*'
-      ),
-    { apiUrl: state.tolgeeUrl, projectId: app.projectId }
-  );
+  await serveOldSdkPage(page, app.url, {
+    apiUrl: state.tolgeeUrl,
+    projectId: app.projectId,
+  });
 
   const popup = await openPopup(page);
   await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
   await expect(popup.getByTestId('sdk-too-old')).toContainText(
-    'Update the Tolgee SDK to sign in'
+    'Sign-in needs a newer Tolgee SDK'
   );
   await expect(popup.getByTestId('sdk-too-old')).toContainText(
-    'needs @tolgee/web'
+    'update @tolgee/web to 7.2.0 or newer'
+  );
+  await expect(popup.getByTestId('sdk-too-old')).toContainText(
+    'You can still connect with a project API key'
   );
   await expect(popup.getByTestId('connect-oauth')).toHaveCount(0);
   await expect(popup.getByTestId('use-api-key')).toBeVisible();
+
+  await popup.getByTestId('use-api-key').click();
+  await expect(popup.getByTestId('api-key-input')).toBeVisible();
+  await expect(popup.getByTestId('sdk-too-old')).toHaveCount(0);
+  await popup.getByTestId('all-connection-options').click();
+  await expect(popup.getByTestId('sdk-too-old')).toBeVisible();
 });
 
 test('reports two Tolgee instances on a page embedding another one', async ({

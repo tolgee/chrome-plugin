@@ -27,7 +27,7 @@ const ORIGIN = 'https://site.example';
 describe('popup storage routing', () => {
   beforeEach(() => store.clear());
 
-  it('for an OAuth session, updates only the marker projectId hint (never the projectKey session identity)', async () => {
+  it('for an OAuth session, updates only the connection projectId hint (never the projectKey session identity)', async () => {
     store.set(ORIGIN, {
       apiUrl: 'https://app.tolgee.io',
       oauth: true,
@@ -52,7 +52,7 @@ describe('popup storage routing', () => {
     expect(record.apiKey).toBeUndefined();
   });
 
-  it('for an OAuth session, remembers the branch override on the marker so reopening the popup restores it', async () => {
+  it('for an OAuth session, remembers the branch override on the connection so reopening the popup restores it', async () => {
     store.set(ORIGIN, {
       apiUrl: 'https://app.tolgee.io',
       oauth: true,
@@ -77,7 +77,34 @@ describe('popup storage routing', () => {
     expect((await loadValues()).branch).toBeUndefined();
   });
 
-  it('for an OAuth session on an origin with no existing marker, does nothing (never fabricates one)', async () => {
+  it('for an OAuth session, keeps the site key the connection remembers and records one the popup knows', async () => {
+    store.set(ORIGIN, {
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectId: 5,
+      projectKey: '5',
+      siteKey: 'tgpak_site',
+    });
+
+    await storeValues({
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectId: 5,
+    });
+    expect((store.get(ORIGIN) as Record<string, unknown>).siteKey).toBe(
+      'tgpak_site'
+    );
+
+    await storeValues({
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectId: 5,
+      siteKey: 'tgpak_other',
+    });
+    expect((await loadValues()).siteKey).toBe('tgpak_other');
+  });
+
+  it('for an OAuth session on an origin with no existing connection, does nothing (never fabricates one)', async () => {
     await storeValues({
       apiUrl: 'https://app.tolgee.io',
       oauth: true,
@@ -87,17 +114,43 @@ describe('popup storage routing', () => {
     expect(store.has(ORIGIN)).toBe(false);
   });
 
-  it('persists an api-key session as a plain record without the oauth flag', async () => {
+  it('persists an api-key session as a plain record without the oauth flag, pinned to its project for the worker', async () => {
     await storeValues({
       apiUrl: 'https://app.tolgee.io',
       apiKey: 'tgpak_x',
       branch: 'feat',
+      projectId: 3,
+      projectKey: '3',
     });
     expect(store.get(ORIGIN)).toEqual({
       apiUrl: 'https://app.tolgee.io',
       apiKey: 'tgpak_x',
       branch: 'feat',
+      projectId: 3,
+      projectKey: '3',
     });
+    expect(await loadValues()).toMatchObject({
+      apiKey: 'tgpak_x',
+      projectId: 3,
+      projectKey: '3',
+    });
+  });
+
+  it('keeps the site key an api-key record overrides', async () => {
+    await storeValues({
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: 'tgpak_own',
+      siteKey: 'tgpak_site',
+    });
+    expect(store.get(ORIGIN)).toEqual({
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: 'tgpak_own',
+      siteKey: 'tgpak_site',
+    });
+    expect(
+      (store.get(ORIGIN) as Record<string, unknown>).projectKey
+    ).toBeUndefined();
+    expect((await loadValues()).siteKey).toBe('tgpak_site');
   });
 
   it('removes the origin record when neither credential is present', async () => {

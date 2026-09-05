@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { sendToBackground } = vi.hoisted(() => ({ sendToBackground: vi.fn() }));
 vi.mock('./sendToBackground', () => ({ sendToBackground }));
+vi.mock('./activeTab', () => ({
+  getActiveTab: async () => ({ url: 'https://page.example/app' }),
+  getActiveTabOrigin: async () => 'https://page.example',
+}));
 
 import {
   abbreviateApiKey,
   branchEditorKeyAction,
   branchInEffect,
-  credentialHeaders,
   fetchBranches,
   pageBranchLabel,
 } from './branch';
@@ -16,26 +19,6 @@ const branches = [
   { name: 'main', isDefault: true },
   { name: 'feature', isDefault: false },
 ];
-
-const TARGET = {
-  pageOrigin: 'https://page.example',
-  apiUrl: 'https://api',
-  projectKey: '7',
-};
-
-describe('credentialHeaders', () => {
-  it('carries no credential for a signed-in session (the worker adds the token)', () => {
-    expect(credentialHeaders({ apiUrl: 'https://api', oauth: true })).toEqual(
-      {}
-    );
-  });
-
-  it('uses the api key header for a key session', () => {
-    expect(
-      credentialHeaders({ apiUrl: 'https://api', apiKey: 'tgpak_x' })
-    ).toEqual({ 'X-API-Key': 'tgpak_x' });
-  });
-});
 
 describe('fetchBranches', () => {
   afterEach(() => {
@@ -53,20 +36,20 @@ describe('fetchBranches', () => {
       },
     });
 
-    const result = await fetchBranches(
-      7,
-      { apiUrl: 'https://api/', oauth: true, projectKey: '7' },
-      TARGET
-    );
+    const result = await fetchBranches(7, {
+      apiUrl: 'https://api/',
+      oauth: true,
+      projectKey: '7',
+    });
 
     expect(result).toEqual(branches);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(sendToBackground).toHaveBeenCalledWith(
-      'TOLGEE_API_REQUEST',
+      'TOLGEE_POPUP_API_REQUEST',
       expect.objectContaining({
         path: '/v2/projects/7/branches?size=100',
         method: 'GET',
-        apiUrl: 'https://api',
+        apiUrl: 'https://api/',
         projectKey: '7',
         pageOrigin: 'https://page.example',
       })
@@ -80,11 +63,10 @@ describe('fetchBranches', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchBranches(
-      7,
-      { apiUrl: 'https://api', apiKey: 'tgpak_x' },
-      TARGET
-    );
+    const result = await fetchBranches(7, {
+      apiUrl: 'https://api',
+      apiKey: 'tgpak_x',
+    });
 
     expect(result).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
@@ -100,14 +82,14 @@ describe('fetchBranches', () => {
       vi.fn(async () => ({ ok: false, status: 403 }))
     );
     await expect(
-      fetchBranches(7, { apiUrl: 'https://api', apiKey: 'tgpak_x' }, TARGET)
+      fetchBranches(7, { apiUrl: 'https://api', apiKey: 'tgpak_x' })
     ).rejects.toThrow();
 
     sendToBackground.mockResolvedValue({
       response: { status: 403, body: '{}' },
     });
     await expect(
-      fetchBranches(7, { apiUrl: 'https://api', oauth: true }, TARGET)
+      fetchBranches(7, { apiUrl: 'https://api', oauth: true })
     ).rejects.toThrow();
   });
 });

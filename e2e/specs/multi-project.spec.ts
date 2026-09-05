@@ -3,6 +3,7 @@ import {
   collectWorkerRequests,
   completeAuthorization,
   installIdentityStub,
+  requestsSentWith,
   storedOAuthSessions,
   requireOAuthServer,
 } from '../fixtures/oauth';
@@ -56,6 +57,10 @@ test('keeps a separate session for each project on the same server', async ({
     sessions.length
   );
 
+  // One collector for the whole test, not one per tab: each tab's SDK starts loading its own translations through
+  // the dev backend as soon as it connects, independently of opening the dialog below.
+  const allRequests = collectWorkerRequests(context);
+
   for (const [i, page] of pages.entries()) {
     const app = state.apps[i];
     const session = sessions.find(
@@ -67,21 +72,19 @@ test('keeps a separate session for each project on the same server', async ({
     expect(await sessionItem(page, '__tolgee_projectKey')).toBe(
       String(app.projectId)
     );
-    expect(await sessionItem(page, '__tolgee_oauth')).toBe('1');
+    expect(await sessionItem(page, '__tolgee_session')).toBe('oauth');
 
-    // The worker sends this tab's dialog requests to this tab's project, with that project's own session token.
-    const requests = collectWorkerRequests(context);
     await page.bringToFront();
     await openInContextDialog(page);
+
+    const requests = await requestsSentWith(allRequests, session!);
+
     expect(requests.length).toBeGreaterThan(0);
     for (const request of requests) {
       const url = request.url();
       if (url.includes('/v2/projects/')) {
         expect(url).toContain(`/v2/projects/${app.projectId}/`);
       }
-      expect((await request.allHeaders())['authorization'], url).toBe(
-        `Bearer ${session!.accessToken}`
-      );
     }
     await page.keyboard.press('Escape');
   }

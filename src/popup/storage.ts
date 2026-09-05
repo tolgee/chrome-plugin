@@ -1,5 +1,9 @@
-import browser from 'webextension-polyfill';
-import { OriginRecord, updateMarkerHints } from '../oauth/marker';
+import {
+  clearConnection,
+  loadOriginRecord,
+  storeApiKeyConnection,
+  updateConnectionHints,
+} from '../oauth/connection';
 import { originOf } from '../oauth/url';
 import { getActiveTab } from './activeTab';
 import { Values } from './tools';
@@ -9,20 +13,22 @@ export const storeValues = async (values: Values | null) => {
     const origin = await getCurrentTabOrigin();
 
     if (values?.oauth && values?.apiUrl) {
-      await updateMarkerHints(origin, {
+      await updateConnectionHints(origin, {
         projectId: values.projectId,
         branch: values.branch,
+        ...(values.siteKey ? { siteKey: values.siteKey } : {}),
       });
     } else if (values?.apiKey && values?.apiUrl) {
-      await browser.storage.local.set({
-        [origin]: {
-          apiUrl: values.apiUrl,
-          apiKey: values.apiKey,
-          branch: values.branch,
-        },
+      await storeApiKeyConnection(origin, {
+        apiUrl: values.apiUrl,
+        apiKey: values.apiKey,
+        branch: values.branch,
+        siteKey: values.siteKey,
+        projectId: values.projectId,
+        projectKey: values.projectKey,
       });
     } else {
-      await browser.storage.local.remove(origin);
+      await clearConnection(origin);
     }
   } catch (e) {
     console.error('[tolgee] storage error', e);
@@ -33,8 +39,7 @@ export const storeValues = async (values: Values | null) => {
 export const loadValues = async () => {
   try {
     const origin = await getCurrentTabOrigin();
-    const keys = await browser.storage.local.get(origin);
-    const data = keys[origin] as OriginRecord;
+    const data = await loadOriginRecord(origin);
 
     return {
       apiKey: data?.apiKey,
@@ -43,6 +48,7 @@ export const loadValues = async () => {
       oauth: data?.oauth,
       projectId: data?.projectId,
       projectKey: data?.projectKey,
+      siteKey: data?.siteKey,
     };
   } catch (e) {
     console.error('[tolgee] storage error', e);

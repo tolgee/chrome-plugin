@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       platform_branch:
-        description: "tolgee-platform branch to build the image from (default: the branch named like this one, else tolgee/tolgee:latest)"
+        description: "tolgee-platform branch to build the image from (default: the branch named like this one, else main)"
         required: false
 
 jobs:
@@ -18,9 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # tolgee-platform publishes no per-branch image, so a platform branch named like this one is built into a
-      # local image here; without one the run uses the published tolgee/tolgee:latest.
-      - name: Look for a tolgee-platform branch named ${{ github.event.inputs.platform_branch || env.SIBLING_BRANCH }}
+      # tolgee-platform publishes no per-branch image, so the platform is built into a local image here: from a
+      # platform branch named like this one when it exists, otherwise from main. The published tolgee/tolgee:latest
+      # lags main by a release and does not carry the OAuth server the extension needs until the next one ships.
+      - name: Pick the tolgee-platform branch to build (${{ github.event.inputs.platform_branch || env.SIBLING_BRANCH }} or main)
         id: platform
         env:
           WANTED: ${{ github.event.inputs.platform_branch || env.SIBLING_BRANCH }}
@@ -29,7 +30,8 @@ jobs:
             echo "tolgee-platform has a branch named $WANTED, building its image"
             echo "ref=$WANTED" >> "$GITHUB_OUTPUT"
           else
-            echo "tolgee-platform has no branch named $WANTED, using tolgee/tolgee:latest"
+            echo "tolgee-platform has no branch named $WANTED, building main"
+            echo "ref=main" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout tolgee-platform

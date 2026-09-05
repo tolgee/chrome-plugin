@@ -1,4 +1,5 @@
 import browser from 'webextension-polyfill';
+import { safeOrigin } from '../oauth/url';
 
 // Opened as a plain tab (end-to-end tests), the popup is itself the active tab, so the tab it should act on is
 // passed in the URL instead.
@@ -17,3 +18,6 @@ export const getActiveTab = async () => {
   }
   return (await browser.tabs.query({ active: true, currentWindow: true }))[0];
 };
+
+export const getActiveTabOrigin = async (): Promise<string | undefined> =>
+  safeOrigin((await getActiveTab())?.url);

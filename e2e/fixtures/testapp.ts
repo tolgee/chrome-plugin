@@ -1,4 +1,4 @@
-import type { Page, Request } from '@playwright/test';
+import type { BrowserContext, Page, Request } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 export const TITLE = '.header__title';
@@ -23,11 +23,104 @@ export const collectProjectRequests = (page: Page): Request[] => {
   return requests;
 };
 
+/**
+ * The extension's service worker calls to the Tolgee project API, i.e. the requests it sends for a page connected
+ * through it. Playwright reports service worker requests only with PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS
+ * (set in playwright.config.ts).
+ */
+export const collectWorkerProjectRequests = (
+  context: BrowserContext
+): Request[] => {
+  const requests: Request[] = [];
+  context.on('request', (request) => {
+    if (
+      request.serviceWorker() &&
+      request.url().includes('/v2/projects') &&
+      request.method() !== 'OPTIONS'
+    ) {
+      requests.push(request);
+    }
+  });
+  return requests;
+};
+
+/** Connects with a project API key from the popup and waits for the page to come back connected. */
+export const connectWithApiKey = async (
+  popup: Page,
+  page: Page,
+  apiKey: string
+) => {
+  await popup.getByTestId('use-api-key').click();
+  await popup.getByTestId('api-key-input').fill(apiKey);
+  await expect(popup.getByTestId('connect-with-api-key')).toBeEnabled();
+  const reloaded = page.waitForEvent('load');
+  await popup.getByTestId('connect-with-api-key').click();
+  await reloaded;
+  await expect(popup.getByTestId('connected-panel')).toBeVisible();
+};
+
+const DEV_TOOLS = '#__tolgee_dev_tools';
+// The dialog's alert for a page holding no credential (the SDK's api_key_not_specified).
+export const SIGN_IN_ALERT_TEXT = 'Sign in to make changes';
+
 export const openInContextDialog = async (page: Page) => {
   await page.locator(TITLE).click({ modifiers: ['Alt'] });
   await expect(
-    page.locator('#__tolgee_dev_tools').getByText(IN_CONTEXT_DIALOG_TEXT)
+    page.locator(DEV_TOOLS).getByText(IN_CONTEXT_DIALOG_TEXT)
   ).toBeVisible({ timeout: 30_000 });
+};
+
+// The dialog's alert while the user has switched editing off for the page in the popup (the SDK's
+// extension_editing_off).
+export const EDITING_OFF_ALERT_TEXT = 'In-context editing is switched off';
+
+export const signInAlert = (page: Page) =>
+  page.locator(DEV_TOOLS).getByText(SIGN_IN_ALERT_TEXT);
+
+export const editingOffAlert = (page: Page) =>
+  page
+    .locator(DEV_TOOLS)
+    .locator(
+      '[data-cy="error-alert"][data-cy-error-code="extension_editing_off"]'
+    );
+
+type DialogState = 'asks-to-sign-in' | 'editing-off' | 'editable';
+
+/** Opens the dialog, waits for it to settle on one of its three states and closes it again. */
+const dialogState = async (page: Page): Promise<DialogState> => {
+  await openInContextDialog(page);
+  await expect(page.locator(DEV_TOOLS)).toContainText(
+    new RegExp(
+      `${SIGN_IN_ALERT_TEXT}|${EDITING_OFF_ALERT_TEXT}|Character limit`
+    ),
+    { timeout: 30_000 }
+  );
+  const state: DialogState =
+    (await signInAlert(page).count()) > 0
+      ? 'asks-to-sign-in'
+      : (await editingOffAlert(page).count()) > 0
+        ? 'editing-off'
+        : 'editable';
+  await page.keyboard.press('Escape');
+  return state;
+};
+
+/** Opens the dialog and reports whether it asks for a credential instead of offering the string. */
+export const dialogAsksToSignIn = async (page: Page): Promise<boolean> =>
+  (await dialogState(page)) === 'asks-to-sign-in';
+
+/** Opens the dialog and reports whether it says editing was switched off in the popup, with the alert's own text. */
+export const dialogSaysEditingOff = async (page: Page): Promise<boolean> => {
+  if ((await dialogState(page)) !== 'editing-off') {
+    return false;
+  }
+  await openInContextDialog(page);
+  await expect(editingOffAlert(page)).toContainText(
+    'You switched editing off for this page in the Tolgee plugin. Turn it on to edit here.'
+  );
+  await expect(editingOffAlert(page)).not.toContainText(SIGN_IN_ALERT_TEXT);
+  await page.keyboard.press('Escape');
+  return true;
 };
 
 export const sessionItem = (page: Page, key: string) =>
@@ -106,3 +199,54 @@ export const waitForContentScript = (page: Page) =>
         }, 200);
       })
   );
+
+/**
+ * Makes the testapp's SDK handshake like one from before the proxied-request protocol: every `TOLGEE_READY` it posts
+ * loses its `protocolVersion`, on this load and on every reload. The extension then treats the page as an old SDK,
+ * and a key it hands to the page is used by the SDK directly, as an old SDK would (a page `__tolgee_apiKey` takes
+ * precedence over the extension session in every @tolgee/web release). A real old release would need its own
+ * in-context bundle from the CDN, which the suite must not depend on.
+ */
+export const pretendOldSdk = (page: Page) =>
+  page.addInitScript(() => {
+    const post = window.postMessage.bind(window);
+    window.postMessage = ((message: any, ...rest: any[]) => {
+      if (message?.type === 'TOLGEE_READY' && message.data) {
+        const data = { ...message.data };
+        delete data.protocolVersion;
+        message = { ...message, data };
+      }
+      return (post as any)(message, ...rest);
+    }) as typeof window.postMessage;
+  });
+
+/**
+ * Serves a page at `${appUrl}/__e2e_old-sdk.html` whose SDK reports `uiPresent: true` but no `protocolVersion`:
+ * a current in-context SDK from before the proxied-request protocol, with no SDK actually running (see
+ * pretendOldSdk for the full flow on the testapp).
+ */
+export const serveOldSdkPage = async (
+  page: Page,
+  appUrl: string,
+  { apiUrl, projectId }: { apiUrl: string; projectId: number }
+): Promise<void> => {
+  const url = `${appUrl}/__e2e_old-sdk.html`;
+  await servePage(page, url, PLAIN_PAGE_HTML);
+  await page.goto(url);
+  await waitForContentScript(page);
+  await page.evaluate(
+    ({ apiUrl, projectId }) =>
+      window.postMessage(
+        {
+          type: 'TOLGEE_READY',
+          data: {
+            uiPresent: true,
+            mode: 'production',
+            config: { apiUrl, apiKey: '', projectId },
+          },
+        },
+        '*'
+      ),
+    { apiUrl, projectId }
+  );
+};

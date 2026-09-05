@@ -1,6 +1,10 @@
+import { isInconclusiveProxyErrorKind } from '../oauth/sessionRules';
+import { ProxyErrorKind } from '../protocol';
+import { normalizeUrl } from '../oauth/url';
+import { getActiveTabOrigin } from './activeTab';
 import { sendToBackground } from './sendToBackground';
+import { isOAuth, Values } from './tools';
 
-// Which page's session the worker should send with; the worker resolves it from this origin's marker.
 export type ProxyTarget = {
   pageOrigin: string | undefined;
   apiUrl: string | undefined;
@@ -14,11 +18,9 @@ export type ProxyFetchResponse = {
   text: () => Promise<string>;
 };
 
-// Anything but a real HTTP answer: no session, refused, unreachable, timed out. Callers treat these as inconclusive
-// about the server's opinion (see sessionRules.ts), never as a 401/403/404 would be.
 export class ProxyFetchError extends Error {
   constructor(
-    readonly kind: string,
+    readonly kind: ProxyErrorKind,
     message: string
   ) {
     super(message);
@@ -26,11 +28,53 @@ export class ProxyFetchError extends Error {
   }
 }
 
+// Inconclusive, not confirmed invalid: a 5xx, or a 2xx whose body wasn't JSON (a maintenance or proxy block page).
+export class InconclusiveHttpStatus extends Error {
+  constructor(
+    readonly status: number,
+    path: string
+  ) {
+    super(`inconclusive ${path} answer: HTTP ${status}`);
+    this.name = 'InconclusiveHttpStatus';
+  }
+}
+
+export const isInconclusiveSessionCheckError = (e: unknown): boolean =>
+  e instanceof InconclusiveHttpStatus ||
+  (e instanceof ProxyFetchError && isInconclusiveProxyErrorKind(e.kind));
+
+export const credentialFetch = async (
+  values: Values,
+  path: string
+): Promise<ProxyFetchResponse> =>
+  isOAuth(values)
+    ? proxyFetch(await proxyTargetFor(values), path)
+    : directFetch(values, path);
+
+const directFetch = async (
+  values: Values,
+  path: string
+): Promise<ProxyFetchResponse> => {
+  try {
+    return await fetch(`${normalizeUrl(values.apiUrl ?? '')}${path}`, {
+      headers: { 'X-API-Key': values.apiKey ?? '' },
+    });
+  } catch (e) {
+    throw new ProxyFetchError('network', String(e));
+  }
+};
+
+const proxyTargetFor = async (values: Values): Promise<ProxyTarget> => ({
+  pageOrigin: await getActiveTabOrigin(),
+  apiUrl: values.apiUrl,
+  projectKey: values.projectKey,
+});
+
 export const proxyFetch = async (
   target: ProxyTarget,
   path: string
 ): Promise<ProxyFetchResponse> => {
-  const result = (await sendToBackground('TOLGEE_API_REQUEST', {
+  const result = (await sendToBackground('TOLGEE_POPUP_API_REQUEST', {
     path,
     method: 'GET',
     headers: { Accept: 'application/json' },
@@ -40,10 +84,10 @@ export const proxyFetch = async (
     pageOrigin: target.pageOrigin,
   })) as
     | { response: { status: number; body: string } }
-    | { error: { kind: string; message: string } }
+    | { error: { kind: ProxyErrorKind; message: string } }
     | undefined;
   if (!result || !('response' in result)) {
-    const error = result?.error ?? {
+    const error: { kind: ProxyErrorKind; message: string } = result?.error ?? {
       kind: 'unavailable',
       message: 'the extension did not answer',
     };

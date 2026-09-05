@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Autocomplete, TextField } from '@mui/material';
 
-import { BranchOption } from './reducer';
+import { BranchOption } from './popupState';
 import { branchEditorKeyAction } from './branch';
 
 const LISTBOX_MAX_HEIGHT = 150;

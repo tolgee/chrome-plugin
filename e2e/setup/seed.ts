@@ -136,6 +136,17 @@ export class TolgeeApi {
     });
   }
 
+  setTranslations(
+    projectId: number,
+    key: string,
+    translations: Record<string, string>
+  ) {
+    return this.request('POST', `projects/${projectId}/translations`, {
+      key,
+      translations,
+    });
+  }
+
   async createApiKey(projectId: number): Promise<string> {
     return (await this.createApiKeyWithId(projectId)).key;
   }

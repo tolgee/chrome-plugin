@@ -1,32 +1,14 @@
-import { normalizeUrl } from '../oauth/url';
-import { BranchOption } from './reducer';
-import { proxyFetch, ProxyFetchResponse, ProxyTarget } from './proxyFetch';
-import { isOAuth, Values } from './tools';
-
-export const credentialHeaders = (values: Values): Record<string, string> =>
-  isOAuth(values) ? {} : { 'X-API-Key': values.apiKey ?? '' };
-
-// An OAuth session never leaves the service worker, so its requests go through it; an api key is sent directly.
-export const credentialFetch = (
-  values: Values,
-  path: string,
-  target: ProxyTarget
-): Promise<ProxyFetchResponse> =>
-  isOAuth(values)
-    ? proxyFetch(target, path)
-    : fetch(`${normalizeUrl(values.apiUrl ?? '')}${path}`, {
-        headers: credentialHeaders(values),
-      });
+import { BranchOption } from './popupState';
+import { credentialFetch } from './proxyFetch';
+import { Values } from './tools';
 
 export const fetchBranches = async (
   projectId: number,
-  values: Values,
-  target: ProxyTarget
+  values: Values
 ): Promise<BranchOption[] | null> => {
   const r = await credentialFetch(
     values,
-    `/v2/projects/${projectId}/branches?size=100`,
-    target
+    `/v2/projects/${projectId}/branches?size=100`
   );
   if (!r.ok) {
     throw new Error('Failed to load branches');
@@ -40,7 +22,6 @@ export const fetchBranches = async (
   );
 };
 
-// The name the page itself works on when the popup sets no override.
 export const pageBranchLabel = (
   pageBranch: string | undefined,
   branches: BranchOption[] | null

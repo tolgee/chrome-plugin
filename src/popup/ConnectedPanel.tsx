@@ -1,247 +1,99 @@
-import React, { useState } from 'react';
-import {
-  Alert,
-  AlertTitle,
-  alpha,
-  Box,
-  Button,
-  IconButton,
-  Link,
-  Paper,
-  Switch,
-  Typography,
-} from '@mui/material';
+import { Alert, AlertTitle, Box, Link } from '@mui/material';
 
-import { BranchOption } from './reducer';
-import { abbreviateApiKey, branchInEffect, pageBranchLabel } from './branch';
-import { BRANCH_EDITOR_LIST_SPACE, BranchEditor } from './BranchEditor';
-import { EditIcon } from './icons';
-import { SdkTooOldAlert } from './LoginTab';
+import { SdkTooOldAlert } from './SdkTooOldAlert';
+import { BranchRow, BranchState } from './BranchRow';
+import { EditingSwitch } from './EditingSwitch';
 import { PopupFrame } from './PopupFrame';
-
-export type Session =
-  | { kind: 'oauth'; userFullName: string | null }
-  | { kind: 'apiKey'; apiKey: string };
-
-type BranchState = {
-  override: string | undefined;
-  pageBranch: string | undefined;
-  options: BranchOption[] | null;
-};
+import { AccountCard, ConnectionSummary } from './AccountCard';
+import { ConnectedFooter } from './ConnectedFooter';
+import {
+  KeyRejected,
+  ProjectInaccessible,
+  SessionEnded,
+} from './ConnectedErrors';
+import {
+  connectionTitle,
+  hasEditingSwitch,
+  Session,
+} from './connectionSummary';
+import { Label, Value } from './fields';
 
 type Props = {
   session: Session;
   serverHost: string;
-  sessionEnded: boolean;
-  apiKeyRejected: boolean;
+  // The server rejected the session or key outright (a 401 / an unknown key), not an outage.
+  credentialRejected: boolean;
   projectName: string | null;
   projectUrl: string | null;
   projectInaccessible: boolean;
   declaredProjectId: number | undefined;
   sdkTooOld: boolean;
+  // The key's project is not known yet, so there is nothing to switch editing on with.
+  checkingKey: boolean;
   branch: BranchState | null;
   editingOn: boolean;
   onToggleEditing: () => void;
   onChangeBranch: (branch: string) => void;
   onSignOut: () => void;
   onSignInAgain: () => void;
+  onUseAnotherKey: () => void;
 };
-
-const AccountCard = ({
-  session,
-  serverHost,
-}: {
-  session: Session;
-  serverHost: string;
-}) => {
-  const name =
-    session.kind === 'oauth'
-      ? session.userFullName || 'Tolgee account'
-      : 'Project API key';
-  const detail =
-    session.kind === 'oauth'
-      ? `Signed in on ${serverHost}`
-      : `${abbreviateApiKey(session.apiKey)} on ${serverHost}`;
-  return (
-    <Paper
-      variant="outlined"
-      data-testid="account-card"
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        px: 1.5,
-        py: 1.25,
-      }}
-    >
-      <Box minWidth={0}>
-        <Typography
-          variant="body2"
-          fontWeight={500}
-          noWrap
-          data-testid="account-name"
-        >
-          {name}
-        </Typography>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          noWrap
-          data-testid="account-detail"
-        >
-          {detail}
-        </Typography>
-      </Box>
-    </Paper>
-  );
-};
-
-const Label = ({ children }: { children: React.ReactNode }) => (
-  <Typography variant="body2" color="text.secondary">
-    {children}
-  </Typography>
-);
-
-const Value = ({ children }: { children: React.ReactNode }) => (
-  <Typography variant="body2" fontWeight={500} noWrap minWidth={0}>
-    {children}
-  </Typography>
-);
-
-const Footer = ({
-  note,
-  action,
-  onAction,
-}: {
-  note?: string;
-  action: string;
-  onAction: () => void;
-}) => (
-  <Box
-    display="flex"
-    justifyContent={note ? 'space-between' : 'flex-end'}
-    alignItems="center"
-  >
-    {note && (
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        data-testid="footer-note"
-      >
-        {note}
-      </Typography>
-    )}
-    <Button
-      size="small"
-      color="error"
-      onClick={onAction}
-      data-testid="sign-out"
-    >
-      {action}
-    </Button>
-  </Box>
-);
 
 export const ConnectedPanel = ({
   session,
   serverHost,
-  sessionEnded,
-  apiKeyRejected,
+  credentialRejected,
   projectName,
   projectUrl,
   projectInaccessible,
   declaredProjectId,
   sdkTooOld,
+  checkingKey,
   branch,
   editingOn,
   onToggleEditing,
   onChangeBranch,
   onSignOut,
   onSignInAgain,
+  onUseAnotherKey,
 }: Props) => {
-  const [editingBranch, setEditingBranch] = useState(false);
-
   const isOauth = session.kind === 'oauth';
-  const title = isOauth ? 'Tolgee plugin' : 'API key connection';
-  const footerAction = isOauth ? 'Sign out' : 'Remove key';
-  const footer = <Footer action={footerAction} onAction={onSignOut} />;
+  const siteKey = session.kind === 'apiKey' && session.source === 'site';
+  const title = connectionTitle(session);
+  const footerProps = { session, onSignOut, onUseAnotherKey };
 
-  if (isOauth && sessionEnded) {
+  if (isOauth && credentialRejected) {
     return (
-      <PopupFrame title={title} testId="connected-panel">
-        <AccountCard session={session} serverHost={serverHost} />
-        <Alert severity="info" data-testid="session-ended">
-          <AlertTitle>Your session ended</AlertTitle>
-          It expired or was revoked on the server. Sign in again to keep
-          editing.
-        </Alert>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={onSignInAgain}
-          data-testid="sign-in-again"
-        >
-          Sign in again
-        </Button>
-      </PopupFrame>
+      <SessionEnded
+        session={session}
+        serverHost={serverHost}
+        onSignInAgain={onSignInAgain}
+      />
     );
   }
-
   if (isOauth && projectInaccessible) {
     return (
-      <PopupFrame title={title} testId="connected-panel">
-        <AccountCard session={session} serverHost={serverHost} />
-        <Alert severity="warning" data-testid="project-inaccessible">
-          <AlertTitle>No access to this page&apos;s project</AlertTitle>
-          This site requests a project this session can&apos;t reach on{' '}
-          {serverHost}. Either you don&apos;t have access to it, or a different
-          project was chosen while signing in. Sign out and sign in again to
-          pick the right one.
-        </Alert>
-        <Footer
-          note={
-            declaredProjectId === undefined
-              ? undefined
-              : `Project #${declaredProjectId} on ${serverHost}`
-          }
-          action={footerAction}
-          onAction={onSignOut}
-        />
-      </PopupFrame>
+      <ProjectInaccessible
+        {...footerProps}
+        serverHost={serverHost}
+        declaredProjectId={declaredProjectId}
+      />
     );
   }
-
-  if (!isOauth && apiKeyRejected) {
-    return (
-      <PopupFrame title={title} testId="connected-panel">
-        <AccountCard session={session} serverHost={serverHost} />
-        <Alert severity="error" data-testid="api-key-rejected">
-          <AlertTitle>
-            This API key doesn&apos;t work on {serverHost}
-          </AlertTitle>
-          Check for a typo, or that the key belongs to this server and
-          hasn&apos;t been revoked.
-        </Alert>
-        {footer}
-      </PopupFrame>
-    );
+  if (!isOauth && credentialRejected) {
+    return <KeyRejected {...footerProps} serverHost={serverHost} />;
   }
-
-  const overrideSet = Boolean(branch?.override);
-  const editingHint = !editingOn
-    ? 'You stay signed in. Turn it on to edit here.'
-    : overrideSet
-      ? `Edits go to ${branch!.override}.`
-      : 'Alt+click any text on the page to edit it.';
 
   return (
     <PopupFrame title={title} testId="connected-panel">
+      <ConnectionSummary session={session} projectName={projectName} />
       <AccountCard session={session} serverHost={serverHost} />
 
       {sdkTooOld && <SdkTooOldAlert />}
 
       <Box
         display="grid"
-        gridTemplateColumns="76px 1fr"
+        gridTemplateColumns="max-content 1fr"
         columnGap={1.5}
         rowGap={1}
         alignItems="center"
@@ -266,97 +118,33 @@ export const ConnectedPanel = ({
           </>
         )}
         {branch && (
-          <>
-            <Label>Branch</Label>
-            {editingBranch ? (
-              <>
-                <BranchEditor
-                  value={branch.override ?? ''}
-                  options={branch.options ?? []}
-                  placeholder={pageBranchLabel(
-                    branch.pageBranch,
-                    branch.options
-                  )}
-                  onCommit={(next) => {
-                    setEditingBranch(false);
-                    if (next !== (branch.override ?? '')) {
-                      onChangeBranch(next);
-                    }
-                  }}
-                  onCancel={() => setEditingBranch(false)}
-                />
-                <Box gridColumn="1 / -1" height={BRANCH_EDITOR_LIST_SPACE} />
-              </>
-            ) : (
-              <Box display="flex" alignItems="center" gap={0.5} minWidth={0}>
-                <Value>
-                  <span data-testid="branch-value">
-                    {branchInEffect(
-                      branch.override,
-                      branch.pageBranch,
-                      branch.options
-                    )}
-                  </span>
-                </Value>
-                <IconButton
-                  size="small"
-                  title="Change branch"
-                  aria-label="Change branch"
-                  disabled={!editingOn}
-                  onClick={() => setEditingBranch(true)}
-                  data-testid="change-branch"
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            )}
-          </>
+          <BranchRow
+            branch={branch}
+            canOverride={!siteKey}
+            editingOn={editingOn}
+            onChangeBranch={onChangeBranch}
+          />
         )}
       </Box>
 
-      <Box
-        display="flex"
-        alignItems="center"
-        gap={1.5}
-        px={1.5}
-        py={1.25}
-        borderRadius={1.5}
-        sx={{
-          bgcolor: (theme) =>
-            editingOn
-              ? alpha(theme.palette.primary.main, 0.12)
-              : theme.palette.action.hover,
-        }}
-      >
-        <Switch
-          size="small"
-          checked={editingOn}
-          disabled={sdkTooOld}
-          onChange={onToggleEditing}
-          color="primary"
-          data-testid="editing-switch"
+      {siteKey && (
+        <Alert severity="info" data-testid="dev-mode-note">
+          <AlertTitle>Development setup</AlertTitle>
+          Anyone who opens this site can use its API key. Keep this for
+          development only.
+        </Alert>
+      )}
+      {hasEditingSwitch(session) && (
+        <EditingSwitch
+          editingOn={editingOn}
+          disabled={sdkTooOld || checkingKey}
+          checkingKey={checkingKey}
+          branchOverride={branch?.override}
+          onToggle={onToggleEditing}
         />
-        <Box minWidth={0}>
-          <Typography
-            variant="body2"
-            fontWeight={500}
-            data-testid="editing-title"
-          >
-            {editingOn
-              ? 'In-context editing on this page'
-              : 'In-context editing off on this page'}
-          </Typography>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            data-testid="editing-hint"
-          >
-            {editingHint}
-          </Typography>
-        </Box>
-      </Box>
+      )}
 
-      {footer}
+      <ConnectedFooter {...footerProps} />
     </PopupFrame>
   );
 };

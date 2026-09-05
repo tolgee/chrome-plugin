@@ -65,7 +65,11 @@ const getValidAccessToken = async (
   projectId: number
 ): Promise<string | null> => {
   const session = await loadSession(apiUrl, projectId);
-  return session ? ensureFreshToken(session) : null;
+  if (!session) {
+    return null;
+  }
+  const fresh = await ensureFreshToken(session);
+  return 'accessToken' in fresh ? fresh.accessToken : null;
 };
 
 describe('tokenStore per-project keying', () => {
@@ -176,7 +180,9 @@ describe('tokenStore per-project keying', () => {
       projectKey: '3',
     };
 
-    expect(await ensureFreshToken(staleSnapshot)).toBe('token-3');
+    expect(await ensureFreshToken(staleSnapshot)).toEqual({
+      accessToken: 'token-3',
+    });
     expect(refresh).not.toHaveBeenCalled();
   });
 
@@ -243,19 +249,25 @@ describe('tokenStore per-project keying', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('clears the session when refresh fails with a terminal 400/401 (dead refresh token)', async () => {
+  it('answers session_ended and clears the session when refresh fails with a terminal 400/401 (dead refresh token)', async () => {
     for (const status of [400, 401]) {
       store.clear();
-      await saveSession(URL_A, tokens('3', { expiresAt: Date.now() - 1 }), 3);
+      const session = await saveSession(
+        URL_A,
+        tokens('3', { expiresAt: Date.now() - 1 }),
+        3
+      );
       refresh.mockReset();
       refresh.mockRejectedValue(endpointError(status));
 
-      expect(await getValidAccessToken(URL_A, 3)).toBeNull();
+      expect(await ensureFreshToken(session)).toEqual({
+        failure: 'session_ended',
+      });
       expect(await loadSession(URL_A, 3)).toBeNull();
     }
   });
 
-  it('keeps the session when refresh fails transiently (403/404/429/503/network)', async () => {
+  it('answers refresh_failed and keeps the session when refresh fails transiently (403/404/429/503/network)', async () => {
     for (const err of [
       endpointError(403),
       endpointError(404),
@@ -264,11 +276,17 @@ describe('tokenStore per-project keying', () => {
       new Error('network error'),
     ]) {
       store.clear();
-      await saveSession(URL_A, tokens('3', { expiresAt: Date.now() - 1 }), 3);
+      const session = await saveSession(
+        URL_A,
+        tokens('3', { expiresAt: Date.now() - 1 }),
+        3
+      );
       refresh.mockReset();
       refresh.mockRejectedValue(err);
 
-      expect(await getValidAccessToken(URL_A, 3)).toBeNull();
+      expect(await ensureFreshToken(session)).toEqual({
+        failure: 'refresh_failed',
+      });
       // The token is kept so a later call can retry rather than logging the user out on a blip.
       expect((await loadSession(URL_A, 3))?.accessToken).toBe('token-3');
     }
@@ -313,7 +331,9 @@ describe('refreshAfterRejection', () => {
       expiresAt: future(),
     });
 
-    expect(await refreshAfterRejection(session, 'token-3')).toBe('token-3b');
+    expect(await refreshAfterRejection(session, 'token-3')).toEqual({
+      accessToken: 'token-3b',
+    });
     expect(refresh).toHaveBeenCalledWith(URL_A, 'refresh');
     expect((await loadSession(URL_A, 3))?.accessToken).toBe('token-3b');
   });
@@ -322,9 +342,9 @@ describe('refreshAfterRejection', () => {
     const stale = await saveSession(URL_A, tokens('3'), 3);
     await saveSession(URL_A, tokens('3-rotated'), 3);
 
-    expect(await refreshAfterRejection(stale, 'token-3')).toBe(
-      'token-3-rotated'
-    );
+    expect(await refreshAfterRejection(stale, 'token-3')).toEqual({
+      accessToken: 'token-3-rotated',
+    });
     expect(refresh).not.toHaveBeenCalled();
   });
 
@@ -347,30 +367,46 @@ describe('refreshAfterRejection', () => {
     });
 
     expect(await Promise.all([viaExpiry, viaRejection])).toEqual([
-      'token-3b',
-      'token-3b',
+      { accessToken: 'token-3b' },
+      { accessToken: 'token-3b' },
     ]);
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('answers null and clears the session when the refresh token is dead', async () => {
+  it('answers session_ended and clears the session when the refresh token is dead', async () => {
     const session = await saveSession(URL_A, tokens('3'), 3);
     refresh.mockRejectedValue(endpointError(401));
 
-    expect(await refreshAfterRejection(session, 'token-3')).toBeNull();
+    expect(await refreshAfterRejection(session, 'token-3')).toEqual({
+      failure: 'session_ended',
+    });
     expect(await loadSession(URL_A, 3)).toBeNull();
   });
 
-  it('answers null for a session that is gone or has no refresh token', async () => {
+  it('answers refresh_failed, keeping the session, when the refresh fails transiently', async () => {
+    const session = await saveSession(URL_A, tokens('3'), 3);
+    refresh.mockRejectedValue(endpointError(503));
+
+    expect(await refreshAfterRejection(session, 'token-3')).toEqual({
+      failure: 'refresh_failed',
+    });
+    expect((await loadSession(URL_A, 3))?.accessToken).toBe('token-3');
+  });
+
+  it('answers session_ended for a session that is gone or has no refresh token', async () => {
     const gone = { ...tokens('3'), apiUrl: URL_A, projectKey: '3' };
-    expect(await refreshAfterRejection(gone, 'token-3')).toBeNull();
+    expect(await refreshAfterRejection(gone, 'token-3')).toEqual({
+      failure: 'session_ended',
+    });
 
     const session = await saveSession(
       URL_A,
       tokens('3', { refreshToken: undefined }),
       3
     );
-    expect(await refreshAfterRejection(session, 'token-3')).toBeNull();
+    expect(await refreshAfterRejection(session, 'token-3')).toEqual({
+      failure: 'session_ended',
+    });
     expect(await loadSession(URL_A, 3)).toBeNull();
     expect(refresh).not.toHaveBeenCalled();
   });

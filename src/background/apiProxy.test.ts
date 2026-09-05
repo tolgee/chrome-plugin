@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OAUTH_REQUEST_TIMEOUT_MS } from '../constants';
+import { OAuthTokenEndpointError } from '../oauth/oauthClient';
 
 const store = new Map<string, unknown>();
 const sent: { tabId: number; message: any; options: any }[] = [];
@@ -16,6 +17,7 @@ vi.mock('webextension-polyfill', () => ({
         }
       ),
       captureVisibleTab: vi.fn(async () => 'data:image/png;base64,aGVsbG8='),
+      get: vi.fn(async (tabId: number) => ({ id: tabId, active: true })),
     },
     storage: {
       local: {
@@ -60,7 +62,8 @@ vi.stubGlobal('createImageBitmap', async () => ({
   close: () => undefined,
 }));
 
-const { handleApiRequest, handleScreenshotUpload } = await import('./apiProxy');
+const { handleApiRequest, handlePopupApiRequest } = await import('./apiProxy');
+const { handleScreenshotUpload } = await import('./proxyScreenshot');
 
 const API = 'https://app.tolgee.io';
 const ORIGIN = 'https://page.example';
@@ -80,7 +83,7 @@ const json = (status: number, body: unknown = {}) =>
     headers: { 'content-type': 'application/json', 'x-tolgee-version': '3.9' },
   });
 
-const seedMarker = (overrides: Partial<Record<string, unknown>> = {}) =>
+const seedConnection = (overrides: Partial<Record<string, unknown>> = {}) =>
   store.set(ORIGIN, {
     apiUrl: API,
     oauth: true,
@@ -88,15 +91,27 @@ const seedMarker = (overrides: Partial<Record<string, unknown>> = {}) =>
     projectKey: '7',
     ...overrides,
   });
+// An api key entered in the popup: held in the origin record, pinned to the key's project (see oauth/connection.ts).
+const seedApiKeyRecord = (overrides: Partial<Record<string, unknown>> = {}) =>
+  store.set(ORIGIN, {
+    apiUrl: API,
+    apiKey: 'tgpak_secret',
+    projectId: 7,
+    projectKey: '7',
+    ...overrides,
+  });
+const apiKeyOf = (call: FetchCall) =>
+  (call.init.headers as Record<string, string>)['X-API-Key'];
+
 const seedSession = (
   accessToken = 'tok',
-  overrides: Partial<Record<string, unknown>> = {}
+  { apiUrl = API, ...overrides }: Partial<Record<string, unknown>> = {}
 ) =>
-  store.set(`oauth:${API}:7`, {
+  store.set(`oauth:${new URL(apiUrl as string).origin}:7`, {
     accessToken,
     refreshToken: 'r',
     expiresAt: future(),
-    apiUrl: API,
+    apiUrl,
     projectKey: '7',
     ...overrides,
   });
@@ -134,11 +149,11 @@ describe('handleApiRequest', () => {
     calls.length = 0;
     refresh.mockReset();
     answer = () => json(200, { ok: true });
-    seedMarker();
+    seedConnection();
     seedSession();
   });
 
-  it('proxies an allowed request with the Bearer token of the marker session and answers the response as text', async () => {
+  it('proxies an allowed request with the Bearer token of the connection session and answers the response as text', async () => {
     answer = () => json(200, { keys: [] });
 
     const result = await handleApiRequest(
@@ -163,14 +178,8 @@ describe('handleApiRequest', () => {
   });
 
   it('keeps a path prefix of the api url', async () => {
-    seedMarker({ apiUrl: 'https://host.example/tolgee/' });
-    store.set('oauth:https://host.example:7', {
-      accessToken: 'tok',
-      refreshToken: 'r',
-      expiresAt: future(),
-      apiUrl: 'https://host.example/tolgee/',
-      projectKey: '7',
-    });
+    seedConnection({ apiUrl: 'https://host.example/tolgee/' });
+    seedSession('tok', { apiUrl: 'https://host.example/tolgee/' });
 
     await handleApiRequest(
       request({ apiUrl: 'https://host.example/tolgee/' }),
@@ -208,7 +217,7 @@ describe('handleApiRequest', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('answers no_session when the origin has no marker', async () => {
+  it('answers no_session when the origin has no connection', async () => {
     store.delete(ORIGIN);
 
     expect(await handleApiRequest(request(), PAGE_TAB)).toMatchObject({
@@ -217,7 +226,7 @@ describe('handleApiRequest', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('answers no_session when the page is applied to a different server than the marker', async () => {
+  it('answers no_session when the page is applied to a different server than the connection', async () => {
     const result = await handleApiRequest(
       request({ apiUrl: 'https://other-server.example' }),
       PAGE_TAB
@@ -227,7 +236,7 @@ describe('handleApiRequest', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('answers no_session when the page is applied to a different project key than the marker', async () => {
+  it('answers no_session when the page is applied to a different project key than the connection', async () => {
     const result = await handleApiRequest(
       request({ projectKey: '9' }),
       PAGE_TAB
@@ -237,18 +246,36 @@ describe('handleApiRequest', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('answers no_session when the session is gone or cannot be refreshed', async () => {
+  it('answers no_session when there is no session at all', async () => {
     store.delete(`oauth:${API}:7`);
     expect(await handleApiRequest(request(), PAGE_TAB)).toMatchObject({
       error: { kind: 'no_session' },
     });
+    expect(calls).toHaveLength(0);
+  });
 
+  it('answers unavailable, not no_session, when a stale token fails to refresh transiently and the session is still stored', async () => {
     seedSession('stale', { expiresAt: Date.now() - 1 });
     refresh.mockRejectedValue(new Error('network'));
-    expect(await handleApiRequest(request(), PAGE_TAB)).toMatchObject({
-      error: { kind: 'no_session' },
-    });
+
+    const result = await handleApiRequest(request(), PAGE_TAB);
+
+    expect(result).toMatchObject({ error: { kind: 'unavailable' } });
     expect(calls).toHaveLength(0);
+    expect(store.has(`oauth:${API}:7`)).toBe(true);
+  });
+
+  it('answers no_session, with the session cleared, when the refresh token is terminally rejected (invalid_grant)', async () => {
+    seedSession('stale', { expiresAt: Date.now() - 1 });
+    refresh.mockRejectedValue(
+      new OAuthTokenEndpointError(400, 'invalid_grant')
+    );
+
+    const result = await handleApiRequest(request(), PAGE_TAB);
+
+    expect(result).toMatchObject({ error: { kind: 'no_session' } });
+    expect(calls).toHaveLength(0);
+    expect(store.has(`oauth:${API}:7`)).toBe(false);
   });
 
   it.each([
@@ -294,8 +321,58 @@ describe('handleApiRequest', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('pins the project prefix to the marker projectKey, never to the rewritable projectId hint', async () => {
-    seedMarker({ projectId: 9, projectKey: '7' });
+  it('refuses a path that climbs out of a path-prefixed api url via ../, even on the same origin', async () => {
+    seedConnection({ apiUrl: 'https://host.example/tolgee/' });
+    seedSession('tok', { apiUrl: 'https://host.example/tolgee/' });
+
+    const result = await handleApiRequest(
+      request({
+        apiUrl: 'https://host.example/tolgee/',
+        path: '/../v2/projects/7/keys',
+      }),
+      PAGE_TAB
+    );
+
+    expect(result).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses a traversal that climbs outside the base path even when the escaped path looks allowed on its own', async () => {
+    seedConnection({ apiUrl: 'https://host.example/a' });
+    seedSession('tok', { apiUrl: 'https://host.example/a' });
+
+    const result = await handleApiRequest(
+      request({
+        apiUrl: 'https://host.example/a',
+        path: '/../b/v2/projects/7/keys',
+      }),
+      PAGE_TAB
+    );
+
+    expect(result).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses a disallowed path without refreshing a stale token to get there', async () => {
+    seedSession('stale', { expiresAt: Date.now() - 1 });
+    refresh.mockResolvedValue({
+      accessToken: 'new',
+      refreshToken: 'r2',
+      expiresAt: future(),
+    });
+
+    const result = await handleApiRequest(
+      request({ path: '/v2/user' }),
+      PAGE_TAB
+    );
+
+    expect(result).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('pins the project prefix to the connection projectKey, never to the rewritable projectId hint', async () => {
+    seedConnection({ projectId: 9, projectKey: '7' });
 
     expect(
       await handleApiRequest(request({ path: '/v2/projects/9/keys' }), PAGE_TAB)
@@ -306,6 +383,32 @@ describe('handleApiRequest', () => {
       await handleApiRequest(request({ path: '/v2/projects/7/keys' }), PAGE_TAB)
     ).toHaveProperty('response');
     expect(calls).toHaveLength(1);
+  });
+
+  it('pins the permissions lookup to the connection project: another project is refused, a missing one is filled in', async () => {
+    expect(
+      await handleApiRequest(
+        request({ path: '/v2/api-keys/current-permissions?projectId=9' }),
+        PAGE_TAB
+      )
+    ).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(calls).toHaveLength(0);
+
+    await handleApiRequest(
+      request({ path: '/v2/api-keys/current-permissions' }),
+      PAGE_TAB
+    );
+    expect(calls[0].url).toBe(
+      `${API}/v2/api-keys/current-permissions?projectId=7`
+    );
+
+    await handleApiRequest(
+      request({ path: '/v2/api-keys/current-permissions?projectId=7&x=1' }),
+      PAGE_TAB
+    );
+    expect(calls[1].url).toBe(
+      `${API}/v2/api-keys/current-permissions?projectId=7&x=1`
+    );
   });
 
   it('forwards only the allowed headers and never a credential the page supplies', async () => {
@@ -364,7 +467,7 @@ describe('handleApiRequest', () => {
     expect(result).toMatchObject({ response: { status: 200 } });
   });
 
-  it('answers no_session when the refresh after a 401 fails, without a second request', async () => {
+  it('answers no_session when the refresh after a 401 fails terminally (invalid_grant), without a second request', async () => {
     answer = () => json(401);
     const { OAuthTokenEndpointError } = await import('../oauth/oauthClient');
     refresh.mockRejectedValue(new OAuthTokenEndpointError(400, 'invalid'));
@@ -374,6 +477,17 @@ describe('handleApiRequest', () => {
     expect(result).toMatchObject({ error: { kind: 'no_session' } });
     expect(calls).toHaveLength(1);
     expect(store.has(`oauth:${API}:7`)).toBe(false);
+  });
+
+  it('answers unavailable, not no_session, when the refresh after a 401 fails transiently, without a second request', async () => {
+    answer = () => json(401);
+    refresh.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const result = await handleApiRequest(request(), PAGE_TAB);
+
+    expect(result).toMatchObject({ error: { kind: 'unavailable' } });
+    expect(calls).toHaveLength(1);
+    expect(store.has(`oauth:${API}:7`)).toBe(true);
   });
 
   it('surfaces a second 401 as-is', async () => {
@@ -519,6 +633,29 @@ describe('handleApiRequest', () => {
     expect(body.get('info')).toBe('{"location":"x"}');
   });
 
+  it('answers not_allowed, not unavailable, for a malformed body a page could craft (bad base64, non-array entries)', async () => {
+    for (const body of [
+      {
+        kind: 'form',
+        entries: [
+          {
+            name: 'image',
+            file: { name: 'x', type: 'image/png', base64: '%%' },
+          },
+        ],
+      },
+      { kind: 'form', entries: 'nope' },
+    ]) {
+      expect(
+        await handleApiRequest(
+          request({ path: '/v2/image-upload', method: 'POST', body }),
+          PAGE_TAB
+        )
+      ).toMatchObject({ error: { kind: 'not_allowed' } });
+    }
+    expect(calls).toHaveLength(0);
+  });
+
   it('sends a json body as text and none as no body', async () => {
     await handleApiRequest(
       request({
@@ -534,8 +671,145 @@ describe('handleApiRequest', () => {
     expect(calls[1].init.body).toBeUndefined();
   });
 
-  it('lets the popup (claimed origin) reach paths outside the prefix list, still under the header filter', async () => {
+  it('refuses a popup-classified sender on the tab-facing message type: the allowlist bypass is not reachable through handleApiRequest at all', async () => {
     const result = await handleApiRequest(
+      request({ path: '/v2/user', pageOrigin: ORIGIN }),
+      POPUP
+    );
+
+    expect(result).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('handleApiRequest with an api key held by the worker', () => {
+  beforeEach(() => {
+    store.clear();
+    sent.length = 0;
+    calls.length = 0;
+    refresh.mockReset();
+    answer = () => json(200, { ok: true });
+    seedApiKeyRecord();
+  });
+
+  it('sends X-API-Key instead of a Bearer token, and the key never appears in the reply', async () => {
+    answer = () => json(200, { keys: [] });
+
+    const result = await handleApiRequest(
+      request({ path: '/v2/projects/7/keys' }),
+      PAGE_TAB
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe(`${API}/v2/projects/7/keys`);
+    expect(apiKeyOf(calls[0])).toBe('tgpak_secret');
+    expect(bearerOf(calls[0])).toBeUndefined();
+    expect(result).toMatchObject({ response: { status: 200 } });
+    expect(JSON.stringify(result)).not.toContain('tgpak_secret');
+  });
+
+  it("pins the allowed project prefix and the permissions query to the key's project", async () => {
+    expect(
+      await handleApiRequest(
+        request({ path: '/v2/projects/8/keys', projectKey: '7' }),
+        PAGE_TAB
+      )
+    ).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(
+      await handleApiRequest(
+        request({ path: '/v2/api-keys/current-permissions?projectId=8' }),
+        PAGE_TAB
+      )
+    ).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(
+      await handleApiRequest(
+        request({ path: '/v2/api-keys/current-permissions?projectId=7' }),
+        PAGE_TAB
+      )
+    ).toMatchObject({ response: { status: 200 } });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('answers no_session when the page connection names another project than the record is pinned to', async () => {
+    const result = await handleApiRequest(
+      request({ projectKey: '8' }),
+      PAGE_TAB
+    );
+
+    expect(result).toMatchObject({ error: { kind: 'no_session' } });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('serves a record from the same server only', async () => {
+    const result = await handleApiRequest(
+      request({ apiUrl: 'https://other-server.example' }),
+      PAGE_TAB
+    );
+
+    expect(result).toMatchObject({ error: { kind: 'no_session' } });
+  });
+
+  it('ignores a record without a project pin (written by an older build) rather than proxying unpinned', async () => {
+    seedApiKeyRecord({ projectKey: undefined, projectId: undefined });
+
+    expect(await handleApiRequest(request(), PAGE_TAB)).toMatchObject({
+      error: { kind: 'no_session' },
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('passes a 401 through as-is: there is no token to refresh', async () => {
+    answer = () => json(401, { code: 'unauthenticated' });
+
+    const result = await handleApiRequest(request(), PAGE_TAB);
+
+    expect(result).toMatchObject({ response: { status: 401 } });
+    expect(calls).toHaveLength(1);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('uploads a screenshot with the key, captured in the worker', async () => {
+    answer = () => json(201, { id: 5 });
+
+    const result = await handleScreenshotUpload(
+      { id: 'shot-1', apiUrl: API, projectKey: '7' },
+      PAGE_TAB
+    );
+
+    expect(result).toMatchObject({
+      response: { status: 201 },
+      width: 640,
+      height: 480,
+    });
+    expect(calls[0].url).toBe(`${API}/v2/image-upload`);
+    expect(apiKeyOf(calls[0])).toBe('tgpak_secret');
+    expect(bearerOf(calls[0])).toBeUndefined();
+  });
+
+  it('does not stand in for an OAuth connection: an oauth record with a stray apiKey field is still served by its session', async () => {
+    seedConnection({ apiKey: 'tgpak_stray' });
+    seedSession();
+
+    await handleApiRequest(request(), PAGE_TAB);
+
+    expect(bearerOf(calls[0])).toBe('Bearer tok');
+    expect(apiKeyOf(calls[0])).toBeUndefined();
+  });
+});
+
+describe('handlePopupApiRequest', () => {
+  beforeEach(() => {
+    store.clear();
+    sent.length = 0;
+    calls.length = 0;
+    refresh.mockReset();
+    answer = () => json(200, { ok: true });
+    seedConnection();
+    seedSession();
+  });
+
+  it('lets the popup (claimed origin) reach paths outside the prefix list, still under the header filter', async () => {
+    const result = await handlePopupApiRequest(
       request({
         path: '/v2/user',
         pageOrigin: ORIGIN,
@@ -553,7 +827,7 @@ describe('handleApiRequest', () => {
   });
 
   it('still refuses the popup a path that leaves the server', async () => {
-    const result = await handleApiRequest(
+    const result = await handlePopupApiRequest(
       request({ path: 'https://evil.example/v2/user', pageOrigin: ORIGIN }),
       POPUP
     );
@@ -562,13 +836,36 @@ describe('handleApiRequest', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('answers no_session to the popup for an origin without a marker', async () => {
-    const result = await handleApiRequest(
+  it('answers no_session to the popup for an origin without a connection', async () => {
+    const result = await handlePopupApiRequest(
       request({ path: '/v2/user', pageOrigin: 'https://nowhere.example' }),
       POPUP
     );
 
     expect(result).toMatchObject({ error: { kind: 'no_session' } });
+  });
+
+  it('refuses outright when the sender is a web page, even if it somehow claims the popup message type', async () => {
+    const result = await handlePopupApiRequest(
+      request({ path: '/v2/user', pageOrigin: ORIGIN }),
+      PAGE_TAB
+    );
+
+    expect(result).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('serves the popup opened as a tab, which has a sender.tab but an extension URL', async () => {
+    const result = await handlePopupApiRequest(
+      request({ path: '/v2/user', pageOrigin: ORIGIN }),
+      {
+        url: POPUP.url,
+        tab: { id: 9, url: POPUP.url, windowId: 4 },
+      }
+    );
+
+    expect(result).toHaveProperty('response');
+    expect(calls[0].url).toBe(`${API}/v2/user`);
   });
 });
 
@@ -579,7 +876,7 @@ describe('handleScreenshotUpload', () => {
     calls.length = 0;
     refresh.mockReset();
     answer = () => json(201, { id: 5, filename: 'x.png' });
-    seedMarker();
+    seedConnection();
     seedSession();
   });
 
@@ -652,5 +949,47 @@ describe('handleScreenshotUpload', () => {
     expect(await upload()).toMatchObject({ error: { kind: 'no_session' } });
     expect(browser.tabs.captureVisibleTab).not.toHaveBeenCalled();
     expect(sent).toHaveLength(0);
+  });
+
+  it('refuses a tab that is not the active one, before capturing: captureVisibleTab would screenshot whatever is in front', async () => {
+    const browser = (await import('webextension-polyfill')).default;
+    (browser.tabs.get as any).mockResolvedValueOnce({ id: 1, active: false });
+    (browser.tabs.captureVisibleTab as any).mockClear();
+
+    expect(await upload()).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(browser.tabs.captureVisibleTab).not.toHaveBeenCalled();
+    expect(sent).toHaveLength(0);
+  });
+
+  it('refuses a tab that stopped being the active one while the token was being refreshed, without capturing', async () => {
+    seedSession('tok', { expiresAt: Date.now() - 1 });
+    refresh.mockResolvedValue({
+      accessToken: 'tok2',
+      refreshToken: 'r2',
+      expiresAt: future(),
+    });
+    const browser = (await import('webextension-polyfill')).default;
+    (browser.tabs.get as any)
+      .mockResolvedValueOnce({ id: 1, active: true })
+      .mockResolvedValueOnce({ id: 1, active: false });
+    (browser.tabs.captureVisibleTab as any).mockClear();
+
+    expect(await upload()).toMatchObject({ error: { kind: 'not_allowed' } });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(browser.tabs.captureVisibleTab).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('answers unavailable when the tab capture itself fails, without notifying the frame or uploading', async () => {
+    const browser = (await import('webextension-polyfill')).default;
+    (browser.tabs.captureVisibleTab as any).mockRejectedValueOnce(
+      new Error('tab not focused')
+    );
+
+    const result = await upload();
+
+    expect(result).toMatchObject({ error: { kind: 'unavailable' } });
+    expect(sent).toHaveLength(0);
+    expect(calls).toHaveLength(0);
   });
 });

@@ -1,53 +1,42 @@
-import React from 'react';
 import {
   Alert,
   AlertTitle,
-  Box,
   Button,
+  IconButton,
   Link,
   Typography,
 } from '@mui/material';
-import { MIN_SDK_VERSION_FOR_OAUTH } from '../constants';
+import { SdkTooOldAlert } from './SdkTooOldAlert';
+import { hostOf } from '../oauth/url';
+import { CloseIcon } from './icons';
+import { ConnectError } from './useOAuthConnect';
 
 const LEARN_MORE_PROJECT_ID =
   'https://docs.tolgee.io/js-sdk/api/core_package/options#projectid';
 
-export const SdkTooOldAlert = () => (
-  <Alert severity="info" data-testid="sdk-too-old">
-    <AlertTitle>Update the Tolgee SDK to sign in</AlertTitle>
-    Signing in with a Tolgee account needs @tolgee/web{' '}
-    {MIN_SDK_VERSION_FOR_OAUTH} or newer. Update the SDK, or connect with an API
-    key.
-  </Alert>
-);
-
 type Props = {
   projectDetected: boolean;
   sdkTooOld: boolean;
-  serverOpen: boolean;
-  serverField: React.ReactNode;
   serverHost: string;
   serverLink: string;
   serverInvalid: boolean;
   connecting: boolean;
-  connectError: string | null;
+  connectError: ConnectError | null;
+  onDismissRefusal: () => void;
   onConnect: () => void;
-  onOpenServerField: () => void;
   onUseApiKey: () => void;
 };
 
 export const LoginTab = ({
   projectDetected,
   sdkTooOld,
-  serverOpen,
-  serverField,
   serverHost,
   serverLink,
   serverInvalid,
   connecting,
   connectError,
+  onDismissRefusal,
   onConnect,
-  onOpenServerField,
   onUseApiKey,
 }: Props) => {
   const useApiKeyButton = (
@@ -112,20 +101,8 @@ export const LoginTab = ({
         >
           {serverHost}
         </Link>{' '}
-        and start translating.
+        and start editing.
       </Typography>
-      {serverOpen && (
-        <Box display="flex" flexDirection="column" gap={0.5}>
-          {serverField}
-          <Typography
-            variant="caption"
-            sx={{ color: 'text.secondary' }}
-            data-testid="server-helper"
-          >
-            Change if you have your own instance of Tolgee.
-          </Typography>
-        </Box>
-      )}
       <Button
         variant="contained"
         color="primary"
@@ -135,25 +112,37 @@ export const LoginTab = ({
       >
         {connecting ? 'Connecting...' : 'Connect to Tolgee'}
       </Button>
-      {connectError && (
-        <Alert severity="error" data-testid="connect-error">
-          {connectError}
-        </Alert>
-      )}
-      {useApiKeyButton}
-      {!serverOpen && (
-        <Box display="flex" justifyContent="center">
-          <Link
-            component="button"
-            type="button"
-            underline="hover"
-            onClick={onOpenServerField}
-            data-testid="change-server"
+      {connectError &&
+        ('code' in connectError ? (
+          <Alert
+            severity="error"
+            data-testid="connect-project-inaccessible"
+            action={
+              <IconButton
+                size="small"
+                color="inherit"
+                aria-label="Dismiss"
+                title="Dismiss"
+                onClick={onDismissRefusal}
+                data-testid="dismiss-connect-refusal"
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            }
           >
-            Change server
-          </Link>
-        </Box>
-      )}
+            <AlertTitle>
+              This account can&apos;t access project #{connectError.projectId}{' '}
+              on {hostOf(connectError.apiUrl)}
+            </AlertTitle>
+            Sign in with an account that has access to it. The project may also
+            no longer exist in Tolgee.
+          </Alert>
+        ) : (
+          <Alert severity="error" data-testid="connect-error">
+            {connectError.message}
+          </Alert>
+        ))}
+      {useApiKeyButton}
     </>
   );
 };

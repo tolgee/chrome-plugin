@@ -14,6 +14,11 @@ import {
 } from '../setup/seed';
 import type { RunState } from '../setup/state';
 
+const TWO_BY_TWO_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEElEQVR4nGP4z8DwHwohFABFzAf5Zsv/OQAAAABJRU5ErkJggg==',
+  'base64'
+);
+
 // The key behind the testapp's title (see importKeys in setup/seed.ts); the dialog opened by alt+clicking it.
 const KEY_NAME = 'app-title';
 const DEV_TOOLS = '#__tolgee_dev_tools';
@@ -95,7 +100,7 @@ const captures = (worker: Worker): Promise<Capture[]> =>
     }))
   );
 
-/** Records what the content scripts hand the SDK about a screenshot: the image itself (api key) or only the capture notice. */
+/** Records what the content scripts hand the SDK about a screenshot: only the capture notice, never the image. */
 const listenForScreenshotMessages = (page: Page) =>
   page.evaluate(() => {
     const taken: string[] = [];
@@ -164,8 +169,8 @@ const connectWithApiKey = async (popup: Page, page: Page, apiKey: string) => {
 type Credential = 'api-key' | 'oauth';
 
 /**
- * Takes one screenshot from the open dialog and checks every hop: worker capture, what the SDK is told, who uploads
- * (the page with an api key, the worker with an OAuth session), gallery.
+ * Takes one screenshot from the open dialog and checks every hop: worker capture, what the SDK is told, the worker
+ * uploading with the credential it holds (the api key or the session token), gallery.
  */
 const takeScreenshotAndCheckHops = async (
   page: Page,
@@ -191,24 +196,15 @@ const takeScreenshotAndCheckHops = async (
   expect(captured[0].dataUrl).toMatch(/^data:image\/(jpeg|png);base64,/);
 
   const messages = await screenshotMessages(page);
-  let upload: Request;
-  if (credential === 'api-key') {
-    expect(messages.taken).toEqual([captured[0].dataUrl]);
-    expect(messages.captured).toEqual([]);
-    expect(pageUploads).toHaveLength(1);
-    expect(workerUploads).toHaveLength(0);
-    upload = pageUploads[0];
-  } else {
-    // The image never crosses to the page: it only hears that the capture is done.
-    expect(messages.taken).toEqual([]);
-    expect(messages.captured).toHaveLength(1);
-    expect(JSON.parse(messages.captured[0])).toEqual({
-      id: expect.any(String),
-    });
-    expect(pageUploads).toHaveLength(0);
-    expect(workerUploads).toHaveLength(1);
-    upload = workerUploads[0];
-  }
+  // The image never crosses to the page: it only hears that the capture is done.
+  expect(messages.taken).toEqual([]);
+  expect(messages.captured).toHaveLength(1);
+  expect(JSON.parse(messages.captured[0])).toEqual({
+    id: expect.any(String),
+  });
+  expect(pageUploads).toHaveLength(0);
+  expect(workerUploads).toHaveLength(1);
+  const upload: Request = workerUploads[0];
   const headers = await upload.allHeaders();
   expect(headers['content-type']).toMatch(/^multipart\/form-data; boundary=/);
   if (credential === 'api-key') {
@@ -241,8 +237,6 @@ const saveAndReadScreenshots = async (
   };
 };
 
-// What the platform derived from the upload: the image size and where the key sits in it, both computed on the
-// uploading side (the page with an api key, the worker with an OAuth session).
 const geometryOf = (screenshot: KeyScreenshot) => ({
   width: screenshot.width,
   height: screenshot.height,
@@ -275,7 +269,7 @@ test.afterEach(async ({ state }) => {
   }
 });
 
-test('takes a screenshot with an API key and attaches it to the key', async ({
+test('takes a screenshot with an API key, uploaded by the worker, and attaches it to the key', async ({
   page,
   context,
   worker,
@@ -339,9 +333,7 @@ test('takes a screenshot with an OAuth session, uploaded by the worker, and atta
   expect(screenshots[0].keyReferences.map((r) => r.keyId)).toEqual([keyId]);
 });
 
-// The worker measures the image with createImageBitmap where the page used an <img>; the key positions are scaled
-// against that size, so a mismatch would land the highlight in the wrong place rather than fail a visible check.
-test('reports the same image size and key positions whether the page or the worker uploads', async ({
+test('reports the same image size and key positions with an API key and with an OAuth session', async ({
   page,
   context,
   worker,
@@ -358,8 +350,8 @@ test('reports the same image size and key positions whether the page or the work
   await openInContextDialog(page);
   await takeScreenshotButton(page).click();
   await expect(galleryThumbnails(page)).toHaveCount(1);
-  const viaPage = await saveAndReadScreenshots(page, api, app.projectId);
-  expect(viaPage.screenshots).toHaveLength(1);
+  const viaApiKey = await saveAndReadScreenshots(page, api, app.projectId);
+  expect(viaApiKey.screenshots).toHaveLength(1);
   await removeKeyScreenshots(state);
 
   const reloaded = page.waitForEvent('load');
@@ -380,13 +372,13 @@ test('reports the same image size and key positions whether the page or the work
   await openInContextDialog(page);
   await takeScreenshotButton(page).click();
   await expect(galleryThumbnails(page)).toHaveCount(1);
-  const viaWorker = await saveAndReadScreenshots(page, api, app.projectId);
-  expect(viaWorker.screenshots).toHaveLength(1);
+  const viaOAuth = await saveAndReadScreenshots(page, api, app.projectId);
+  expect(viaOAuth.screenshots).toHaveLength(1);
 
-  const expected = geometryOf(viaPage.screenshots[0]);
+  const expected = geometryOf(viaApiKey.screenshots[0]);
   expect(expected.width).toBeGreaterThan(0);
   expect(expected.positions).toHaveLength(1);
-  expect(geometryOf(viaWorker.screenshots[0])).toEqual(expected);
+  expect(geometryOf(viaOAuth.screenshots[0])).toEqual(expected);
 });
 
 test('uploads a dropped image through the worker with its file name and type intact', async ({
@@ -415,15 +407,11 @@ test('uploads a dropped image through the worker with its file name and type int
   const pageUploads = collectUploads(page);
   const workerUploads = collectWorkerRequests(context, isUpload);
 
-  // A 2x2 PNG.
-  const png = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEElEQVR4nGP4z8DwHwohFABFzAf5Zsv/OQAAAABJRU5ErkJggg==',
-    'base64'
-  );
-  await page
-    .locator(DEV_TOOLS)
-    .locator('input[type="file"]')
-    .setInputFiles({ name: 'dropped.png', mimeType: 'image/png', buffer: png });
+  await page.locator(DEV_TOOLS).locator('input[type="file"]').setInputFiles({
+    name: 'dropped.png',
+    mimeType: 'image/png',
+    buffer: TWO_BY_TWO_PNG,
+  });
   await expect(galleryThumbnails(page)).toHaveCount(1);
 
   expect(pageUploads).toHaveLength(0);
@@ -436,7 +424,7 @@ test('uploads a dropped image through the worker with its file name and type int
         name: 'image',
         fileName: 'dropped.png',
         type: 'image/png',
-        size: png.length,
+        size: TWO_BY_TWO_PNG.length,
       },
     ],
   ]);
@@ -484,11 +472,11 @@ test('reports the missing upload scope instead of silently dropping the screensh
   const popup = await openPopup(page);
   await connectWithApiKey(popup, page, key.key);
   await openInContextDialog(page);
-
-  // The dialog computed its permissions on open; the scope goes away underneath it, as a key edit on the server would.
-  await api.updateApiKeyScopes(key.id, SCOPES_WITHOUT_UPLOAD);
   await takeScreenshotAndCheckHops(page, context, worker, 'api-key', key.key);
 
+  // The dialog computed its permissions, and the screenshot upload above went through, before the scope goes away
+  // underneath it, as a key edit on the server would; only the save is refused.
+  await api.updateApiKeyScopes(key.id, SCOPES_WITHOUT_UPLOAD);
   await saveButton(page).click();
   await expect(dialogAlert(page)).toContainText('Operation not permitted');
   await expect(dialogAlert(page)).toContainText(
