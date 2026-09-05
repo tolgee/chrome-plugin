@@ -142,7 +142,7 @@ describe('writeCredentialsIfChanged', () => {
       writeCredentialsIfChanged(store, {});
       expect(store.map.get(EDITING_SESSION_STORAGE)).toBe('off');
 
-      writeCredentialsIfChanged(store, { editing: null });
+      writeCredentialsIfChanged(store, { editing: 'clear' });
       expect(store.map.has(EDITING_SESSION_STORAGE)).toBe(false);
 
       writeCredentialsIfChanged(store, {});
@@ -163,7 +163,7 @@ describe('writeCredentialsIfChanged', () => {
         writeCredentialsIfChanged(store, {
           apiUrl: 'https://app.tolgee.io',
           session: 'apiKey',
-          editing: null,
+          editing: 'clear',
         })
       ).toBe(true);
       expect(store.map.has(EDITING_SESSION_STORAGE)).toBe(false);
@@ -173,7 +173,9 @@ describe('writeCredentialsIfChanged', () => {
     it('never counts as a change on its own: the page is not reloaded for it', () => {
       const store = fakeStore();
       expect(writeCredentialsIfChanged(store, { editing: 'off' })).toBe(false);
-      expect(writeCredentialsIfChanged(store, { editing: null })).toBe(false);
+      expect(writeCredentialsIfChanged(store, { editing: 'clear' })).toBe(
+        false
+      );
     });
   });
 });

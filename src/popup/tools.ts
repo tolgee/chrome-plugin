@@ -176,7 +176,7 @@ export const pageEditing = ({
   editingSwitchedOff: boolean;
 }): PageCredentials['editing'] =>
   appliedValues || !storedValues
-    ? null
+    ? 'clear'
     : editingSwitchedOff
       ? 'off'
       : undefined;

@@ -383,7 +383,7 @@ describe('pageEditing', () => {
           appliedValues: session,
           editingSwitchedOff,
         })
-      ).toBeNull();
+      ).toBe('clear');
     }
   });
 
@@ -394,7 +394,7 @@ describe('pageEditing', () => {
         appliedValues: null,
         editingSwitchedOff: false,
       })
-    ).toBeNull();
+    ).toBe('clear');
   });
 
   it('leaves the slot alone when a stored session is only restored, not applied on this page', () => {

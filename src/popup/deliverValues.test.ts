@@ -74,7 +74,7 @@ describe('syncToStorageAndPage', () => {
             session: 'apiKey',
             projectId: 7,
             projectKey: '7',
-            editing: null,
+            editing: 'clear',
             pageOrigin: ORIGIN,
           },
         },
@@ -124,7 +124,7 @@ describe('syncToStorageAndPage', () => {
     expect(store.has(ORIGIN)).toBe(false);
     expect(sent.map((s) => s.tabId)).toEqual([1, 2]);
     for (const { message } of sent) {
-      expect(message.data).toEqual({ editing: null, pageOrigin: ORIGIN });
+      expect(message.data).toEqual({ editing: 'clear', pageOrigin: ORIGIN });
     }
   });
 });

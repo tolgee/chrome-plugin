@@ -119,7 +119,7 @@ const injectCredentials = async (
   await browser.tabs
     .sendMessage(tabId, {
       type: 'SET_CREDENTIALS',
-      data: { ...data, editing: null },
+      data: { ...data, editing: 'clear' },
     })
     .catch(() => undefined);
 };
@@ -132,7 +132,7 @@ export const disconnect = async (data: { pageOrigin?: string }) => {
   // The origin's connection goes first: a tab reloads as soon as it is told to clear, and the popup re-applies whatever
   // OAUTH_SESSION_STATE still finds for the origin when the reloaded page handshakes.
   await clearConnection(data.pageOrigin);
-  await deliverToOrigin(data.pageOrigin, { editing: null });
+  await deliverToOrigin(data.pageOrigin, { editing: 'clear' });
   if (connection?.projectKey) {
     await endSessionIfUnreferenced(connection.apiUrl, connection.projectKey);
   }

@@ -244,7 +244,7 @@ describe('background message handling', () => {
             projectId: 5,
             projectKey: '5',
             pageOrigin: 'https://page.example',
-            editing: null,
+            editing: 'clear',
           },
         },
       },
@@ -980,7 +980,7 @@ describe('background message handling', () => {
     expect(sent.map((s) => s.tabId).sort()).toEqual([7, 8]);
     expect(sent[0].message).toEqual({
       type: 'SET_CREDENTIALS',
-      data: { pageOrigin: 'https://site-a.example', editing: null },
+      data: { pageOrigin: 'https://site-a.example', editing: 'clear' },
     });
     expect(connectionAtClear).toEqual([false, false]);
     expect(store.has('oauth:https://app.tolgee.io:5')).toBe(false);

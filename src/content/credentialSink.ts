@@ -19,8 +19,9 @@ export type PageCredentials = {
   session?: SessionKind | null;
   projectId?: string | number | null;
   projectKey?: string | null;
-  // 'off' writes the slot, null removes it, absent leaves it as it is (see popup/tools.ts pageEditing).
-  editing?: 'off' | null;
+  // Unlike every other field above, 'clear' and absent are NOT interchangeable: 'off' writes the slot, 'clear'
+  // removes it, absent leaves it exactly as the page already has it (see popup/tools.ts pageEditing).
+  editing?: 'off' | 'clear';
 };
 
 export const writeCredentialsIfChanged = (
@@ -54,11 +55,11 @@ export const readAppliedCredentials = (
 // Never part of the reload decision: the SDK reads the slot on every dialog request.
 const writeEditing = (
   store: SessionStore,
-  editing: 'off' | null | undefined
+  editing: 'off' | 'clear' | undefined
 ) => {
   if (editing === 'off') {
     store.setItem(EDITING_SESSION_STORAGE, editing);
-  } else if (editing === null) {
+  } else if (editing === 'clear') {
     store.removeItem(EDITING_SESSION_STORAGE);
   }
 };
