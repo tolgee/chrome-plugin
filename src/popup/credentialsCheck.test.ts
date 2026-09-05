@@ -75,12 +75,10 @@ describe('checkOAuthSession', () => {
       error: { kind: 'unavailable', message: 'redirected' },
     });
 
-    const outcome = checkOAuthSession(OAUTH);
+    const error = await checkOAuthSession(OAUTH).catch((e) => e);
 
-    await expect(outcome).rejects.toMatchObject({ kind: 'unavailable' });
-    await expect(
-      outcome.catch((e) => isInconclusiveSessionCheckError(e))
-    ).resolves.toBe(true);
+    expect(error).toMatchObject({ kind: 'unavailable' });
+    expect(isInconclusiveSessionCheckError(error)).toBe(true);
   });
 });
 

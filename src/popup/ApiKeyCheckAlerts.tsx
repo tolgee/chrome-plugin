@@ -10,6 +10,7 @@ import { ApiKeyRejectedAlert } from './ApiKeyRejectedAlert';
 import { API_KEY_HELP } from './ApiKeyHelper';
 import { keyAllowsEditing } from './apiKeyScreen';
 import { CredentialsCheck, isProjectInfo } from './popupState';
+import { VIEW_ONLY_NOTE } from './sessionCopy';
 
 export const ApiKeyCheckAlerts = ({
   apiKeyCheck,
@@ -54,7 +55,7 @@ export const ApiKeyCheckAlerts = ({
       ) : (
         <Alert severity="warning" data-testid="api-key-view-only">
           <AlertTitle>This key can only view strings</AlertTitle>
-          You can look up strings on this page but not edit them.
+          {VIEW_ONLY_NOTE}
         </Alert>
       ))}
   </>

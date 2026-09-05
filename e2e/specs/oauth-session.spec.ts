@@ -12,17 +12,16 @@ import {
 import {
   collectProjectRequests,
   declareProject,
-  DEV_TOOLS,
   dialogAsksToSignIn,
+  errorAlert,
   dialogSaysEditingOff,
   editingSwitchInput,
   openInContextDialog,
   openTestapp,
   responseStatuses,
-  serveOldSdkPage,
   sessionItem,
-  TITLE,
 } from '../fixtures/testapp';
+import { serveOldSdkPage } from '../fixtures/pageProtocol';
 
 requireOAuthServer();
 
@@ -53,16 +52,12 @@ test('offers to sign in again once the session was revoked on the server', async
   expect(await bearerStatus(state.tolgeeUrl, session.accessToken)).toBe(401);
 
   await test.step('the worker drops the session after a 401 its refresh cannot cure, and the dialog says so', async () => {
-    await page.locator(TITLE).click({ modifiers: ['Alt'] });
-    await expect(page.locator(DEV_TOOLS)).toContainText(
-      "You're not signed in",
-      {
-        timeout: 30_000,
-      }
-    );
-    await expect(page.locator(DEV_TOOLS)).toContainText(
-      'Sign in again in the Tolgee plugin'
-    );
+    await openInContextDialog(page);
+    // The code, not the copy: ErrorAlert renders this same body for seven codes, and only the one the SDK
+    // synthesizes when the worker reports no session proves the session was actually dropped.
+    await expect(errorAlert(page, 'extension_session_missing')).toBeVisible({
+      timeout: 30_000,
+    });
     await expect
       .poll(() => storedOAuthSessions(worker), {
         message: 'the dead session to be dropped',

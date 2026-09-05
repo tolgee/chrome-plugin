@@ -10,11 +10,11 @@ import {
   keyFormSubmit,
   openInContextDialog,
   openTestapp,
-  pretendOldSdk,
   sessionItem,
   TITLE,
   typeAndSubmitDialog,
 } from '../fixtures/testapp';
+import { pretendOldSdk } from '../fixtures/pageProtocol';
 
 // The key behind the testapp's title (see importKeys in setup/seed.ts) and its seeded translation.
 const KEY_NAME = 'app-title';

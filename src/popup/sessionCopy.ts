@@ -10,6 +10,9 @@ export type Session =
       delivery: CredentialDelivery;
     };
 
+export const VIEW_ONLY_NOTE =
+  'You can look up strings on this page but not edit them.';
+
 export const PAGE_DELIVERY_NOTE =
   "This site's SDK uses it directly; update @tolgee/web to keep it in the extension.";
 

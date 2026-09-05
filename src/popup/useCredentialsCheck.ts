@@ -36,11 +36,14 @@ export const useCredentialsCheck = (
 
 // A 5xx/network/timeout/unavailable answer is inconclusive, not a rejection: it clears to null rather than
 // flipping a connected session to 'invalid' on a transient server outage.
+// The panel's state machine never produces CredentialsCheck's 'loading' or 'unreachable': no consumer of
+// state.credentialsCheck distinguishes them from null, so a check in flight clears to null like any other
+// not-yet-known verdict. Those two members belong to useApiKeyCheck's separate state, which does render them.
 export const runCredentialsCheck = async (
   checkableValues: Values,
   setCredentialsCheck: (val: CredentialsCheck) => void
 ): Promise<void> => {
-  setCredentialsCheck('loading');
+  setCredentialsCheck(null);
   const check = isOAuth(checkableValues)
     ? checkOAuthSession(checkableValues)
     : checkApiKey(checkableValues);

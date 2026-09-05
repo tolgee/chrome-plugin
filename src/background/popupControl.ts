@@ -51,7 +51,6 @@ const openOrFocusPopupWindow = async (tabId: number) => {
   await sessionArea().set({ [keyFor(tabId)]: created.id });
 };
 
-// Claims a fresh cooldown window for this tab, unless one is already running.
 const claimCooldown = async (tabId: number): Promise<boolean> => {
   const key = focusKeyFor(tabId);
   const last = (await sessionArea().get(key))[key];

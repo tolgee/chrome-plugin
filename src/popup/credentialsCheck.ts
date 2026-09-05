@@ -13,26 +13,6 @@ import { Values } from './tools';
 const USER_PATH = '/v2/user';
 const CURRENT_KEY_PATH = '/v2/api-keys/current';
 
-// Shared shape for both checks: fetch, confirm a rejection or throw inconclusive, parse the JSON body or throw
-// inconclusive if it isn't one.
-const checkCredential = async (
-  values: Values,
-  path: string,
-  confirmsUnusable: (status: number) => boolean,
-  rejectedMessage: string
-): Promise<Record<string, unknown>> => {
-  const r: ProxyFetchResponse = await credentialFetch(values, path);
-  if (!r.ok) {
-    if (confirmsUnusable(r.status)) {
-      throw new Error(rejectedMessage);
-    }
-    throw new InconclusiveHttpStatus(r.status, path);
-  }
-  return r.json().catch(() => {
-    throw new InconclusiveHttpStatus(r.status, path);
-  });
-};
-
 export const checkOAuthSession = async (values: Values): Promise<OAuthUser> => {
   const user = await checkCredential(
     values,
@@ -56,4 +36,22 @@ export const checkApiKey = async (values: Values): Promise<ProjectInfo> => {
     scopes: (data.scopes as string[]) ?? [],
     branchingEnabled: (data.branchingEnabled as boolean) ?? false,
   };
+};
+
+const checkCredential = async (
+  values: Values,
+  path: string,
+  confirmsUnusable: (status: number) => boolean,
+  rejectedMessage: string
+): Promise<Record<string, unknown>> => {
+  const r: ProxyFetchResponse = await credentialFetch(values, path);
+  if (!r.ok) {
+    if (confirmsUnusable(r.status)) {
+      throw new Error(rejectedMessage);
+    }
+    throw new InconclusiveHttpStatus(r.status, path);
+  }
+  return r.json().catch(() => {
+    throw new InconclusiveHttpStatus(r.status, path);
+  });
 };

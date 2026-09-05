@@ -6,10 +6,12 @@ import {
   openTestapp,
   PLAIN_PAGE_HTML,
   servePage,
-  serveOldSdkPage,
   TITLE,
-  waitForContentScript,
 } from '../fixtures/testapp';
+import {
+  serveOldSdkPage,
+  waitForContentScript,
+} from '../fixtures/pageProtocol';
 
 test('shows the sign-in screen with the page project detected', async ({
   page,

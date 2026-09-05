@@ -12,8 +12,8 @@ import {
 
 export { initialState };
 
-// `apply` is useApplier's apply: it flips a ref and forces a render, and the real storage/page write runs
-// afterwards in useSessionRestore's effect, against the next state - not synchronously here.
+// Despite being called from inside the reducer, `apply` writes nothing: the storage/page write runs later, in
+// useSessionRestore's effect, and against the next state.
 export const createReducer =
   (apply: () => void) =>
   (state: State, action: Action): State => {

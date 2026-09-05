@@ -1,4 +1,4 @@
-import type { BrowserContext, Frame, Page, Request } from '@playwright/test';
+import type { BrowserContext, Page, Request } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 export const TITLE = '.header__title';
@@ -63,6 +63,12 @@ export const keyFormSubmit = (page: Page) =>
 export const dialogAlert = (page: Page) =>
   page.locator(DEV_TOOLS).locator('[role="alert"]');
 
+const charLimitCheckbox = (page: Page) =>
+  page.locator(DEV_TOOLS).locator('[data-cy="key-char-limit-checkbox"]');
+
+export const screenshotFileInput = (page: Page) =>
+  page.locator(DEV_TOOLS).locator('[data-cy="screenshot-file-input"]');
+
 export const translationEditor = (page: Page, language = 'en') =>
   page
     .locator(DEV_TOOLS)
@@ -70,7 +76,6 @@ export const translationEditor = (page: Page, language = 'en') =>
       `[data-cy="translation-editor"][data-cy-language="${language}"] .cm-content`
     );
 
-// Alt+clicks the given element (the testapp's title by default) and waits for the dialog to render.
 export const openInContextDialog = async (
   page: Page,
   trigger = page.locator(TITLE)
@@ -79,8 +84,7 @@ export const openInContextDialog = async (
   await expect(keyFormSubmit(page)).toBeVisible({ timeout: 30_000 });
 };
 
-// Types into the dialog's English editor and saves, waiting for the dialog to close on success. Selects all first:
-// the editor opens prefilled with the key's current text.
+// Selects all first: the editor opens prefilled with the key's current text.
 export const typeAndSubmitDialog = async (page: Page, text: string) => {
   await translationEditor(page).click();
   await page.keyboard.press('ControlOrMeta+a');
@@ -93,30 +97,34 @@ export const typeAndSubmitDialog = async (page: Page, text: string) => {
 // extension_editing_off).
 export const EDITING_OFF_ALERT_TEXT = 'In-context editing is switched off';
 
-export const signInAlert = (page: Page) =>
+// The SDK renders one alert body for several error codes (ErrorAlert.tsx groups all the signed-out ones), so a
+// test that matches the copy cannot tell which code produced it: locate the code itself.
+export const errorAlert = (page: Page, code: string) =>
   page
     .locator(DEV_TOOLS)
-    .locator(
-      '[data-cy="error-alert"][data-cy-error-code="api_key_not_specified"]'
-    );
+    .locator(`[data-cy="error-alert"][data-cy-error-code="${code}"]`);
+
+export const signInAlert = (page: Page) =>
+  errorAlert(page, 'api_key_not_specified');
 
 export const editingOffAlert = (page: Page) =>
-  page
-    .locator(DEV_TOOLS)
-    .locator(
-      '[data-cy="error-alert"][data-cy-error-code="extension_editing_off"]'
-    );
+  errorAlert(page, 'extension_editing_off');
 
 type DialogState = 'asks-to-sign-in' | 'editing-off' | 'editable';
 
 const dialogState = async (page: Page): Promise<DialogState> => {
   await openInContextDialog(page);
-  await expect(page.locator(DEV_TOOLS)).toContainText(
-    new RegExp(
-      `${SIGN_IN_ALERT_TEXT}|${EDITING_OFF_ALERT_TEXT}|Character limit`
-    ),
-    { timeout: 30_000 }
-  );
+  // Settles once the check behind the dialog has answered: either an alert renders, or the char-limit checkbox
+  // does, which the SDK only renders once the form is ready (KeyForm's `ready && permissions.canEditCharLimit`).
+  await expect
+    .poll(
+      async () =>
+        (await signInAlert(page).count()) +
+        (await editingOffAlert(page).count()) +
+        (await charLimitCheckbox(page).count()),
+      { timeout: 30_000, message: 'the dialog to settle on a state' }
+    )
+    .toBeGreaterThan(0);
   const state: DialogState =
     (await signInAlert(page).count()) > 0
       ? 'asks-to-sign-in'
@@ -207,161 +215,3 @@ export const PLAIN_PAGE_HTML =
 /** Responses of the page's own project API calls, once they are in. */
 export const responseStatuses = (requests: Request[]) =>
   Promise.all(requests.map(async (r) => (await r.response())?.status()));
-
-// The content script arrives at document_idle; it answers the SDK's TOLGEE_PING once it listens.
-export const waitForContentScript = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const deadline = Date.now() + 30_000;
-        const onMessage = (event: MessageEvent) => {
-          if (event.data?.type === 'TOLGEE_PONG') {
-            window.removeEventListener('message', onMessage);
-            clearInterval(timer);
-            resolve();
-          }
-        };
-        window.addEventListener('message', onMessage);
-        const timer = setInterval(() => {
-          if (Date.now() > deadline) {
-            clearInterval(timer);
-            reject(new Error('no content script answered TOLGEE_PING'));
-          }
-          window.postMessage({ type: 'TOLGEE_PING' }, '*');
-        }, 200);
-      })
-  );
-
-// A real old release would need its own in-context bundle from the CDN, which the suite must not depend on.
-export const pretendOldSdk = (page: Page) =>
-  page.addInitScript(() => {
-    const post = window.postMessage.bind(window);
-    window.postMessage = ((message: any, ...rest: any[]) => {
-      if (message?.type === 'TOLGEE_READY' && message.data) {
-        const data = { ...message.data };
-        delete data.protocolVersion;
-        message = { ...message, data };
-      }
-      return (post as any)(message, ...rest);
-    }) as typeof window.postMessage;
-  });
-
-/**
- * Serves a page at `${appUrl}/__e2e_old-sdk.html` whose SDK reports `uiPresent: true` but no `protocolVersion`:
- * a current in-context SDK from before the proxied-request protocol, with no SDK actually running (see
- * pretendOldSdk for the full flow on the testapp).
- */
-export const serveOldSdkPage = async (
-  page: Page,
-  appUrl: string,
-  { apiUrl, projectId }: { apiUrl: string; projectId: number }
-): Promise<void> => {
-  const url = `${appUrl}/__e2e_old-sdk.html`;
-  await servePage(page, url, PLAIN_PAGE_HTML);
-  await page.goto(url);
-  await waitForContentScript(page);
-  await page.evaluate(
-    ({ apiUrl, projectId }) =>
-      window.postMessage(
-        {
-          type: 'TOLGEE_READY',
-          data: {
-            uiPresent: true,
-            mode: 'production',
-            config: { apiUrl, apiKey: '', projectId },
-          },
-        },
-        '*'
-      ),
-    { apiUrl, projectId }
-  );
-};
-
-export type ProxyReply = {
-  id: string;
-  response?: { status: number };
-  error?: { kind: string; message: string };
-};
-
-// What a script on the page gets back when it posts TOLGEE_API_REQUEST itself, as an XSS payload would.
-export const askExtension = (
-  target: Page | Frame,
-  path: string
-): Promise<ProxyReply> =>
-  target.evaluate(
-    (path) =>
-      new Promise<ProxyReply>((resolve, reject) => {
-        const id = `probe-${Math.random()}`;
-        const timer = setTimeout(
-          () => reject(new Error(`no answer for ${path}`)),
-          15_000
-        );
-        window.addEventListener('message', function onMessage(event) {
-          if (
-            event.data?.type === 'TOLGEE_API_RESPONSE' &&
-            event.data.data?.id === id
-          ) {
-            window.removeEventListener('message', onMessage);
-            clearTimeout(timer);
-            resolve(event.data.data);
-          }
-        });
-        window.postMessage(
-          {
-            type: 'TOLGEE_API_REQUEST',
-            data: {
-              id,
-              path,
-              method: 'GET',
-              headers: {},
-              body: { kind: 'none' },
-            },
-          },
-          window.origin
-        );
-      }),
-    path
-  );
-
-export const findInPage = (page: Page, needle: string): Promise<string[]> =>
-  page.evaluate((needle) => {
-    const hits: string[] = [];
-    const seen = new WeakSet<object>();
-    const scan = (label: string, value: unknown, depth: number) => {
-      if (typeof value === 'string') {
-        if (value.includes(needle)) {
-          hits.push(label);
-        }
-        return;
-      }
-      if (
-        depth === 0 ||
-        value === null ||
-        (typeof value !== 'object' && typeof value !== 'function') ||
-        seen.has(value as object) ||
-        value instanceof Node
-      ) {
-        return;
-      }
-      seen.add(value as object);
-      for (const name of Object.getOwnPropertyNames(value)) {
-        try {
-          scan(`${label}.${name}`, (value as any)[name], depth - 1);
-        } catch {
-          // restricted or cross-origin accessor
-        }
-      }
-    };
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i)!;
-      scan(`sessionStorage.${key}`, sessionStorage.getItem(key), 1);
-    }
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)!;
-      scan(`localStorage.${key}`, localStorage.getItem(key), 1);
-    }
-    scan('document.cookie', document.cookie, 1);
-    scan('document', document.documentElement.outerHTML, 1);
-    scan('window', window, 4);
-    return hits;
-  }, needle);

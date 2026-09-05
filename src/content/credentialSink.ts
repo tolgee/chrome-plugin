@@ -7,22 +7,10 @@ import {
   PROJECT_ID_SESSION_STORAGE,
   PROJECT_KEY_SESSION_STORAGE,
 } from '../sessionStorageKeys';
-import { SessionKind, sessionKindOf } from '../protocol';
+import { sessionKindOf } from '../protocol';
+import { PageCredentials } from '../types';
 
 export type SessionStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
-
-export type PageCredentials = {
-  // Only ever set for a page delivery (see CredentialDelivery); a proxied session leaves the slot cleared.
-  apiKey?: string | null;
-  apiUrl?: string | null;
-  branch?: string | null;
-  session?: SessionKind | null;
-  projectId?: string | number | null;
-  projectKey?: string | null;
-  // Unlike every other field above, 'clear' and absent are NOT interchangeable: 'off' writes the slot, 'clear'
-  // removes it, absent leaves it exactly as the page already has it (see popup/tools.ts pageEditing).
-  editing?: 'off' | 'clear';
-};
 
 export const writeCredentialsIfChanged = (
   store: SessionStore,

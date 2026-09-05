@@ -1,5 +1,5 @@
 import { LibConfig } from '../types';
-import { PageCredentials } from '../content/credentialSink';
+import { PageCredentials } from '../types';
 import {
   appliedValuesFrom,
   credentialDelivery,

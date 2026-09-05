@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import { PageCredentials } from './content/credentialSink';
+import { PageCredentials } from './types';
 import { safeOrigin } from './oauth/url';
 
 export const deliverToOrigin = async (

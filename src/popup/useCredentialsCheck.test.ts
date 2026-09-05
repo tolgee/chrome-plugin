@@ -25,13 +25,13 @@ const PROJECT: import('./popupState').ProjectInfo = {
 };
 
 describe('runCredentialsCheck', () => {
-  it('reports loading, then the result, for a conclusive answer', async () => {
+  it('clears the previous verdict, then reports the result, for a conclusive answer', async () => {
     checkApiKey.mockResolvedValue(PROJECT);
     const set = vi.fn();
 
     await runCredentialsCheck(KEY, set);
 
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', PROJECT]);
+    expect(set.mock.calls.map((c) => c[0])).toEqual([null, PROJECT]);
   });
 
   it('reports invalid on a confirmed rejection (a plain Error from checkApiKey/checkOAuthSession)', async () => {
@@ -40,7 +40,7 @@ describe('runCredentialsCheck', () => {
 
     await runCredentialsCheck(KEY, set);
 
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', 'invalid']);
+    expect(set.mock.calls.map((c) => c[0])).toEqual([null, 'invalid']);
   });
 
   it('a 5xx (InconclusiveHttpStatus) clears to null rather than reporting invalid', async () => {
@@ -51,7 +51,7 @@ describe('runCredentialsCheck', () => {
 
     await runCredentialsCheck(KEY, set);
 
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', null]);
+    expect(set.mock.calls.map((c) => c[0])).toEqual([null, null]);
   });
 
   it('a network/timeout/unavailable proxy failure clears to null rather than reporting invalid', async () => {
@@ -62,16 +62,16 @@ describe('runCredentialsCheck', () => {
 
     await runCredentialsCheck(OAUTH, set);
 
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', null]);
+    expect(set.mock.calls.map((c) => c[0])).toEqual([null, null]);
 
     checkOAuthSession.mockRejectedValue(new ProxyFetchError('network', 'x'));
     set.mockClear();
     await runCredentialsCheck(OAUTH, set);
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', null]);
+    expect(set.mock.calls.map((c) => c[0])).toEqual([null, null]);
 
     checkOAuthSession.mockRejectedValue(new ProxyFetchError('timeout', 'x'));
     set.mockClear();
     await runCredentialsCheck(OAUTH, set);
-    expect(set.mock.calls.map((c) => c[0])).toEqual(['loading', null]);
+    expect(set.mock.calls.map((c) => c[0])).toEqual([null, null]);
   });
 });

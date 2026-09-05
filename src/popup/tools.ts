@@ -1,7 +1,6 @@
-import { CredentialDelivery, LibConfig } from '../types';
+import { CredentialDelivery, LibConfig, PageCredentials } from '../types';
 import { sameOrigin } from '../oauth/url';
 import { SessionKind, supportsProxy } from '../protocol';
-import { PageCredentials } from '../content/credentialSink';
 import { isApiKeyRecord } from '../oauth/originRecord';
 import { projectIdOfApiKey } from '../oauth/apiKeyProject';
 import { projectKeyFor } from '../oauth/sessionRules';

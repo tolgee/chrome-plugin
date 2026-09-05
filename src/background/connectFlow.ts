@@ -13,7 +13,7 @@ import {
   loadOriginRecord,
   storeOAuthConnection,
 } from '../oauth/connection';
-import { PageCredentials } from '../content/credentialSink';
+import { PageCredentials } from '../types';
 import { supportsProxy } from '../protocol';
 import { deliverToOrigin } from '../tabCredentials';
 import { openPopup } from './popupControl';

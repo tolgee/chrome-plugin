@@ -4,7 +4,7 @@ import { checkableValuesOf } from './checkableValues';
 const OAUTH = { apiUrl: 'https://app.tolgee.io', oauth: true, projectKey: '7' };
 
 describe('checkableValuesOf', () => {
-  it('picks appliedValues over storedValues and libConfig when they agree with what is stored', () => {
+  it('checks an applied session that agrees with the stored record', () => {
     expect(
       checkableValuesOf({
         libConfig: {
@@ -16,6 +16,26 @@ describe('checkableValuesOf', () => {
         appliedValues: OAUTH,
       })
     ).toEqual(OAUTH);
+  });
+
+  // appliedValues wins the pick, but only ever with values that compare equal to the stored record: the case
+  // below (applied disagrees -> null) is the other half, so no input can show applied beating a *different* stored.
+  it('prefers appliedValues over the page config when there is no stored record to agree with', () => {
+    const applied = {
+      apiUrl: 'https://app.tolgee.io',
+      apiKey: 'tgpak_applied',
+    };
+    expect(
+      checkableValuesOf({
+        libConfig: {
+          uiPresent: true,
+          mode: 'production',
+          config: { apiUrl: 'https://app.tolgee.io', apiKey: 'tgpak_page' },
+        },
+        storedValues: null,
+        appliedValues: applied,
+      })
+    ).toEqual(applied);
   });
 
   it('falls back to storedValues, then to the page config, when nothing is applied', () => {

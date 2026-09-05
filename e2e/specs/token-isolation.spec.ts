@@ -7,12 +7,11 @@ import {
   storedOAuthSessions,
 } from '../fixtures/oauth';
 import {
-  askExtension,
-  findInPage,
   openInContextDialog,
   openTestapp,
   servePage,
 } from '../fixtures/testapp';
+import { askExtension, findInPage } from '../fixtures/pageProtocol';
 
 requireOAuthServer();
 

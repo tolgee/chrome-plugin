@@ -1,15 +1,14 @@
 import { expect, test } from '../fixtures/extension';
 import { collectPageRequests, collectWorkerRequests } from '../fixtures/oauth';
 import {
-  askExtension,
   connectWithApiKey,
   declareApiKey,
-  findInPage,
   openInContextDialog,
   openTestapp,
   sessionItem,
   TITLE,
 } from '../fixtures/testapp';
+import { askExtension, findInPage } from '../fixtures/pageProtocol';
 
 test('keeps a key entered in the popup out of the page and sends its requests from the worker', async ({
   page,

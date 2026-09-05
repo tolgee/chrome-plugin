@@ -121,16 +121,7 @@ export const revoke = async (apiUrl: string, token: string): Promise<void> => {
     body: new URLSearchParams({ token, client_id: OAUTH_CLIENT_ID }),
     signal: AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS),
   });
-  if (isBlockedRedirect(res)) {
-    throw new OAuthTokenEndpointError(
-      0,
-      'the server redirected this request instead of answering it'
-    );
-  }
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new OAuthTokenEndpointError(res.status, body);
-  }
+  await throwUnlessAnswered(res);
 };
 
 // Comfortably past OAUTH_REFRESH_SKEW_MS, so a token endpoint that omits expires_in still yields a usable token.
@@ -147,16 +138,7 @@ const postToken = async (
     body: new URLSearchParams(params),
     signal: AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS),
   });
-  if (isBlockedRedirect(res)) {
-    throw new OAuthTokenEndpointError(
-      0,
-      'the server redirected this request instead of answering it'
-    );
-  }
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new OAuthTokenEndpointError(res.status, body);
-  }
+  await throwUnlessAnswered(res);
   return parseTokenResponse(await res.json(), previousRefreshToken);
 };
 
@@ -186,4 +168,19 @@ const launchAuthWithRetry = async (url: string): Promise<string> => {
     }
   }
   throw lastError;
+};
+
+const throwUnlessAnswered = async (res: Response): Promise<void> => {
+  if (isBlockedRedirect(res)) {
+    throw new OAuthTokenEndpointError(
+      0,
+      'the server redirected this request instead of answering it'
+    );
+  }
+  if (!res.ok) {
+    throw new OAuthTokenEndpointError(
+      res.status,
+      await res.text().catch(() => '')
+    );
+  }
 };

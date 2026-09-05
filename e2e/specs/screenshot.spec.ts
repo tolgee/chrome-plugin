@@ -11,6 +11,7 @@ import {
   keyFormSubmit,
   openInContextDialog,
   openTestapp,
+  screenshotFileInput,
   takeScreenshotButton,
 } from '../fixtures/testapp';
 import {
@@ -374,7 +375,7 @@ test('uploads a dropped image through the worker with its file name and type int
   const pageUploads = collectUploads(page);
   const workerUploads = collectWorkerRequests(context, isUpload);
 
-  await page.locator(DEV_TOOLS).locator('input[type="file"]').setInputFiles({
+  await screenshotFileInput(page).setInputFiles({
     name: 'dropped.png',
     mimeType: 'image/png',
     buffer: TWO_BY_TWO_PNG,

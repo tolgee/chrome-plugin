@@ -2,9 +2,10 @@ import { originOf } from '../oauth/url';
 import { sessionArea } from '../storageArea';
 import { Connection, ProxyResponse } from './proxyTypes';
 
-// Past this age an id is pruned on read rather than kept forever, matching connectRefusalStore.ts's MAX_AGE_MS -
-// this matters on the sessionArea() fallback (storage.local, reached below Firefox 115), which nothing else clears.
-const MAX_AGE_MS = 60 * 60 * 1000;
+// Swept on write, never on read: expiring on read would shorten the DELETE grant itself, so a dialog left open
+// could no longer clean up its own uploads. Bounds the sessionArea() fallback (storage.local, below Firefox 115),
+// which nothing else clears. A day is far longer than any dialog session.
+const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export const rememberUploadIfSuccessful = async (
   connection: Connection,
@@ -28,17 +29,15 @@ export const wasUploadedThroughSession = async (
   id: string
 ): Promise<boolean> => {
   const key = imageKey(connection, id);
-  const stored = (await sessionArea().get(key))[key] as
-    | { at: number }
-    | undefined;
-  if (!stored) {
-    return false;
-  }
-  if (Date.now() - stored.at > MAX_AGE_MS) {
-    await sessionArea().remove(key);
-    return false;
-  }
-  return true;
+  return Boolean((await sessionArea().get(key))[key]);
+};
+
+export const rememberUploadedImage = async (
+  connection: Connection,
+  id: string
+): Promise<void> => {
+  await sweepExpired();
+  await sessionArea().set({ [imageKey(connection, id)]: { at: Date.now() } });
 };
 
 const KEY_PREFIX = 'uploadedImages:';
@@ -46,9 +45,17 @@ const KEY_PREFIX = 'uploadedImages:';
 const imageKey = (connection: Connection, id: string): string =>
   `${KEY_PREFIX}${originOf(connection.apiUrl)}:${connection.projectKey}:${id}`;
 
-export const rememberUploadedImage = async (
-  connection: Connection,
-  id: string
-): Promise<void> => {
-  await sessionArea().set({ [imageKey(connection, id)]: { at: Date.now() } });
+const sweepExpired = async (): Promise<void> => {
+  const cutoff = Date.now() - MAX_AGE_MS;
+  const all = await sessionArea().get(null);
+  const stale = Object.entries(all)
+    .filter(
+      ([key, value]) =>
+        key.startsWith(KEY_PREFIX) &&
+        ((value as { at?: number } | null)?.at ?? 0) <= cutoff
+    )
+    .map(([key]) => key);
+  if (stale.length > 0) {
+    await sessionArea().remove(stale);
+  }
 };

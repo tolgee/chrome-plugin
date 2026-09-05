@@ -15,8 +15,10 @@ vi.mock('webextension-polyfill', () => ({
         set: async (obj: Record<string, unknown>) => {
           Object.entries(obj).forEach(([k, v]) => store.set(k, v));
         },
-        remove: async (key: string) => {
-          store.delete(key);
+        remove: async (keys: string | string[]) => {
+          for (const key of Array.isArray(keys) ? keys : [keys]) {
+            store.delete(key);
+          }
         },
       },
       local: {
@@ -28,6 +30,16 @@ vi.mock('webextension-polyfill', () => ({
 }));
 
 const connection = { apiUrl: 'https://app.tolgee.io', projectKey: '7' };
+
+const reply = (status: number, body: unknown) => ({
+  status,
+  statusText: '',
+  headers: {},
+  body: JSON.stringify(body),
+});
+
+const storedIds = () =>
+  [...store.keys()].filter((key) => key.startsWith('uploadedImages:'));
 
 beforeEach(() => {
   store.clear();
@@ -67,52 +79,64 @@ describe('uploadedImages', () => {
     }
   });
 
-  it('rememberUploadIfSuccessful only remembers a 2xx response whose body is JSON with an id', async () => {
+  it('rememberUploadIfSuccessful remembers the id of a 2xx JSON response', async () => {
     const { rememberUploadIfSuccessful, wasUploadedThroughSession } =
       await import('./uploadedImages');
 
-    await rememberUploadIfSuccessful(connection, {
-      status: 403,
-      statusText: '',
-      headers: {},
-      body: JSON.stringify({ code: 'permission_denied', id: 999 }),
-    });
+    await rememberUploadIfSuccessful(connection, reply(201, { id: 7 }));
+
+    expect(await wasUploadedThroughSession(connection, '7')).toBe(true);
+  });
+
+  it('rememberUploadIfSuccessful remembers nothing from a non-2xx answer, even one carrying an id', async () => {
+    const { rememberUploadIfSuccessful, wasUploadedThroughSession } =
+      await import('./uploadedImages');
+
+    await rememberUploadIfSuccessful(
+      connection,
+      reply(403, { code: 'permission_denied', id: 999 })
+    );
+
+    expect(await wasUploadedThroughSession(connection, '999')).toBe(false);
+    expect(storedIds()).toEqual([]);
+  });
+
+  it('rememberUploadIfSuccessful writes no entry at all when the body is not JSON or carries no id', async () => {
+    const { rememberUploadIfSuccessful } = await import('./uploadedImages');
+
     await rememberUploadIfSuccessful(connection, {
       status: 200,
       statusText: '',
       headers: {},
       body: '<html>not json</html>',
     });
-    await rememberUploadIfSuccessful(connection, {
-      status: 201,
-      statusText: '',
-      headers: {},
-      body: JSON.stringify({ filename: 'no-id-here' }),
-    });
-    await rememberUploadIfSuccessful(connection, {
-      status: 201,
-      statusText: '',
-      headers: {},
-      body: JSON.stringify({ id: 7 }),
-    });
+    await rememberUploadIfSuccessful(
+      connection,
+      reply(201, { filename: 'no-id-here' })
+    );
 
-    expect(await wasUploadedThroughSession(connection, '999')).toBe(false);
-    expect(await wasUploadedThroughSession(connection, '7')).toBe(true);
+    // Without this the id-less body would be remembered under an ...:undefined key, widening what a later DELETE
+    // is authorized against.
+    expect(storedIds()).toEqual([]);
   });
 
-  it('prunes and refuses an id remembered more than an hour ago', async () => {
+  it('sweeps entries older than a day when a new upload is remembered, and never expires one on read', async () => {
     vi.useFakeTimers();
     try {
       const { rememberUploadedImage, wasUploadedThroughSession } = await import(
         './uploadedImages'
       );
-      await rememberUploadedImage(connection, '42');
+      await rememberUploadedImage(connection, 'old');
 
-      vi.advanceTimersByTime(61 * 60 * 1000);
+      vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+      // A dialog left open for hours keeps the grant to clean up its own upload: reads never expire an id.
+      expect(await wasUploadedThroughSession(connection, 'old')).toBe(true);
 
-      expect(await wasUploadedThroughSession(connection, '42')).toBe(false);
-      const key = [...store.keys()].find((k) => k.endsWith(':42'));
-      expect(store.has(key!)).toBe(false);
+      vi.advanceTimersByTime(23 * 60 * 60 * 1000);
+      await rememberUploadedImage(connection, 'fresh');
+
+      expect(await wasUploadedThroughSession(connection, 'old')).toBe(false);
+      expect(await wasUploadedThroughSession(connection, 'fresh')).toBe(true);
     } finally {
       vi.useRealTimers();
     }

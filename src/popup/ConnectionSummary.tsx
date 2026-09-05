@@ -1,5 +1,10 @@
 import { Typography } from '@mui/material';
-import { connectionHow, isViewOnly, Session } from './sessionCopy';
+import {
+  connectionHow,
+  isViewOnly,
+  Session,
+  VIEW_ONLY_NOTE,
+} from './sessionCopy';
 
 export const ConnectionSummary = ({
   session,
@@ -11,7 +16,7 @@ export const ConnectionSummary = ({
   <Typography variant="body2" data-testid="connection-summary">
     {connectionHow(session)}{' '}
     {isViewOnly(session) ? (
-      'You can look up strings on this page but not edit them.'
+      VIEW_ONLY_NOTE
     ) : (
       <>
         Edits you make on this page are saved{' '}

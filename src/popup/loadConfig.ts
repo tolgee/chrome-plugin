@@ -1,5 +1,5 @@
 import { sendMessage } from './sendMessage';
-import { PageCredentials } from '../content/credentialSink';
+import { PageCredentials } from '../types';
 
 export const loadAppliedValues = (): Promise<PageCredentials> =>
   Promise.race([

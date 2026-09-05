@@ -9,10 +9,10 @@ import {
 } from '../fixtures/oauth';
 import {
   declareProject,
-  DEV_TOOLS,
+  openInContextDialog,
   openTestapp,
   sessionItem,
-  TITLE,
+  signInAlert,
 } from '../fixtures/testapp';
 
 requireOAuthServer();
@@ -84,11 +84,8 @@ const expectRefused = async ({
 
   await test.step('the page is still signed out: its dialog asks to sign in', async () => {
     await page.bringToFront();
-    await page.locator(TITLE).click({ modifiers: ['Alt'] });
-    await expect(page.locator(DEV_TOOLS)).toContainText(
-      'Sign in to make changes',
-      { timeout: 30_000 }
-    );
+    await openInContextDialog(page);
+    await expect(signInAlert(page)).toBeVisible({ timeout: 30_000 });
     await page.keyboard.press('Escape');
   });
 };
