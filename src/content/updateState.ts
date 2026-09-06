@@ -1,19 +1,14 @@
-import { API_KEY_LOCAL_STORAGE, API_URL_LOCAL_STORAGE } from '../constants';
+import { API_URL_SESSION_STORAGE } from '../sessionStorageKeys';
+import { LibConfig } from '../types';
 import { Messages } from './Messages';
 
-export const updateState = (config: any, messages: Messages) => {
-  const apiKey = sessionStorage.getItem(API_URL_LOCAL_STORAGE);
-  const apiUrl = sessionStorage.getItem(API_KEY_LOCAL_STORAGE);
+export const updateState = (
+  config: LibConfig | undefined,
+  messages: Messages
+) => {
+  const apiUrl = sessionStorage.getItem(API_URL_SESSION_STORAGE);
 
-  let state = 'inactive';
-
-  if (Boolean(config) && (apiKey || apiUrl)) {
-    state = 'active';
-  } else if (config) {
-    state = 'present';
-  } else {
-    state = 'inactive';
-  }
+  const state = config ? (apiUrl ? 'active' : 'present') : 'inactive';
 
   messages.sendToPlugin('TOLGEE_SET_STATE', state);
 };

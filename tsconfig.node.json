@@ -6,5 +6,5 @@
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true
   },
-  "include": ["vite.config.chrome.ts", "vite.config.firefox.ts"],
+  "include": ["vite.config.chrome.ts", "vite.config.firefox.ts", "vite.licenseFiles.ts"],
 }

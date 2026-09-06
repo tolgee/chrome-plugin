@@ -1,39 +1,37 @@
-import browser from 'webextension-polyfill';
-
-type Values = {
-  apiUrl?: string;
-  apiKey?: string;
-  branch?: string;
-};
-
-const getCurrentTab = async () => {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-
-  return tabs[0];
-};
-
-const getCurrentTabOrigin = async () => {
-  const url = new URL((await getCurrentTab()).url!);
-  return url.origin;
-};
+import {
+  clearConnection,
+  loadOriginRecord,
+  storeApiKeyConnection,
+  updateConnectionHints,
+} from '../oauth/connection';
+import { originOf } from '../oauth/url';
+import { getActiveTab } from './activeTab';
+import { Values } from './tools';
 
 export const storeValues = async (values: Values | null) => {
   try {
     const origin = await getCurrentTabOrigin();
 
-    if (values?.apiKey && values?.apiUrl) {
-      browser.storage.local.set({
-        [origin]: {
-          apiUrl: values.apiUrl,
-          apiKey: values.apiKey,
-          branch: values.branch,
-        },
+    if (values?.oauth && values?.apiUrl) {
+      await updateConnectionHints(origin, {
+        projectId: values.projectId,
+        branch: values.branch,
+        ...(values.siteKey ? { siteKey: values.siteKey } : {}),
+      });
+    } else if (values?.apiKey && values?.apiUrl) {
+      await storeApiKeyConnection(origin, {
+        apiUrl: values.apiUrl,
+        apiKey: values.apiKey,
+        branch: values.branch,
+        siteKey: values.siteKey,
+        projectId: values.projectId,
+        projectKey: values.projectKey,
       });
     } else {
-      browser.storage.local.remove(origin);
+      await clearConnection(origin);
     }
   } catch (e) {
-    console.error(e);
+    console.error('[tolgee] storage error', e);
     return;
   }
 };
@@ -41,16 +39,21 @@ export const storeValues = async (values: Values | null) => {
 export const loadValues = async () => {
   try {
     const origin = await getCurrentTabOrigin();
-    const keys = await browser.storage.local.get(origin);
-    const data = keys[origin] as Values;
+    const data = await loadOriginRecord(origin);
 
     return {
       apiKey: data?.apiKey,
       apiUrl: data?.apiUrl,
       branch: data?.branch,
+      oauth: data?.oauth,
+      projectId: data?.projectId,
+      projectKey: data?.projectKey,
+      siteKey: data?.siteKey,
     };
   } catch (e) {
-    console.error(e);
+    console.error('[tolgee] storage error', e);
     return {};
   }
 };
+
+const getCurrentTabOrigin = async () => originOf((await getActiveTab()).url!);

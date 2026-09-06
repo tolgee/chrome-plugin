@@ -4,6 +4,7 @@ import { crx } from '@crxjs/vite-plugin';
 import zipPack from 'vite-plugin-zip-pack';
 
 import manifest from './manifest.json';
+import { licenseFiles } from './vite.licenseFiles';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -14,6 +15,7 @@ export default defineConfig({
   plugins: [
     react(),
     crx({ manifest: manifest as any, browser: 'firefox' }),
+    licenseFiles('dist-firefox'),
     zipPack({ inDir: 'dist-firefox', outFileName: 'firefox.zip' }),
   ],
 });

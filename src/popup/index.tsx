@@ -1,6 +1,6 @@
-import { createTheme, ThemeProvider } from '@mui/material';
+import { createTheme, CssBaseline, ThemeProvider } from '@mui/material';
 import { createRoot } from 'react-dom/client';
-import { TolgeeDetector } from './TolgeeDetector';
+import { Popup } from './Popup';
 
 const theme = createTheme({
   palette: {
@@ -18,6 +18,7 @@ const root = createRoot(container!);
 
 root.render(
   <ThemeProvider theme={theme}>
-    <TolgeeDetector />
+    <CssBaseline />
+    <Popup />
   </ThemeProvider>
 );

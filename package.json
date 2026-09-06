@@ -12,11 +12,15 @@
     "eslint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "prettier": "prettier --write ./src",
     "prettier-ci": "prettier --check ./src",
-    "tsc": "tsc",
+    "tsc": "tsc && tsc -p e2e/tsconfig.json",
     "preview": "vite preview",
     "release": "semantic-release",
     "release-dry": "semantic-release --no-ci -d",
-    "release-dry-debug": "semantic-release --no-ci -d --debug"
+    "release-dry-debug": "semantic-release --no-ci -d --debug",
+    "test": "vitest run",
+    "test-watch": "vitest",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:ui": "playwright test -c e2e/playwright.config.ts --ui"
   },
   "dependencies": {
     "@emotion/react": "^11.11.3",
@@ -28,9 +32,11 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "2.0.0-beta.25",
+    "@playwright/test": "^1.62.1",
     "@semantic-release/changelog": "^5.0.1",
     "@semantic-release/exec": "^5.0.0",
     "@semantic-release/git": "^9.0.0",
+    "@types/node": "^20.19.43",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@types/webextension-polyfill": "^0.12.1",
@@ -46,7 +52,8 @@
     "semantic-release": "^17.4.7",
     "typescript": "^5.2.2",
     "vite": "^3.2.7",
-    "vite-plugin-zip-pack": "^1.0.7"
+    "vite-plugin-zip-pack": "^1.0.7",
+    "vitest": "^4.1.11"
   },
   "release": {
     "plugins": [
