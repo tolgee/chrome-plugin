@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/tolgee/chrome-plugin/compare/v1.9.0...v1.10.0) (2026-09-06)
+
+
+### Features
+
+* OAuth login & UI improvements ([45323c6](https://github.com/tolgee/chrome-plugin/commit/45323c61366a40b29776f014491e0dc4cf3fed60)), closes [#41](https://github.com/tolgee/chrome-plugin/issues/41) [tolgee/tolgee-platform#3893](https://github.com/tolgee/tolgee-platform/issues/3893)
+
 # [1.9.0](https://github.com/tolgee/chrome-plugin/compare/v1.8.2...v1.9.0) (2026-03-19)
 
 
