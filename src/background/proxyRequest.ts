@@ -116,10 +116,10 @@ const isAllowedPath = async (
   connection: Connection
 ): Promise<boolean> => {
   if (pathname === IMAGE_UPLOAD_PATH) {
-    return true;
+    return method === 'POST';
   }
   if (pathname.startsWith(`${IMAGE_UPLOAD_PATH}/`)) {
-    return method !== 'DELETE' || deletesOnlyOwnUploads(pathname, connection);
+    return method === 'DELETE' && deletesOnlyOwnUploads(pathname, connection);
   }
   return (
     pathname === PERMISSIONS_PATH ||
