@@ -9,6 +9,7 @@ import { captureAndUploadScreenshot, isActiveTab } from './proxyScreenshot';
 import { locateSession, authorizeSession } from './proxyCredential';
 import {
   isCrossOriginFrame,
+  isExtensionPage,
   isWebPageSender,
   MessageSender,
   requesterOrigin,
@@ -59,6 +60,10 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({});
       break;
     case 'OAUTH_LOGIN':
+      if (!isExtensionPage(sender.url)) {
+        sendResponse({ error: 'only the popup may start a login' });
+        break;
+      }
       respondAsync(
         sendResponse,
         connect(data),

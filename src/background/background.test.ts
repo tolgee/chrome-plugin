@@ -103,23 +103,6 @@ vi.stubGlobal('fetch', fetchMock);
 await import('./background');
 const browser = (await import('webextension-polyfill')).default;
 
-const respond = (
-  message: unknown,
-  sender: {
-    url?: string;
-    tab?: { id?: number; url?: string; windowId?: number };
-  } = {}
-): Promise<unknown> =>
-  new Promise((resolve) => {
-    const kept = messageListener(message, sender, resolve);
-    if (kept !== true) {
-      throw new Error(
-        'handler did not keep the channel open (must return true)'
-      );
-    }
-  });
-
-const future = () => Date.now() + 60 * 60 * 1000;
 const PAGE_TAB = {
   url: 'https://page.example/app',
   tab: { id: 1, url: 'https://page.example/app', windowId: 1 },
@@ -135,6 +118,24 @@ const POPUP_TAB = {
     windowId: 1,
   },
 };
+
+const respond = (
+  message: unknown,
+  sender: {
+    url?: string;
+    tab?: { id?: number; url?: string; windowId?: number };
+  } = POPUP
+): Promise<unknown> =>
+  new Promise((resolve) => {
+    const kept = messageListener(message, sender, resolve);
+    if (kept !== true) {
+      throw new Error(
+        'handler did not keep the channel open (must return true)'
+      );
+    }
+  });
+
+const future = () => Date.now() + 60 * 60 * 1000;
 
 const seedSession = (
   overrides: Partial<Record<string, unknown>> = {},
@@ -188,6 +189,60 @@ describe('background message handling', () => {
 
     expect(res).toEqual({ connected: true });
     expect(JSON.stringify(res)).not.toContain('tok');
+  });
+
+  it.each([
+    ['a web page', PAGE_TAB],
+    [
+      'a cross-origin frame',
+      { ...PAGE_TAB, url: 'https://evil.example/frame', frameId: 3 },
+    ],
+    ['a sender without a url', {}],
+  ])(
+    'OAUTH_LOGIN from %s is refused before any auth window can open',
+    async (_label, sender) => {
+      const res = await new Promise((resolve) =>
+        messageListener(
+          {
+            type: 'OAUTH_LOGIN',
+            data: {
+              protocolVersion: 2,
+              apiUrl: 'https://evil.example',
+              projectId: 1,
+              tabId: 1,
+            },
+          },
+          sender,
+          resolve
+        )
+      );
+
+      expect(res).toMatchObject({ error: expect.stringContaining('popup') });
+      expect(login).not.toHaveBeenCalled();
+    }
+  );
+
+  it('OAUTH_LOGIN from the popup opened in a tab is still allowed', async () => {
+    login.mockResolvedValue({
+      accessToken: 'tok',
+      refreshToken: 'r',
+      expiresAt: future(),
+    });
+
+    const res = await respond(
+      {
+        type: 'OAUTH_LOGIN',
+        data: {
+          protocolVersion: 2,
+          apiUrl: 'https://app.tolgee.io',
+          projectId: 5,
+          tabId: 1,
+        },
+      },
+      POPUP_TAB
+    );
+
+    expect(res).toEqual({ connected: true });
   });
 
   it.each([undefined, 1])(
