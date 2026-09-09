@@ -303,8 +303,6 @@ describe('handleApiRequest', () => {
     '/v2/projects/7/keys',
     '/v2/projects/7/translations?filterKeyName=x',
     'v2/projects/7/keys',
-    '/v2/image-upload',
-    '/v2/image-upload/12,13',
     '/v2/api-keys/current-permissions?projectId=7',
   ])('proxies %s from a tab', async (path) => {
     const result = await handleApiRequest(request({ path }), PAGE_TAB);
@@ -312,6 +310,38 @@ describe('handleApiRequest', () => {
     expect(result).toHaveProperty('response');
     expect(calls).toHaveLength(1);
   });
+
+  it('proxies a POST to the image-upload collection from a tab', async () => {
+    const result = await handleApiRequest(
+      request({ path: '/v2/image-upload', method: 'POST' }),
+      PAGE_TAB
+    );
+
+    expect(result).toHaveProperty('response');
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    ['GET', '/v2/image-upload'],
+    ['PUT', '/v2/image-upload'],
+    ['PATCH', '/v2/image-upload'],
+    ['DELETE', '/v2/image-upload'],
+    ['GET', '/v2/image-upload/12,13'],
+    ['POST', '/v2/image-upload/12,13'],
+    ['PUT', '/v2/image-upload/12,13'],
+    ['PATCH', '/v2/image-upload/12,13'],
+  ])(
+    'refuses %s %s from a tab: only the POST-collection + DELETE-own-ids surface the platform exposes is proxied',
+    async (method, path) => {
+      const result = await handleApiRequest(
+        request({ path, method }),
+        PAGE_TAB
+      );
+
+      expect(result).toMatchObject({ error: { kind: 'not_allowed' } });
+      expect(calls).toHaveLength(0);
+    }
+  );
 
   it('refuses methods the SDK never uses', async () => {
     for (const method of ['HEAD', 'OPTIONS', 'TRACE', 'CONNECT']) {
