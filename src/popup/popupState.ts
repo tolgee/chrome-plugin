@@ -86,6 +86,7 @@ export const initialState = {
   declaredProject: null as ProjectOption | null,
   declaredProjectInaccessible: false,
   connectRefusal: null as StoredConnectRefusal | null,
+  missingPermissions: [] as string[],
 };
 
 export type State = typeof initialState;
@@ -112,4 +113,5 @@ export type Action =
       type: 'RESOLVE_PROJECT';
       payload: { project: ProjectOption | null; inaccessible: boolean };
     }
-  | { type: 'SET_CONNECT_REFUSAL'; payload: StoredConnectRefusal | null };
+  | { type: 'SET_CONNECT_REFUSAL'; payload: StoredConnectRefusal | null }
+  | { type: 'SET_MISSING_PERMISSIONS'; payload: string[] };

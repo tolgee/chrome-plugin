@@ -94,6 +94,25 @@ type AuthorizationArgs = {
   target: Page;
   decision?: 'allow' | 'deny';
   project?: ConsentProject;
+  declineScopes?: string[];
+};
+
+const declineConsentScopes = async (page: Page, scopes: string[]) => {
+  await page.locator('[data-cy="oauth2-consent-modify"]').click();
+  await expect(page.locator('[data-cy="oauth2-consent-scopes"]')).toBeVisible();
+  for (const scope of scopes) {
+    const checkbox = page
+      .locator(
+        `[data-cy="permissions-advanced-item"][data-cy-scope="${scope}"]`
+      )
+      .locator('[data-cy="permissions-advanced-checkbox"]');
+    // Unticking a scope can untick the ones that imply it, so one may be off already.
+    if (await checkbox.locator('input').isChecked()) {
+      await checkbox.click();
+    }
+    await expect(checkbox.locator('input')).not.toBeChecked();
+  }
+  await page.locator('[data-cy="oauth2-consent-modify"]').click();
 };
 
 const chooseConsentProject = async (page: Page, project: ConsentProject) => {
@@ -130,6 +149,7 @@ export const completeAuthorization = async ({
   target,
   decision = 'allow',
   project,
+  declineScopes,
 }: AuthorizationArgs) => {
   const authorizeUrl = await waitForAuthorizeUrl(worker);
   const page = await context.newPage();
@@ -146,6 +166,9 @@ export const completeAuthorization = async ({
   await page.goto(authorizeUrl, { timeout: 60_000 });
   if (project) {
     await chooseConsentProject(page, project);
+  }
+  if (declineScopes?.length) {
+    await declineConsentScopes(page, declineScopes);
   }
 
   const button = page.locator(`[data-cy="oauth2-consent-${decision}"]`);
@@ -164,12 +187,15 @@ export const completeAuthorization = async ({
 
   await page.close();
   await target.bringToFront();
-  await worker.evaluate(
-    ([key, url]) => chrome.storage.session.set({ [key]: url }),
-    [REDIRECT_KEY, redirectUrl!]
-  );
+  await resolveAuthorization(worker, redirectUrl!);
   return { authorizeUrl, redirectUrl: redirectUrl! };
 };
+
+const resolveAuthorization = (worker: Worker, redirectUrl: string) =>
+  worker.evaluate(
+    ([key, url]) => chrome.storage.session.set({ [key]: url }),
+    [REDIRECT_KEY, redirectUrl]
+  );
 
 export type StoredSession = {
   apiUrl: string;
@@ -177,6 +203,7 @@ export type StoredSession = {
   accessToken: string;
   refreshToken?: string;
   expiresAt: number;
+  scopes?: string[];
 };
 
 /** The OAuth sessions the extension holds in `chrome.storage.local` (see oauth/tokenStore.ts). */
@@ -212,6 +239,19 @@ export const expireStoredSessions = (worker: Worker) =>
     );
     await chrome.storage.local.set(expired);
   });
+
+/** The worker's own list, before the popup's dismissals. */
+export const workerSaysMissingPermissions = (
+  popup: Page,
+  locator: { apiUrl: string; projectKey: string; pageOrigin: string }
+): Promise<string[]> =>
+  popup.evaluate(
+    (data) =>
+      chrome.runtime
+        .sendMessage({ type: 'OAUTH_MISSING_PERMISSIONS', data })
+        .then((reply: { missing?: string[] }) => reply?.missing ?? []),
+    locator
+  );
 
 /**
  * The requests the extension's service worker makes to the Tolgee API on the page's behalf. Playwright reports

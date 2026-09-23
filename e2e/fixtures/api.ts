@@ -41,3 +41,33 @@ export const revokeOAuthToken = async (tolgeeUrl: string, token: string) => {
     throw new Error(`revoke failed: HTTP ${res.status}`);
   }
 };
+
+/** A user whose role lacks most optional scopes. */
+export const signUpViewer = async (state: RunState): Promise<User> => {
+  const api = await apiAs(state);
+  const { code } = await api.request(
+    'PUT',
+    `projects/${state.apps[0].projectId}/invite`,
+    { type: 'VIEW', name: 'viewer' }
+  );
+  const user = {
+    username: `viewer-${Date.now()}@e2e.test`,
+    password: 'viewer-password',
+  };
+  const res = await fetch(`${state.tolgeeUrl}/api/public/sign_up`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Viewer',
+      email: user.username,
+      password: user.password,
+      invitationCode: code,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `viewer sign-up failed: HTTP ${res.status} ${await res.text()}`
+    );
+  }
+  return user;
+};

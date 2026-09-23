@@ -101,6 +101,10 @@ vi.stubGlobal('fetch', fetchMock);
 
 // Import after the mocks: this triggers background.ts's module-load side effects (listener registration).
 await import('./background');
+const { OAUTH_SCOPES } = await import('../constants');
+const { ProjectInaccessibleError } = await import('../oauth/connectRefusal');
+const without = (...scopes: string[]) =>
+  OAUTH_SCOPES.filter((s) => !scopes.includes(s));
 const browser = (await import('webextension-polyfill')).default;
 
 const PAGE_TAB = {
@@ -147,6 +151,7 @@ const seedSession = (
     expiresAt: future(),
     apiUrl: 'https://app.tolgee.io',
     projectKey: '5',
+    scopes: OAUTH_SCOPES,
     ...overrides,
   });
 
@@ -848,6 +853,23 @@ describe('background message handling', () => {
     );
   });
 
+  it('OAUTH_LOGIN reuses a session with missing permissions without asking the server (connecting another site must not open a consent screen)', async () => {
+    seedSession({ scopes: without('translations.edit') });
+
+    const res = await respond({
+      type: 'OAUTH_LOGIN',
+      data: {
+        protocolVersion: 2,
+        apiUrl: 'https://app.tolgee.io',
+        projectId: 5,
+        tabId: 1,
+      },
+    });
+
+    expect(res).toEqual({ connected: true });
+    expect(login).not.toHaveBeenCalled();
+  });
+
   it('OAUTH_LOGIN keeps reusing the existing session when the reachability probe rejects with a network error (inconclusive, not a confirmed answer)', async () => {
     seedSession({ accessToken: 'still-good' });
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
@@ -1175,6 +1197,251 @@ describe('background message handling', () => {
     expect(revoke).toHaveBeenCalledWith('https://app.tolgee.io', 'rtok');
     expect(store.has('oauth:https://app.tolgee.io:5')).toBe(false);
     expect(store.has('https://site-a.example')).toBe(false);
+  });
+
+  const connectPageWithSession = (overrides: Record<string, unknown> = {}) => {
+    store.set('https://page.example', {
+      apiUrl: 'https://app.tolgee.io',
+      oauth: true,
+      projectKey: '5',
+    });
+    seedSession(overrides);
+  };
+  const LOCATOR = {
+    apiUrl: 'https://app.tolgee.io',
+    projectKey: '5',
+    pageOrigin: 'https://page.example',
+  };
+
+  describe('OAUTH_MISSING_PERMISSIONS', () => {
+    const ask = () =>
+      respond({ type: 'OAUTH_MISSING_PERMISSIONS', data: LOCATOR });
+
+    const userHolds = (scopes: string[] | undefined, status = 200) =>
+      (
+        fetchMock as unknown as Mock<(url: string) => Promise<unknown>>
+      ).mockImplementation(async (url: string) => {
+        const body =
+          String(url).includes('/current-permissions') && scopes
+            ? { userScopes: scopes }
+            : {};
+        return {
+          ok: status === 200,
+          status,
+          statusText: '',
+          headers: new Headers({ 'content-type': 'application/json' }),
+          text: async () => JSON.stringify(body),
+          json: async () => body,
+        };
+      });
+
+    it('names the optional scopes the grant lacks, whether declined at consent or granted before the extension asked them', async () => {
+      connectPageWithSession({ scopes: without('translations.edit') });
+      userHolds(OAUTH_SCOPES);
+
+      expect(await ask()).toEqual({ missing: ['translations.edit'] });
+      expect(String((fetchMock.mock.calls as unknown[][])[0][0])).toBe(
+        'https://app.tolgee.io/v2/api-keys/current-permissions?projectId=5'
+      );
+      expect(
+        ((fetchMock.mock.calls as unknown[][])[0][1] as RequestInit).headers
+      ).toMatchObject({ Authorization: 'Bearer tok' });
+    });
+
+    it("leaves out what the user's own project permissions do not hold, since signing in again cannot add it", async () => {
+      connectPageWithSession({
+        scopes: without('keys.edit', 'translations.edit'),
+      });
+      userHolds(['translations.view', 'keys.view', 'keys.edit']);
+
+      expect(await ask()).toEqual({ missing: ['keys.edit'] });
+    });
+
+    it.each([
+      ['are not reported', undefined, 200],
+      ['cannot be read', undefined, 500],
+    ])(
+      "names nothing while the user's own permissions %s, rather than naming what they may not have",
+      async (_, scopes, status) => {
+        connectPageWithSession({ scopes: without('translations.edit') });
+        userHolds(scopes, status);
+
+        expect(await ask()).toEqual({ missing: [] });
+      }
+    );
+
+    it('never names a required scope', async () => {
+      connectPageWithSession({ scopes: without('keys.view') });
+
+      expect(await ask()).toEqual({ missing: [] });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('names nothing, without asking the server, while the grant holds every scope the extension knows', async () => {
+      connectPageWithSession({ scopes: OAUTH_SCOPES });
+
+      expect(await ask()).toEqual({ missing: [] });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('names nothing for a session stored before the extension recorded the grant, until its next refresh', async () => {
+      connectPageWithSession({ scopes: undefined });
+
+      expect(await ask()).toEqual({ missing: [] });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('is refused for a web page: a site must not learn what its visitor may do', async () => {
+      connectPageWithSession({ scopes: without('translations.edit') });
+
+      const res = await new Promise((resolve) =>
+        messageListener(
+          { type: 'OAUTH_MISSING_PERMISSIONS', data: LOCATOR },
+          PAGE_TAB,
+          resolve
+        )
+      );
+
+      expect(res).toMatchObject({ error: expect.stringContaining('popup') });
+    });
+
+    it('names nothing for a page without a session', async () => {
+      expect(await ask()).toEqual({ missing: [] });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('OAUTH_REAUTHORIZE', () => {
+    const reauthorize = () =>
+      respond({ type: 'OAUTH_REAUTHORIZE', data: LOCATOR });
+    const freshLogin = {
+      accessToken: 'fresh-tok',
+      refreshToken: 'fresh-r',
+      expiresAt: future(),
+      scopes: OAUTH_SCOPES,
+    };
+
+    it('replaces a working session that lacks permissions, revoking it only after the new login', async () => {
+      connectPageWithSession({
+        refreshToken: 'old-refresh',
+        scopes: without('translations.edit'),
+      });
+      login.mockImplementation(async () => {
+        expect(revoke).not.toHaveBeenCalled();
+        return freshLogin;
+      });
+
+      expect(await reauthorize()).toEqual({});
+      expect(store.get('oauth:https://app.tolgee.io:5')).toMatchObject({
+        accessToken: 'fresh-tok',
+        scopes: OAUTH_SCOPES,
+      });
+      expect(revoke).toHaveBeenCalledWith(
+        'https://app.tolgee.io',
+        'old-refresh'
+      );
+    });
+
+    it('revokes the grant as it stands after the login, not the snapshot from before it: a refresh during the identity window rotates the old tokens', async () => {
+      connectPageWithSession({
+        refreshToken: 'old-refresh',
+        scopes: without('translations.edit'),
+      });
+      login.mockImplementation(async () => {
+        seedSession({
+          refreshToken: 'rotated-refresh',
+          scopes: without('translations.edit'),
+        });
+        return freshLogin;
+      });
+
+      expect(await reauthorize()).toEqual({});
+      expect(revoke).toHaveBeenCalledTimes(1);
+      expect(revoke).toHaveBeenCalledWith(
+        'https://app.tolgee.io',
+        'rotated-refresh'
+      );
+    });
+
+    it('stores nothing and revokes the new grant when the user signed out while the identity window was open', async () => {
+      connectPageWithSession({ scopes: without('translations.edit') });
+      login.mockImplementation(async () => {
+        store.delete('oauth:https://app.tolgee.io:5');
+        return freshLogin;
+      });
+
+      expect(await reauthorize()).toEqual({});
+      expect(store.has('oauth:https://app.tolgee.io:5')).toBe(false);
+      expect(revoke).toHaveBeenCalledTimes(1);
+      expect(revoke).toHaveBeenCalledWith('https://app.tolgee.io', 'fresh-r');
+    });
+
+    it('delivers nothing to the page, which would reload it and drop its branch: only the token in the worker changed', async () => {
+      connectPageWithSession({ scopes: without('translations.edit') });
+      login.mockResolvedValue(freshLogin);
+
+      await reauthorize();
+
+      expect(sent).toEqual([]);
+      expect(store.get('https://page.example')).toEqual({
+        apiUrl: 'https://app.tolgee.io',
+        oauth: true,
+        projectKey: '5',
+      });
+    });
+
+    it.each([
+      ['cancelled', new Error('The user did not approve access.')],
+      [
+        'bound to a project the page does not declare',
+        new ProjectInaccessibleError(5, 'https://app.tolgee.io'),
+      ],
+    ])(
+      'keeps the working session, parks no refusal and opens no popup when the login is %s',
+      async (_, failure) => {
+        connectPageWithSession({
+          accessToken: 'old-tok',
+          scopes: without('translations.edit'),
+        });
+        login.mockRejectedValue(failure);
+        const keysBefore = [...store.keys()].sort();
+
+        expect(await reauthorize()).toMatchObject({
+          error: expect.any(String),
+        });
+        expect(store.get('oauth:https://app.tolgee.io:5')).toMatchObject({
+          accessToken: 'old-tok',
+        });
+        expect([...store.keys()].sort()).toEqual(keysBefore);
+        expect(revoke).not.toHaveBeenCalled();
+        expect(openPopup).not.toHaveBeenCalled();
+        expect(windowsCreate).not.toHaveBeenCalled();
+      }
+    );
+
+    it('opens no login when nothing is missing, or while the grant is not known yet', async () => {
+      connectPageWithSession();
+      expect(await reauthorize()).toEqual({});
+
+      connectPageWithSession({ scopes: undefined });
+      expect(await reauthorize()).toEqual({});
+      expect(login).not.toHaveBeenCalled();
+    });
+
+    it('is refused for a web page, before any auth window can open', async () => {
+      connectPageWithSession({ scopes: without('translations.edit') });
+
+      const res = await new Promise((resolve) =>
+        messageListener(
+          { type: 'OAUTH_REAUTHORIZE', data: LOCATOR },
+          PAGE_TAB,
+          resolve
+        )
+      );
+
+      expect(res).toMatchObject({ error: expect.stringContaining('popup') });
+      expect(login).not.toHaveBeenCalled();
+    });
   });
 
   describe('OAUTH_SESSION_STATE', () => {

@@ -17,7 +17,7 @@ vi.mock('./pkce', () => ({
   challengeFromVerifier: async () => 'challenge',
 }));
 
-import { OAUTH_REFRESH_SKEW_MS } from '../constants';
+import { OAUTH_REFRESH_SKEW_MS, OAUTH_SCOPES } from '../constants';
 import {
   login,
   OAuthTokenEndpointError,
@@ -86,6 +86,15 @@ describe('login security gates', () => {
       )
     );
     await expect(login('https://api')).rejects.toThrow('User denied');
+  });
+
+  it('surfaces a bare error code from a redirect that carries no description', async () => {
+    launchWebAuthFlow.mockResolvedValue(
+      redirect('state=fixed&error=invalid_scope')
+    );
+    await expect(login('https://api')).rejects.toThrow(
+      'Tolgee authorization failed: invalid_scope'
+    );
   });
 
   it('rejects a matching-state redirect that carries no code', async () => {
@@ -229,6 +238,27 @@ describe('refresh', () => {
   });
 });
 
+describe('login scopes', () => {
+  it('sends the scopes the extension needs to the consent screen and records what was granted', async () => {
+    launchWebAuthFlow.mockResolvedValue(redirect('state=fixed&code=abc'));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ access_token: 'at', scope: 'keys.view' }),
+      }))
+    );
+
+    const tokens = await login('https://api', 7);
+
+    const sent = new URL(
+      (launchWebAuthFlow.mock.calls[0][0] as { url: string }).url
+    ).searchParams.get('scope');
+    expect(sent?.split(' ')).toEqual(OAUTH_SCOPES);
+    expect(tokens.scopes).toEqual(['keys.view']);
+  });
+});
+
 describe('parseTokenResponse', () => {
   it('rotates the refresh token when the response carries a new one', () => {
     const t = parseTokenResponse(
@@ -237,6 +267,24 @@ describe('parseTokenResponse', () => {
     );
     expect(t.accessToken).toBe('a2');
     expect(t.refreshToken).toBe('r2');
+  });
+
+  it('records the granted scopes, and none when the response omits them', () => {
+    expect(
+      parseTokenResponse({
+        access_token: 'a2',
+        scope: 'translations.view translations.suggest',
+      }).scopes
+    ).toEqual(['translations.view', 'translations.suggest']);
+    expect(parseTokenResponse({ access_token: 'a2' })).not.toHaveProperty(
+      'scopes'
+    );
+    expect(
+      parseTokenResponse({ access_token: 'a2', scope: ' keys.view  ' }).scopes
+    ).toEqual(['keys.view']);
+    expect(
+      parseTokenResponse({ access_token: 'a2', scope: '' })
+    ).not.toHaveProperty('scopes');
   });
 
   it('keeps the previous refresh token when the response omits one', () => {

@@ -65,6 +65,8 @@ export const createReducer =
         return synced(switchEditingOn(state));
       case 'SET_CONNECT_REFUSAL':
         return { ...state, connectRefusal: action.payload };
+      case 'SET_MISSING_PERMISSIONS':
+        return { ...state, missingPermissions: action.payload };
       case 'SET_BRANCHES':
         return { ...state, branches: action.payload };
       default:
