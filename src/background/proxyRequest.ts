@@ -10,7 +10,7 @@ const ALLOWED_HEADERS = [
   'x-tolgee-sdk-type',
   'x-tolgee-sdk-version',
 ];
-const PERMISSIONS_PATH = '/v2/api-keys/current-permissions';
+export const PERMISSIONS_PATH = '/v2/api-keys/current-permissions';
 export const IMAGE_UPLOAD_PATH = '/v2/image-upload';
 
 export type ResolvedTarget = {

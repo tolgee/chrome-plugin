@@ -12,6 +12,7 @@ export type OAuthTokens = {
   accessToken: string;
   refreshToken?: string;
   expiresAt: number;
+  scopes?: string[];
 };
 
 export class OAuthTokenEndpointError extends Error {
@@ -38,7 +39,7 @@ export const login = async (
   authorizeUrl.searchParams.set('response_type', 'code');
   authorizeUrl.searchParams.set('client_id', OAUTH_CLIENT_ID);
   authorizeUrl.searchParams.set('redirect_uri', redirectUri);
-  authorizeUrl.searchParams.set('scope', OAUTH_SCOPES);
+  authorizeUrl.searchParams.set('scope', OAUTH_SCOPES.join(' '));
   authorizeUrl.searchParams.set(
     'code_challenge',
     await challengeFromVerifier(verifier)
@@ -106,6 +107,10 @@ export const parseTokenResponse = (
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? previousRefreshToken,
     expiresAt: Date.now() + expiresIn * 1000,
+    ...(typeof data.scope === 'string' &&
+      data.scope.trim() !== '' && {
+        scopes: data.scope.split(' ').filter(Boolean),
+      }),
   };
 };
 

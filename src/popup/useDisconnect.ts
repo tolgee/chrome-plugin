@@ -2,6 +2,7 @@ import type { Dispatch } from 'react';
 import { getActiveTabOrigin } from './activeTab';
 import { sendToBackground } from './sendToBackground';
 import { Action } from './popupState';
+import { forgetDismissal } from './missingPermissions';
 
 export const useDisconnect = (
   dispatch: Dispatch<Action>,
@@ -11,6 +12,7 @@ export const useDisconnect = (
   const disconnect = async () => {
     try {
       if (isOauthSession) {
+        await forgetDismissal().catch(() => undefined);
         await sendToBackground('OAUTH_LOGOUT', {
           pageOrigin: await getActiveTabOrigin(),
         });

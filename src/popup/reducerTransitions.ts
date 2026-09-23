@@ -80,6 +80,7 @@ export const clearAll = (state: State): State => {
     values: { ...page, apiKey: state.storedValues?.siteKey ?? pageKey },
     declaredProject: null,
     declaredProjectInaccessible: false,
+    missingPermissions: [],
   };
 };
 
@@ -103,6 +104,7 @@ export const oauthApply = (
     declaredProject: null,
     declaredProjectInaccessible: false,
     connectRefusal: null,
+    missingPermissions: [],
   };
 };
 
