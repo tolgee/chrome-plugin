@@ -131,11 +131,12 @@ export const LoginTab = ({
             }
           >
             <AlertTitle>
-              This account can&apos;t access project #{connectError.projectId}{' '}
-              on {hostOf(connectError.apiUrl)}
+              This sign-in can&apos;t reach project #{connectError.projectId} on{' '}
+              {hostOf(connectError.apiUrl)}
             </AlertTitle>
-            Sign in with an account that has access to it. The project may also
-            no longer exist in Tolgee.
+            This sign-in may be bound to another project. Connect again and
+            choose this one, or all projects. If that doesn&apos;t help, your
+            account has no access to it, or it no longer exists in Tolgee.
           </Alert>
         ) : (
           <Alert severity="error" data-testid="connect-error">

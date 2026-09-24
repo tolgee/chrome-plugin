@@ -9,6 +9,8 @@ import { resolveAppliedValues } from './delivery';
 import { redeliverToPage, syncToStorageAndPage } from './deliverValues';
 import { isConnectedSession, migrateLegacyApiKeyRecord } from './tools';
 import { Action, State } from './popupState';
+import { missingPermissionsToShow } from './missingPermissions';
+import { oauthSessionLocator } from './sessionLocator';
 
 export const useSessionRestore = (
   state: Pick<
@@ -35,6 +37,7 @@ export const useSessionRestore = (
     if (libConfig) {
       syncPageAppliedValues().catch(() => undefined);
       restoreStoredSession().catch(() => undefined);
+      checkMissingPermissions().catch(() => undefined);
       restoreConnectRefusal().catch(() => undefined);
     }
   }, [libConfig]);
@@ -62,19 +65,24 @@ export const useSessionRestore = (
     }
   };
 
+  const checkMissingPermissions = async () =>
+    dispatch({
+      type: 'SET_MISSING_PERMISSIONS',
+      payload: await missingPermissionsToShow(),
+    });
+
   const restoreStoredSession = async () => {
     const storedData = await loadValues();
-    if (storedData.oauth && storedData.apiUrl) {
-      const res = (await sendToBackground('OAUTH_SESSION_STATE', {
-        apiUrl: storedData.apiUrl,
-        projectKey: storedData.projectKey,
-        pageOrigin: await getActiveTabOrigin(),
-      })) as { active?: boolean };
+    const locator = await oauthSessionLocator(storedData);
+    if (locator) {
+      const res = (await sendToBackground('OAUTH_SESSION_STATE', locator)) as {
+        active?: boolean;
+      };
       if (res?.active) {
         dispatch({
           type: 'LOAD_STORED_VALUES',
           payload: {
-            apiUrl: storedData.apiUrl,
+            apiUrl: locator.apiUrl,
             oauth: true,
             projectId: storedData.projectId,
             projectKey: storedData.projectKey,

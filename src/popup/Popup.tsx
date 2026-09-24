@@ -38,6 +38,7 @@ export const Popup = () => {
     declaredProject,
     declaredProjectInaccessible,
     connectRefusal,
+    missingPermissions,
   } = state;
 
   const activeValues = activeValuesOf({ values, storedValues, appliedValues });
@@ -60,8 +61,15 @@ export const Popup = () => {
     isOauthSession,
     apiKeyConnect.clearOverride
   );
-  const { connect, signInAgain, connecting, connectError, dismissRefusal } =
-    useOAuthConnect(dispatch, disconnect, libConfig);
+  const {
+    connect,
+    signInAgain,
+    reauthorize,
+    dismissMissing,
+    connecting,
+    connectError,
+    dismissRefusal,
+  } = useOAuthConnect(dispatch, disconnect, libConfig);
 
   const server = values?.apiUrl || DEFAULT_SERVER;
   const serverInvalid = !isHttpUrl(server);
@@ -131,6 +139,8 @@ export const Popup = () => {
         projectInaccessible={declaredProjectInaccessible}
         declaredProjectId={declaredId}
         sdkTooOld={sdkTooOld}
+        missingPermissions={missingPermissions}
+        signingInAgain={connecting}
         keyProjectPending={keyProjectPending(activeValues, credentialsCheck)}
         editingOn={Boolean(appliedValues)}
         onToggleEditing={handleToggleEditing}
@@ -139,6 +149,8 @@ export const Popup = () => {
         onSignInAgain={() =>
           signInAgain(activeValues?.apiUrl || DEFAULT_SERVER, declaredId)
         }
+        onReauthorize={reauthorize}
+        onDismissMissingPermissions={() => dismissMissing(missingPermissions)}
         onUseAnotherKey={apiKeyConnect.switchToAnotherKey}
       />
     );

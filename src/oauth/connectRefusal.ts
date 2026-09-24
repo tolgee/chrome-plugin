@@ -17,7 +17,7 @@ export class ProjectInaccessibleError extends Error {
     readonly apiUrl: string
   ) {
     super(
-      `This account can't access project #${projectId} on ${hostOf(apiUrl)}`
+      `This sign-in can't reach project #${projectId} on ${hostOf(apiUrl)}`
     );
     this.name = 'ProjectInaccessibleError';
   }

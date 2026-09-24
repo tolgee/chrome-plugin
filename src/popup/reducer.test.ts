@@ -684,6 +684,28 @@ describe('detector reducer', () => {
     expect(connected.connectRefusal).toBeNull();
   });
 
+  it.each([
+    [
+      'OAUTH_APPLY (the new sign-in carries the scopes)',
+      {
+        type: 'OAUTH_APPLY' as const,
+        payload: {
+          apiUrl: 'https://app.tolgee.io',
+          projectId: 5,
+          projectKey: '5',
+        },
+      },
+    ],
+    ['CLEAR_ALL (there is no session left)', { type: 'CLEAR_ALL' as const }],
+  ])('SET_MISSING_PERMISSIONS stores the list and %s drops it', (_, action) => {
+    const flagged = reduce(initialState, {
+      type: 'SET_MISSING_PERMISSIONS',
+      payload: ['translations.edit'],
+    });
+    expect(flagged.missingPermissions).toEqual(['translations.edit']);
+    expect(reduce(flagged, action).missingPermissions).toEqual([]);
+  });
+
   it('CHANGE_VALUES merges a partial patch', () => {
     const next = reduce(
       { ...initialState, values: { apiUrl: 'https://app.tolgee.io' } },

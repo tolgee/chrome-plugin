@@ -15,9 +15,11 @@ import {
   requesterOrigin,
 } from './sender';
 import { RuntimeMessage } from '../content/Messages';
+import { ApiRequestData } from './proxyTypes';
 import { connectRefusalOf } from '../oauth/connectRefusal';
 import { TOLGEE_API_REQUEST, TOLGEE_SCREENSHOT_UPLOAD } from '../protocol';
 import { connect, disconnect } from './connectFlow';
+import { missingPermissions, reauthorize } from './sessionLifecycle';
 import {
   openPopup,
   registerPopupControlListeners,
@@ -25,6 +27,8 @@ import {
 } from './popupControl';
 
 registerPopupControlListeners();
+
+const POPUP_ONLY = { error: 'only the popup may ask this' };
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { type, data } = message as RuntimeMessage;
@@ -61,7 +65,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
     case 'OAUTH_LOGIN':
       if (!isExtensionPage(sender.url)) {
-        sendResponse({ error: 'only the popup may start a login' });
+        sendResponse(POPUP_ONLY);
         break;
       }
       respondAsync(
@@ -79,6 +83,31 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         'session refresh',
         (active) => ({ active }),
         () => ({ active: false })
+      );
+      return true;
+    case 'OAUTH_REAUTHORIZE':
+      if (!isExtensionPage(sender.url)) {
+        sendResponse(POPUP_ONLY);
+        break;
+      }
+      respondAsync(
+        sendResponse,
+        reauthorizeLocatedSession(data, sender),
+        'reauthorization',
+        () => ({})
+      );
+      return true;
+    case 'OAUTH_MISSING_PERMISSIONS':
+      if (!isExtensionPage(sender.url)) {
+        sendResponse(POPUP_ONLY);
+        break;
+      }
+      respondAsync(
+        sendResponse,
+        missingPermissionsOfLocatedSession(data, sender),
+        'missing permissions check',
+        (missing) => ({ missing }),
+        () => ({ missing: [] })
       );
       return true;
     case 'OAUTH_LOGOUT':
@@ -135,8 +164,13 @@ const respondAsync = <T>(
 const errorMessage = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
 
+type SessionLocator = Pick<
+  ApiRequestData,
+  'apiUrl' | 'projectKey' | 'pageOrigin'
+>;
+
 const refreshAndCheckSession = async (
-  data: { apiUrl?: string; projectKey?: string; pageOrigin?: string },
+  data: SessionLocator,
   sender: MessageSender
 ): Promise<boolean> => {
   const located = await locateSession(data, sender);
@@ -145,4 +179,30 @@ const refreshAndCheckSession = async (
   }
   const authorized = await authorizeSession(located);
   return !('error' in authorized) || authorized.error.kind !== 'no_session';
+};
+
+const missingPermissionsOfLocatedSession = async (
+  data: SessionLocator,
+  sender: MessageSender
+): Promise<string[]> => {
+  const located = await locateOAuthSession(data, sender);
+  return located ? missingPermissions(located) : [];
+};
+
+const reauthorizeLocatedSession = async (
+  data: SessionLocator,
+  sender: MessageSender
+): Promise<void> => {
+  const located = await locateOAuthSession(data, sender);
+  if (located) {
+    await reauthorize(located.session);
+  }
+};
+
+const locateOAuthSession = async (
+  data: SessionLocator,
+  sender: MessageSender
+) => {
+  const located = await locateSession(data, sender);
+  return !('error' in located) && located.kind === 'oauth' ? located : null;
 };

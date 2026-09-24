@@ -9,6 +9,8 @@ services:
       - tolgee.authentication.initialPassword=admin
       - tolgee.authentication.create-demo-for-initial-user=false
       - tolgee.internal.controllerEnabled=true
+      # The OAuth specs sign in more than 20 times a minute from one address.
+      - tolgee.rate-limits.authentication-limits=false
       - tolgee.back-end-url=http://localhost:${TOLGEE_PORT:-8299}
       - tolgee.front-end-url=http://localhost:${TOLGEE_PORT:-8299}
       - tolgee.oauth2.browser-extension-redirect-uris[0]=https://${EXTENSION_ID}.chromiumapp.org/
