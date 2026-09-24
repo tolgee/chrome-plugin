@@ -137,7 +137,10 @@ test('warns when the page declares a project the session cannot reach', async ({
     "No access to this page's project"
   );
   await expect(otherPopup.getByTestId('project-inaccessible')).toContainText(
-    `This site requests a project this session can't reach on ${host}.`
+    `This site requests a project the Tolgee plugin can't reach on ${host}.`
+  );
+  await expect(otherPopup.getByTestId('project-inaccessible')).toContainText(
+    'You may have picked a different project when signing in — sign out and sign in again to pick this one.'
   );
   await expect(otherPopup.getByTestId('footer-note')).toHaveText(
     `Project #${other.projectId} on ${host}`
