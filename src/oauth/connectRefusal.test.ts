@@ -10,7 +10,7 @@ describe('connectRefusal', () => {
     const error = new ProjectInaccessibleError(28, 'https://app.tolgee.io');
 
     expect(error.message).toBe(
-      "This account can't access project #28 on app.tolgee.io"
+      "This sign-in can't reach project #28 on app.tolgee.io"
     );
     expect(connectRefusalOf(error)).toEqual({
       code: 'project_inaccessible',

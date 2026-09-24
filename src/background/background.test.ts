@@ -520,7 +520,7 @@ describe('background message handling', () => {
           code: 'project_inaccessible',
           projectId: 5,
           apiUrl: 'https://app.tolgee.io',
-          error: "This account can't access project #5 on app.tolgee.io",
+          error: "This sign-in can't reach project #5 on app.tolgee.io",
         });
         expect(revoke).toHaveBeenCalledWith('https://app.tolgee.io', 'r');
         expect(store.has('oauth:https://app.tolgee.io:5')).toBe(false);

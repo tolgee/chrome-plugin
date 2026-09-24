@@ -139,6 +139,9 @@ test('warns when the page declares a project the session cannot reach', async ({
   await expect(otherPopup.getByTestId('project-inaccessible')).toContainText(
     `This site requests a project this session can't reach on ${host}.`
   );
+  await expect(otherPopup.getByTestId('project-inaccessible')).toContainText(
+    'This sign-in may be bound to another project — sign out and sign in again to pick this one.'
+  );
   await expect(otherPopup.getByTestId('footer-note')).toHaveText(
     `Project #${other.projectId} on ${host}`
   );

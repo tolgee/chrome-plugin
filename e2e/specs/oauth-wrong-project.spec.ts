@@ -64,10 +64,10 @@ const expectRefused = async ({
 }) => {
   const alert = popup.getByTestId('connect-project-inaccessible');
   await expect(alert).toContainText(
-    `This account can't access project #${projectId} on ${host}`
+    `This sign-in can't reach project #${projectId} on ${host}`
   );
   await expect(alert).toContainText(
-    'Sign in with an account that has access to it. The project may also no longer exist in Tolgee.'
+    'This sign-in may be bound to another project. Connect again and choose this one, or all projects.'
   );
   await expect(popup.getByTestId('connect-error')).toHaveCount(0);
   await expect(popup.getByTestId('sign-in-screen')).toBeVisible();
