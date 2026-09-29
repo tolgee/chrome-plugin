@@ -1,3 +1,4 @@
+import { OAUTH_SCOPES } from '../../src/constants';
 import { log } from './env';
 
 export type OAuthAvailability = {
@@ -13,8 +14,8 @@ const CLIENT_ID = 'tolgee-browser-extension';
 /**
  * Whether the server can sign the extension in: it serves the RFC 8414 metadata (the authorization server exists and
  * has at least one client registered) and `/oauth2/authorize` accepts the extension's client id and redirect URI. The
- * platform answers the latter with a redirect once both are validated and with 400 otherwise, before it looks at
- * any other parameter.
+ * platform answers the latter with a redirect once both are validated and with 400 otherwise, before it looks at any
+ * other parameter.
  */
 export const probeOAuthServer = async (
   tolgeeUrl: string,
@@ -50,6 +51,18 @@ export const probeOAuthServer = async (
         `${(await res.text()).slice(0, 200)}`.trim() +
         '; register it through tolgee.oauth2.browser-extension-redirect-uris',
       true
+    );
+  }
+  const supported: unknown = (await metadata.json()).scopes_supported;
+  const unknownScopes = Array.isArray(supported)
+    ? OAUTH_SCOPES.filter((scope) => !supported.includes(scope))
+    : [];
+  if (unknownScopes.length > 0) {
+    return unavailable(
+      `the server does not know ${unknownScopes.join(
+        ', '
+      )}, so the OAuth specs cannot sign in for it or untick it on the ` +
+        'consent screen; run against an image that has the scopes the extension asks for'
     );
   }
   log(`OAuth server available, redirect URI ${redirectUri} is registered`);

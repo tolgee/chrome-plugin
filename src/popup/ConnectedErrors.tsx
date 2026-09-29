@@ -62,9 +62,10 @@ export const ProjectInaccessible = ({
   <Frame session={session} serverHost={serverHost}>
     <Alert severity="warning" data-testid="project-inaccessible">
       <AlertTitle>No access to this page&apos;s project</AlertTitle>
-      This site requests a project this session can&apos;t reach on {serverHost}
-      . Either you don&apos;t have access to it, or a different project was
-      chosen while signing in. Sign out and sign in again to pick the right one.
+      This site requests a project the Tolgee plugin can&apos;t reach on{' '}
+      {serverHost}. You may have picked a different project when signing in —
+      sign out and sign in again to pick this one. If that doesn&apos;t help,
+      your account has no access to it, or it no longer exists in Tolgee.
     </Alert>
     <ConnectedFooter
       session={session}

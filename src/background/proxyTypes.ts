@@ -25,6 +25,11 @@ export type ApiRequestData = {
   pageOrigin?: string;
 };
 
+export type SessionLocator = Pick<
+  ApiRequestData,
+  'apiUrl' | 'projectKey' | 'pageOrigin'
+>;
+
 export type ScreenshotUploadData = Pick<
   ApiRequestData,
   'id' | 'apiUrl' | 'projectKey'

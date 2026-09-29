@@ -123,7 +123,11 @@ const refreshSession = async (
     // A Disconnect or reconnect can land during the network round-trip.
     const current = await loadSessionByKey(session.apiUrl, session.projectKey);
     if (current?.refreshToken === spentRefreshToken) {
-      await persist(session.apiUrl, refreshed, session.projectKey);
+      await persist(
+        session.apiUrl,
+        { ...current, ...refreshed },
+        session.projectKey
+      );
       return { accessToken: refreshed.accessToken };
     }
     return current ? { accessToken: current.accessToken } : SESSION_ENDED;
