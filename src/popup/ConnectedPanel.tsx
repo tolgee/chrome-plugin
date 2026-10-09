@@ -1,6 +1,7 @@
 import { Alert, AlertTitle, Box, Link } from '@mui/material';
 
 import { SdkTooOldAlert } from './SdkTooOldAlert';
+import { MissingPermissionsAlert } from './MissingPermissionsAlert';
 import { BranchRow, BranchState } from './BranchRow';
 import { EditingSwitch } from './EditingSwitch';
 import { PopupFrame } from './PopupFrame';
@@ -24,6 +25,8 @@ type Props = {
   projectInaccessible: boolean;
   declaredProjectId: number | undefined;
   sdkTooOld: boolean;
+  missingPermissions: string[];
+  signingInAgain: boolean;
   keyProjectPending: boolean;
   branch: BranchState | null;
   editingOn: boolean;
@@ -31,6 +34,8 @@ type Props = {
   onChangeBranch: (branch: string) => void;
   onSignOut: () => void;
   onSignInAgain: () => void;
+  onReauthorize: () => void;
+  onDismissMissingPermissions: () => void;
   onUseAnotherKey: () => void;
 };
 
@@ -43,6 +48,8 @@ export const ConnectedPanel = ({
   projectInaccessible,
   declaredProjectId,
   sdkTooOld,
+  missingPermissions,
+  signingInAgain,
   keyProjectPending,
   branch,
   editingOn,
@@ -50,6 +57,8 @@ export const ConnectedPanel = ({
   onChangeBranch,
   onSignOut,
   onSignInAgain,
+  onReauthorize,
+  onDismissMissingPermissions,
   onUseAnotherKey,
 }: Props) => {
   const isOauth = session.kind === 'oauth';
@@ -85,6 +94,14 @@ export const ConnectedPanel = ({
       <AccountCard session={session} serverHost={serverHost} />
 
       {sdkTooOld && <SdkTooOldAlert />}
+      {missingPermissions.length > 0 && (
+        <MissingPermissionsAlert
+          missing={missingPermissions}
+          signingInAgain={signingInAgain}
+          onReauthorize={onReauthorize}
+          onDismiss={onDismissMissingPermissions}
+        />
+      )}
 
       <Box
         display="grid"

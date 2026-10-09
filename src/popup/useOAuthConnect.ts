@@ -9,6 +9,12 @@ import {
   isProjectInaccessibleRefusal,
 } from '../oauth/connectRefusal';
 import { clearConnectRefusal } from '../oauth/connectRefusalStore';
+import {
+  dismissMissingPermissions,
+  forgetDismissal,
+  missingPermissionsToShow,
+  reauthorizeThenRecheck,
+} from './missingPermissions';
 
 export type ConnectError = ConnectRefusal | { message: string };
 
@@ -50,6 +56,11 @@ export const useOAuthConnect = (
             projectKey: projectKeyFor(projectId),
           },
         });
+        await forgetDismissal().catch(() => undefined);
+        dispatch({
+          type: 'SET_MISSING_PERMISSIONS',
+          payload: await missingPermissionsToShow(),
+        });
       } else if (isProjectInaccessibleRefusal(res)) {
         setConnectError({
           code: res.code,
@@ -69,6 +80,23 @@ export const useOAuthConnect = (
     await connect(apiUrl, projectId);
   };
 
+  const reauthorize = async () => {
+    setConnecting(true);
+    try {
+      dispatch({
+        type: 'SET_MISSING_PERMISSIONS',
+        payload: await reauthorizeThenRecheck(),
+      });
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const dismissMissing = async (missing: string[]) => {
+    dispatch({ type: 'SET_MISSING_PERMISSIONS', payload: [] });
+    await dismissMissingPermissions(missing).catch(() => undefined);
+  };
+
   const dismissRefusal = async () => {
     setConnectError(null);
     dispatch({ type: 'SET_CONNECT_REFUSAL', payload: null });
@@ -78,5 +106,13 @@ export const useOAuthConnect = (
     }
   };
 
-  return { connect, signInAgain, connecting, connectError, dismissRefusal };
+  return {
+    connect,
+    signInAgain,
+    reauthorize,
+    dismissMissing,
+    connecting,
+    connectError,
+    dismissRefusal,
+  };
 };

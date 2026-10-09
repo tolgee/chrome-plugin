@@ -52,7 +52,11 @@ const future = () => Date.now() + 60 * 60 * 1000;
 
 const tokens = (
   label: string,
-  overrides: Partial<{ refreshToken: string; expiresAt: number }> = {}
+  overrides: Partial<{
+    refreshToken: string;
+    expiresAt: number;
+    scopes: string[];
+  }> = {}
 ) => ({
   accessToken: `token-${label}`,
   refreshToken: 'refresh',
@@ -145,6 +149,36 @@ describe('tokenStore per-project keying', () => {
     expect(token).toBe('token-refreshed');
     expect((await loadSession(URL_A, 3))?.projectKey).toBe('3');
     expect((await loadSession(URL_A, 3))?.refreshToken).toBe('r2');
+  });
+
+  it('refresh records the scopes the token response names, and keeps the stored ones when it names none', async () => {
+    await saveSession(
+      URL_A,
+      tokens('3', { expiresAt: Date.now() - 1, scopes: ['translations.view'] }),
+      3
+    );
+    refresh.mockResolvedValueOnce({
+      accessToken: 'token-refreshed',
+      refreshToken: 'r2',
+      expiresAt: Date.now() - 1,
+      scopes: ['translations.view', 'translations.suggest'],
+    });
+    await getValidAccessToken(URL_A, 3);
+    expect((await loadSession(URL_A, 3))?.scopes).toEqual([
+      'translations.view',
+      'translations.suggest',
+    ]);
+
+    refresh.mockResolvedValueOnce({
+      accessToken: 'token-refreshed-2',
+      refreshToken: 'r3',
+      expiresAt: future(),
+    });
+    await getValidAccessToken(URL_A, 3);
+    expect((await loadSession(URL_A, 3))?.scopes).toEqual([
+      'translations.view',
+      'translations.suggest',
+    ]);
   });
 
   it('does not refresh a still-valid token', async () => {
