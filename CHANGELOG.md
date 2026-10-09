@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/tolgee/chrome-plugin/compare/v1.10.0...v1.11.0) (2026-10-09)
+
+
+### Features
+
+* tell the user which permissions a sign-in lacks (pitch tolgee/tolgee-platform[#3780](https://github.com/tolgee/chrome-plugin/issues/3780), scope C) ([#44](https://github.com/tolgee/chrome-plugin/issues/44)) ([4b21c8d](https://github.com/tolgee/chrome-plugin/commit/4b21c8da644a7209cc83f24fd183feccefe2763d))
+
 # [1.10.0](https://github.com/tolgee/chrome-plugin/compare/v1.9.0...v1.10.0) (2026-09-06)
 
 
