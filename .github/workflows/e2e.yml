@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       platform_branch:
-        description: "tolgee-platform branch to build the image from (default: the branch named like this one, else main)"
+        description: "tolgee-platform branch to build the image from (default: the branch named like this one, else the released tolgee/tolgee:latest)"
         required: false
 
 jobs:
@@ -18,20 +18,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # tolgee-platform publishes no per-branch image, so the platform is built into a local image here: from a
-      # platform branch named like this one when it exists, otherwise from main. The published tolgee/tolgee:latest
-      # lags main by a release and does not carry the OAuth server the extension needs until the next one ships.
-      - name: Pick the tolgee-platform branch to build (${{ github.event.inputs.platform_branch || env.SIBLING_BRANCH }} or main)
+      # Passing on main releases the extension to the stores, so main must test against the released platform users
+      # run, not platform main. tolgee-platform publishes no per-branch image, so a platform branch named like this
+      # one (or the one given as input) is built into a local image here.
+      - name: Pick the tolgee-platform image (${{ github.event.inputs.platform_branch || env.SIBLING_BRANCH }} branch or released)
         id: platform
         env:
+          INPUT: ${{ github.event.inputs.platform_branch }}
           WANTED: ${{ github.event.inputs.platform_branch || env.SIBLING_BRANCH }}
         run: |
-          if [ "$WANTED" != main ] && [ -n "$(git ls-remote --heads https://github.com/tolgee/tolgee-platform.git "refs/heads/$WANTED")" ]; then
-            echo "tolgee-platform has a branch named $WANTED, building its image"
+          if [ -n "$INPUT" ] || { [ "$WANTED" != main ] && [ -n "$(git ls-remote --heads https://github.com/tolgee/tolgee-platform.git "refs/heads/$WANTED")" ]; }; then
+            echo "building the tolgee-platform image from branch $WANTED"
             echo "ref=$WANTED" >> "$GITHUB_OUTPUT"
           else
-            echo "tolgee-platform has no branch named $WANTED, building main"
-            echo "ref=main" >> "$GITHUB_OUTPUT"
+            echo "tolgee-platform has no branch named $WANTED, using the released tolgee/tolgee:latest"
           fi
 
       - name: Checkout tolgee-platform
