@@ -8,8 +8,30 @@ on:
       - completed
 
 jobs:
-  main:
+  # workflow_run checks out the tip of main, which is not the commit Test verified once another merge lands.
+  tested-commit:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      is-latest: ${{ steps.compare.outputs.is-latest }}
+    steps:
+      - name: Compare the tested commit with main
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          latest_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          echo "tested=$TESTED_SHA latest=$latest_sha"
+          if [ "$latest_sha" = "$TESTED_SHA" ]; then
+            echo "is-latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is-latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  main:
+    needs: tested-commit
+    if: ${{ needs.tested-commit.outputs.is-latest == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
