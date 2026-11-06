@@ -194,7 +194,6 @@ const declineConsentScopes = async (page: Page, scopes: string[]) => {
     }
     await expect(checkbox.locator('input')).not.toBeChecked();
   }
-  await page.locator('[data-cy="oauth2-consent-modify"]').click();
 };
 
 export type StoredSession = {
