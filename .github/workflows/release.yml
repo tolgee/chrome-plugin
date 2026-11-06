@@ -1,9 +1,9 @@
-name: Prerelease
+name: Release
 
 on:
   workflow_run:
     workflows: ['Test']
-    branches: ['main', 'next']
+    branches: ['main']
     types:
       - completed
 
@@ -64,8 +64,8 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
           release_name: Release ${{ steps.version.outputs.VERSION }}
-          draft: false
-          prerelease: true
+          draft: true
+          prerelease: false
 
       - name: Upload Release Asset Chrome
         if: ${{ steps.version.outputs.VERSION != '' }}
@@ -91,14 +91,14 @@ jobs:
           asset_name: Tolgee-firefox-${{ steps.version.outputs.VERSION }}.zip
           asset_content_type: application/zip
 
-  promote:
-    name: Promote release to trigger store publishing
+  publish:
+    name: Publish release
     needs: main
-    if: ${{ needs.main.outputs.version != '' && github.event.workflow_run.head_branch == 'main' }}
+    if: ${{ needs.main.outputs.version != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      # An edit made with GITHUB_TOKEN would not trigger publish-stores.yml.
+      # Publishing with GITHUB_TOKEN would not trigger publish-stores.yml.
       GH_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
       VERSION: ${{ needs.main.outputs.version }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -118,5 +118,5 @@ jobs:
             --exit-status \
             --interval 30
 
-      - name: Mark release as a full release
-        run: gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --prerelease=false
+      - name: Publish draft release
+        run: gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
