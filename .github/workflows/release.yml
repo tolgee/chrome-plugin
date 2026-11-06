@@ -11,8 +11,6 @@ jobs:
   main:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.VERSION }}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -57,66 +55,16 @@ jobs:
 
       - name: Create Release
         if: ${{ steps.version.outputs.VERSION != '' }}
-        id: create_release
-        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
-        with:
-          tag_name: ${{ steps.version.outputs.VERSION }}
-          release_name: Release ${{ steps.version.outputs.VERSION }}
-          draft: true
-          prerelease: false
-
-      - name: Upload Release Asset Chrome
-        if: ${{ steps.version.outputs.VERSION != '' }}
-        id: upload-release-chrome-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist-zip/chrome.zip
-          asset_name: Tolgee-chrome-${{ steps.version.outputs.VERSION }}.zip
-          asset_content_type: application/zip
-
-      - name: Upload Release Asset Firefox
-        if: ${{ steps.version.outputs.VERSION != '' }}
-        id: upload-release-firefox-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist-zip/firefox.zip
-          asset_name: Tolgee-firefox-${{ steps.version.outputs.VERSION }}.zip
-          asset_content_type: application/zip
-
-  publish:
-    name: Publish release
-    needs: main
-    if: ${{ needs.main.outputs.version != '' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      # Publishing with GITHUB_TOKEN would not trigger publish-stores.yml.
-      GH_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
-      VERSION: ${{ needs.main.outputs.version }}
-      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-    steps:
-      - name: Wait for E2E on the released commit
+          # Publishing with GITHUB_TOKEN would not trigger publish-stores.yml.
+          GH_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          run_id=$(gh run list \
-            --repo "$GITHUB_REPOSITORY" \
-            --workflow e2e.yml \
-            --commit "$HEAD_SHA" \
-            --limit 1 \
-            --json databaseId \
-            --jq '.[0].databaseId')
-          test -n "$run_id"
-          gh run watch "$run_id" \
-            --repo "$GITHUB_REPOSITORY" \
-            --exit-status \
-            --interval 30
-
-      - name: Publish draft release
-        run: gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
+          cp dist-zip/chrome.zip "dist-zip/Tolgee-chrome-$VERSION.zip"
+          cp dist-zip/firefox.zip "dist-zip/Tolgee-firefox-$VERSION.zip"
+          gh release create "$VERSION" \
+            --title "Release $VERSION" \
+            --notes "" \
+            --verify-tag \
+            "dist-zip/Tolgee-chrome-$VERSION.zip" \
+            "dist-zip/Tolgee-firefox-$VERSION.zip"
