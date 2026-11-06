@@ -12,4 +12,5 @@ services:
       - tolgee.rate-limits.authentication-limits=false
       - tolgee.back-end-url=http://localhost:${TOLGEE_PORT:-8299}
       - tolgee.front-end-url=http://localhost:${TOLGEE_PORT:-8299}
+      - tolgee.oauth2.browser-extension-enabled=true
       - tolgee.oauth2.browser-extension-redirect-uris[0]=https://${EXTENSION_ID}.chromiumapp.org/
