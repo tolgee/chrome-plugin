@@ -61,6 +61,10 @@ jobs:
           GH_TOKEN: ${{ secrets.TOLGEE_MACHINE_PAT }}
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
+          if ! git tag --points-at HEAD | grep -qx "$VERSION"; then
+            echo "semantic-release did not tag $VERSION on this commit (main moved on), nothing to release"
+            exit 0
+          fi
           cp dist-zip/chrome.zip "dist-zip/Tolgee-chrome-$VERSION.zip"
           cp dist-zip/firefox.zip "dist-zip/Tolgee-firefox-$VERSION.zip"
           gh release create "$VERSION" \
