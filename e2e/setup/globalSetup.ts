@@ -40,6 +40,10 @@ export default async function globalSetup() {
         `docker-compose.yml registers the wrong redirect URI: ${state.oauth.reason}`
       );
     }
+    // A green CI run on main publishes to the stores, so it must not pass with the sign-in specs skipped.
+    if (!state.oauth.available && process.env.CI) {
+      throw new Error(`OAuth specs cannot run in CI: ${state.oauth.reason}`);
+    }
 
     const seeded = await seed(platform.url, PROJECT_COUNT);
     state.seed = seeded.cleanup;

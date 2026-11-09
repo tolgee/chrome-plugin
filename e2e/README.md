@@ -46,7 +46,8 @@ when the server has no authorization server the OAuth specs are skipped with tha
 rejects the extension's redirect URI the docker setup fails (its `docker-compose.yml` registers the URI) and a
 `TOLGEE_URL` server skips them with the reason. The probe also compares `scopes_supported` with the scopes the
 extension asks for: on a server that does not know one of them the OAuth specs cannot sign in for it or untick it on
-the consent screen, so they skip naming the missing scopes instead of failing opaquely.
+the consent screen, so they skip naming the missing scopes instead of failing opaquely. In CI (`CI` set) any of
+these skips fails the setup instead, because a green `Test` on `main` publishes to the stores.
 
 Every popup state, alert and transition has at least one assertion in these specs. `e2e/fixtures/testapp.ts`
 rewrites the testapp's inlined env on the way to the browser (`declareProject`, `declareApiKey`) and serves extra
