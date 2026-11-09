@@ -33,3 +33,7 @@ jobs:
 
       - name: Tests
         run: npm test
+
+  e2e:
+    name: E2E
+    uses: ./.github/workflows/e2e.yml

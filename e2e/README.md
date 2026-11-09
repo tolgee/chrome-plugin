@@ -46,7 +46,8 @@ when the server has no authorization server the OAuth specs are skipped with tha
 rejects the extension's redirect URI the docker setup fails (its `docker-compose.yml` registers the URI) and a
 `TOLGEE_URL` server skips them with the reason. The probe also compares `scopes_supported` with the scopes the
 extension asks for: on a server that does not know one of them the OAuth specs cannot sign in for it or untick it on
-the consent screen, so they skip naming the missing scopes instead of failing opaquely.
+the consent screen, so they skip naming the missing scopes instead of failing opaquely. In CI (`CI` set) any of
+these skips fails the setup instead, because a green `Test` on `main` publishes to the stores.
 
 Every popup state, alert and transition has at least one assertion in these specs. `e2e/fixtures/testapp.ts`
 rewrites the testapp's inlined env on the way to the browser (`declareProject`, `declareApiKey`) and serves extra
@@ -111,9 +112,9 @@ A change that needs a sibling repo gets tested together with it by giving both b
   looks for a platform branch named like the extension's, and when there is one checks it out into `.platform/`,
   builds it (`./gradlew dockerPrepare` plus `docker build` of `build/docker`, the same steps as the platform's own
   image build) into `tolgee/tolgee:e2e-branch` and runs the suite with `TOLGEE_IMAGE` pointing at it. That adds
-  10 to 15 minutes to the job. Without one the job builds platform `main` the same way, because the published
-  `tolgee/tolgee:latest` lags main by a release; a manual run (`workflow_dispatch`)
-  can name the platform branch to build in its `platform_branch` input. Locally, build the image the same
+  10 to 15 minutes to the job. Without one (and always on `main`, whose green run releases to the stores) the
+  job runs against the published `tolgee/tolgee:latest`, the platform users actually run; a manual run
+  (`workflow_dispatch`) can name the platform branch to build in its `platform_branch` input. Locally, build the image the same
   way from a platform checkout **without** the billing repo next to it (a `../billing` sibling is compiled into the
   image and changes what the server does) and pass it as `TOLGEE_IMAGE`.
 
